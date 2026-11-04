@@ -1,0 +1,237 @@
+# Example Kayra configuration, corrected and runnable. Pick ONE entry
+# under database: that you actually want active — Kayra requires
+# exactly one. authorizations: is different: it's a
+# named map, and every authentifications.<name> entry picks which one of
+# its entries authorizes it, so several can (and here do) stay active
+# side by side — each still needs exactly one of ldap/local/claims set.
+
+# app: is infrapi/lib's own shared INFRAPI_APP_* bootstrap config,
+# authored here instead of a separate dotenv file — see
+# config.AppConfig.ToVariables, which flattens it into the
+# INFRAPI_APP_NAME/_PLATFORM/etc. keys libconfig.NewConfigFromMap expects.
+app:
+  name: "auth"
+  fqdn: "localhost.local"
+  url: "http://localhost:8080"
+  platform: "sandbox"
+  region: "eu-west-1"
+  location: "dc1"
+  listen_type: "tcp"
+  listen_address: "0.0.0.0:8080"
+  # api_domain names this deployment's own API groups — every route
+  # mounts under "/apis/<group>.<api_domain>/v1/...", and every
+  # Role.Rules entry you author must name that same URN. Defaults to
+  # "example.com" when omitted; set it to a domain you actually control.
+  api_domain: "example.com"
+
+database:
+  main:
+    etcd:
+      host:
+        - "https://etcd0101e1.domain:2379"
+        - "https://etcd0101e2.domain:2379"
+        - "https://etcd0101e3.domain:2379"
+      prefix: "/kayra"
+      timeout: 30
+      tls:
+        verify: true
+        cacert: "/usr/local/auth/conf/cacert.pem"
+        key: "/usr/local/auth/conf/etcd_key.pem"
+        cert: "/usr/local/auth/conf/etcd_cert.pem"
+
+  # dev:
+  #   local:
+  #     path: /tmp/kayra-db
+
+authentifications:
+  okta:
+    authorization: okta
+    remote:
+      enabled: true
+      url: https://example-admin.okta-emea.com/.well-known/openid-configuration
+      user_id:
+        from: token
+        field: sub
+        filter: '^([^@]+)@'
+      proxy: http://proxy.corp.example:8080
+      # oauth2: lets `kayra token oauth2-login --provider okta` open a
+      # real browser against Okta's own /authorize (PKCE, no client secret
+      # — a public client, like oc/kubectl's own OIDC plugins) instead of
+      # an LDAP bind, printing back Okta's own access token.
+      # oauth2:
+      #   client_id: "<this CLI's client_id in Okta's app registration>"
+      #   scopes: [openid, profile, email]
+
+  gitlab:
+    authorization: idm
+    remote:
+      enabled: true
+      url: https://gitlab.example.com/.well-known/openid-configuration
+      user_id:
+        from: token
+        field: user_login
+
+  self:
+    # claims, not idm: a self-signed token already is the full trust
+    # statement — its own groups claim (see crypto.MintSelfJWT, and
+    # `kayra token mint`) is honored directly, never re-checked against
+    # a directory. That's what makes it usable to bootstrap a brand new
+    # deployment that has no working idm connection yet.
+    authorization: self-claims
+    local:
+      - enabled: true
+        algorithm: "RS512"
+        audiences: []
+        expiry: 3600
+        issuer: true
+        kid: "12RZfliqysdhfnad"
+        # PEM-encoded RSA private key (PKCS1 or PKCS8). This is a
+        # throwaway key generated just for this example — generate your
+        # own with `openssl genrsa 2048`, never reuse this one.
+        secret: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEuwIBADANBgkqhkiG9w0BAQEFAASCBKUwggShAgEAAoIBAQC6IDfflEQca5Sh
+          oSrMXNldfUCvEkPAuZIvc9lKmZYxryfprbD1Gmlu/tmY7pDU7MbqNzaNoSmWZPJP
+          pUsdRM2YLQQbFYYfU7g0JsCCYm4tVrjvRbNaG3yC+uwtLiYfbzIukxt/PIerLBYm
+          BGHHoFjyRsv6oY4AVADFil0C+S8Vyd1wmtBKG6TUh92slXUisGUcdphRnEn/RWDn
+          pYeEMGli1wmpPyhsgrTCdUonDLKGDySNW7t+7egO+0uNl6UaQFcGDq5DeHVZPaUo
+          SvpsWeRQZ1PyK7wOm95CzpLM/6lX5ttTQ9+RSA/DX/vRTjsVPcVP0w/uHTbLOU1U
+          Z1yeC6eZAgMBAAECggEAEaj4upr2HKvSfJGIhSWylCdlw0n2EF73/jU9fITdI0ka
+          ZH0DNmzNBmfIKRwXTufjQ2bj7+utc/310qIwe3SQFpL/rQgz44+m5//c5TvGQ3QG
+          jeFs3Pn3RiaqN4RsJpbMFqI4cJapzFwdaXo7j6lPUNGjc6jvipvUPoOpEDapH1jd
+          EgG5ZYciOb19Xr2755Kq/8Q1HjuW7NNmX9Od4wtreZknTtWJ44fOUhZyA7rSe2k8
+          qgJFNaVwHv3Z54K9fpqogdvo1dfkM7G00eimE8F/CRfEAkJnbf7KNySv6FQxGp4W
+          dFhnfnM1kj0I74RkPyZNze3RTq0gl9wStDl/5vW2PwKBgQDxPtqiOgaS1Fu40EM9
+          oAseChxF2oGPSx4Nuo9TqOPb6+RrdITP2G2Bt3ffxhKRGXyE3iNhYy/dI62B8N0G
+          fdHpJVrZEj1r+3ADZRiqcOYiHfH5lxvm0vvWrnc8DW97+DREQTEaiN2v9Ou4BEiE
+          xy2lICqhPGU9ehXiZVOz0r54LwKBgQDFgl0S+ci2Wxnya1mDoZS7p/4w61PoAmXk
+          rIAc5fx2RPaoCZ9MEphDJf9/o7CKc9340TDy9p5U6BGynezXWA5YSLPSFxIjO75z
+          zhyWlihM9g0miAi8Yzdi4/hC8xYC9hmXbWqPfqXpZQ/PVhawASD2J9OkRYRxtAw8
+          r1jqogqitwKBgQDD3n5w3J/dsuFNqnoNnNWp7BeMd55dk2WxS9l22Vc3hc0NmasD
+          fftbKHUBkLYebQz2a81aEsgXyhHjwIYT8S/vFc8vE2ofNCR7/ScLq2KOLLX8Kb4T
+          qRWj9j8E2Pu9MYZuLGgL3Tfw1vBTldazR2w992HlSz3/rhH6oL5W8DKJLQJ/Wwm7
+          3QNFgMh9LUBOAl54MAc/I01VX5u7W6wnYSqhM+KVzt6gjnADvu/E1RCeTzMZHZdO
+          +K60TG6ruakRgjEUa50XRb9cnODs6HQYuVB9QvwnE5ugazVQUkTCKhniC3tkUGge
+          tgWqc+ohX3BPBNGAX/X7l7xzT/WtrksksQH/5QKBgFVJh61mhVirpeC0RDYaddxm
+          ShIkVNS/A9J9WfQ+zEzoVoIXBSVa107HkjUK9ENuxm+PXaPSi4pZmeOsrBUjHDgZ
+          zT72v80D3RTl5TOb+5C6UYtAXGFY/0tKEq/vgkwOr+HXPoin6DgbOl0H3IyY8/0p
+          x3XONlXNhBmSNodpjIwT
+          -----END PRIVATE KEY-----
+
+
+authorizations:
+  # self-claims: trusts a self-signed token's own groups claim directly
+  # — see authentifications.self above.
+  self-claims:
+    claims:
+      from: token
+      groups_field: groups
+
+  # idm: a real LDAP/FreeIPA directory — backs authentifications.gitlab.
+  idm:
+    ldap:
+      enabled: true
+      connection:
+        host: "ipa.global.example.com"
+        port: 636
+        bind_dn: "uid=kayra,cn=sysaccounts,cn=etc,dc=ipa,dc=global,dc=example,dc=com"
+        password: "changeme"
+        timeout: 10
+        tls:
+          encryption: simple_tls
+      options:
+        lowercase_usernames: true
+        allow_username_or_email_login: true
+        cache_ttl: "15m"
+      user:
+        id: uid
+        base: "cn=users,cn=accounts,dc=ipa,dc=global,dc=example,dc=com"
+        user_attributes:
+          email: mail
+          name: cn
+        groups:
+          member_attribute: memberof
+          member_regex: "^cn=(sandbox-\\w+-\\w+),cn=groups,cn=accounts,dc=ipa,dc=global,dc=example,dc=com"
+
+  # okta: resolved straight from Okta's own already-verified token claims
+  # — no directory to query, see authentifications.okta above.
+  okta:
+    claims:
+      from: token
+      groups_field: MemberOf
+      user_attributes:
+        email: email
+        name: name
+
+  # dev: a local fixture standing in for idm, for testing without a real
+  # LDAP server — same group DN shape, filtered the same way.
+  dev:
+    local:
+      path: examples/kayra-users.yaml
+      # optional: same drop-non-matches, keep-first-capture-group
+      # filtering as above, applied to the fixture's own Groups lists —
+      # omit it to author Groups as the final resolved names directly.
+      member_regex: "^cn=(sandbox-\\w+-\\w+),cn=groups,cn=accounts,dc=ipa,dc=global,dc=example,dc=com"
+
+sysadmin:
+  # Group(s) middleware.SysadminGate requires a caller's resolved
+  # groups to intersect, to reach the cluster-bootstrap endpoints
+  # (rbac's cluster routes, catalog's stack/namespace-collection
+  # routes). Resolved the exact same way any other endpoint resolves
+  # groups — live LDAP lookup, or straight from an already-verified
+  # token for a claims-backed authorizations.<name> — so any
+  # configured authentifications.<name> (self-signed or remote) can
+  # satisfy this, not just a local-signing-key token. Omit entirely
+  # (the default) to fall back to a single group:
+  # "$platform-core-sysadmin" (e.g. "sandbox-core-sysadmin" here).
+  groups:
+    - sandbox-core-sysadmin
+    - sandbox-platform-admins
+
+reconciler:
+  # caps how many reconcile/activate operations `kayra reconciler`
+  # runs at once (its goroutine pool size); omit/0 defaults to 30.
+  max_concurrent_reconciles: 30
+  default_mode: api
+
+  # mode.<name> is the HTTP step pipeline reconcile actually runs for a
+  # stack whose mode (after default_mode falls back) is <name> — a mode
+  # with no entry here keeps the log-only placeholder. Endpoint, every
+  # data value, and every headers value renders as a Go text/template
+  # against ".Subscription" (Stack, Namespace, Platform, Region,
+  # CurrentSyncID, ExpectedSyncID) and ".Previous.Outputs" (the
+  # preceding step's own outputs; empty for the first step).
+  #
+  # async: true (default false) fires the call but only waits ~2s for
+  # it (catalog.AsyncStepAckTimeout) — whatever happens is logged and
+  # ignored, the pipeline always moves on. async: false waits the full
+  # timeout; a non-2xx response, a timeout, or a transport error fails
+  # the step and aborts the whole pipeline (reconcile fails, and the
+  # subscription's current_sync_id is never advanced).
+  mode:
+    api:
+      - method: post
+        endpoint: "https://{{ .Subscription.Stack }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync"
+        data:
+          sync_id: "{{ .Subscription.ExpectedSyncID }}"
+        headers:
+          Content-Type: "application/json"
+          Authorization:
+            type: Bearer
+            value: "yyyyyyyyyyyyyyyy"
+        timeout: "3600s"
+
+      - method: get
+        endpoint: "https://{{ .Subscription.Stack }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync/{{ .Subscription.ExpectedSyncID }}"
+        headers:
+          Content-Type: "application/json"
+          Authorization:
+            type: Bearer
+            value: "yyyyyyyyyyyyyyyy"
+        timeout: "3600s" # the whole wait budget: poll every 5s until
+                         # wait resolves, or give up (fail) once this
+                         # elapses
+        wait:
+          - key: .status
+            successes: [done]
+            failures: [skipped, canceled, failed]

@@ -1,0 +1,13 @@
+# Fixture for authorizations.<name>.local: a stand-in LDAP directory for
+# dev/test use without a real server. Shape mirrors
+# authorizations.idm.ldap.user.user_attributes.
+users:
+  - id: jdoe
+    # dev/test only, plaintext.
+    password: "s3cret"
+    attributes:
+      email: jdoe@example.com
+      name: John Doe
+      employee_id: "12345"
+    groups:
+      - "cn=sandbox-thetenant-sysadmin,cn=groups,cn=accounts,dc=ipa,dc=global,dc=example,dc=com"
