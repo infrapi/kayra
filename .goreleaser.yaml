@@ -1,0 +1,68 @@
+version: 2
+
+project_name: kayra
+
+builds:
+  - id: kayra
+    main: ./cmd/kayra
+    binary: kayra
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+  - id: kayra-cli
+    main: ./cmd/cli
+    binary: kayra-cli
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: kayra
+    ids: [kayra]
+    name_template: >-
+      kayra_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - examples/kayra.yaml
+      - examples/kayra-users.yaml
+
+  - id: kayra-cli
+    ids: [kayra-cli]
+    name_template: >-
+      kayra-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+# go-semantic-release (see .github/workflows/ci.yml) already tags and
+# creates the GitHub release with its own generated notes before this
+# ever runs (see .github/workflows/release.yml, triggered by that same
+# tag push) — append the built artifacts to that release rather than
+# replacing it or writing a second, conflicting changelog.
+release:
+  mode: append
+
+changelog:
+  disable: true
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"

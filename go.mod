@@ -11,7 +11,6 @@ require (
 	github.com/urfave/cli/v3 v3.14.0
 	go.etcd.io/etcd/client/v3 v3.7.2
 	golang.org/x/oauth2 v0.37.0
-	golang.org/x/term v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 

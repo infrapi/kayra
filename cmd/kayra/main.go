@@ -32,10 +32,16 @@ import (
 // wins over it.
 const configEnvVar = "KAYRA_CONFIG_FILE"
 
+// version is set at build time via -ldflags "-X main.version=..." —
+// see .goreleaser.yaml. "dev" is what `go build`/`go run` without
+// that flag leaves it at.
+var version = "dev"
+
 func main() {
 	root := &cli.Command{
-		Name:  "kayra",
-		Usage: "authentication, namespace creation and IAM policy service",
+		Name:    "kayra",
+		Usage:   "authentication, namespace creation and IAM policy service",
+		Version: version,
 		// A non-Local flag on the root is automatically available to
 		// every subcommand (including nested ones, e.g. "cache clean"),
 		// so --config never needs repeating on each command.

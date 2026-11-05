@@ -29,10 +29,16 @@ import (
 	"github.com/infrapi/kayra/internal/oauth2login"
 )
 
+// version is set at build time via -ldflags "-X main.version=..." —
+// see .goreleaser.yaml. "dev" is what `go build`/`go run` without
+// that flag leaves it at.
+var version = "dev"
+
 func main() {
 	root := &cli.Command{
-		Name:  "kayra-cli",
-		Usage: "the portable Kayra client — log in and manage saved logins against any Kayra server's own API",
+		Name:    "kayra-cli",
+		Usage:   "the portable Kayra client — log in and manage saved logins against any Kayra server's own API",
+		Version: version,
 		Commands: []*cli.Command{
 			loginCommand(),
 			contextCommand(),
