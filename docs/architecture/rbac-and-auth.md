@@ -159,6 +159,23 @@ gated by `Authenticator` like every other namespace-scoped route:
 {"allowed": true}
 ```
 
+Before any RBAC rule is evaluated, every check validates its target
+(`catalog.Repository.CheckSubscribedApi`), in
+this order, and returns an error instead of a decision on the first
+failure:
+
+| Condition | Status | Detail |
+|---|---|---|
+| the namespace doesn't exist | `404` | `namespace "core" not found` |
+| `api` isn't `<name>.<app.api_domain>`, or no `ApiRegistration` named `<name>` exists in this deployment's platform/region | `404` | `api "compute.example.com" not found ...` |
+| the namespace has no subscription to that registration | `403` | `namespace "core" is not subscribed to api "compute.example.com"` |
+| the subscription is not active yet (never reconciled) and `verb` is anything but `get`/`list` | `403` | `subscription of namespace "core" to api "compute.example.com" is not active (state "init"): only read verbs (get, list) are allowed until it is reconciled` |
+
+A subscription becomes active only once the Reconciler has provisioned
+it; until then the namespace is read-only on that api — every other
+verb (`create`, `update`, `patch`, `delete`, or any unknown one) is
+refused.
+
 `Namespace`/`Api` come straight from the URL (`Api` is the calling
 app's own full API group URN, e.g. "compute.example.com", matching how
 it's actually reachable — never the bare app name); `Resource`/`Verb`

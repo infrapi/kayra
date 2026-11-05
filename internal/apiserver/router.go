@@ -21,6 +21,7 @@ import (
 	"github.com/infrapi/kayra/internal/store"
 	"github.com/infrapi/kayra/internal/tokenapi"
 	libconfig "github.com/infrapi/lib/pkg/config"
+	liberrors "github.com/infrapi/lib/pkg/errors"
 	libserver "github.com/infrapi/lib/pkg/server"
 )
 
@@ -142,14 +143,18 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	rbacRepo := rbac.NewRepository(s, keys)
 	rbac.RegisterClusterRoutes(engine, rbacRepo, sysadminGate)
 	rbac.RegisterNamespaceRoutes(engine, rbacRepo, authenticator.Middleware())
-	rbac.RegisterAuthorizeRoute(engine, rbacRepo, authenticator.Middleware())
-
 	// catalog.Reconciler (the namespace/subscription/api registration
 	// reconcile controller) deliberately does not run here: it's its own
 	// "kayra reconciler" CLI command/process (see cmd/kayra), not a
 	// goroutine mixed into the API server — easier to debug and scale
 	// independently, and a crash in one never takes down the other.
 	catalogRepo := catalog.NewRepository(s, keys)
+	// Every check first requires the namespace to exist, the api to be
+	// registered here, the namespace to be subscribed to it, and that
+	// subscription to be active for anything but a read.
+	rbac.RegisterAuthorizeRoute(engine, rbacRepo, authenticator.Middleware(), func(namespace, api, verb string) *liberrors.Error {
+		return catalogRepo.CheckSubscribedApi(namespace, api, verb, appCfg.AppPlatform, appCfg.AppRegion)
+	})
 	catalog.RegisterApiRegistrationRoutes(engine, catalogRepo, sysadminGate, appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, authenticator.Middleware(), appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceCollectionRoutes(engine, catalogRepo, sysadminGate)

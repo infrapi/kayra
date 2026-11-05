@@ -34,6 +34,11 @@ type AuthorizeResponse struct {
 	Reason  string `json:"reason,omitempty"`
 }
 
+// PrecheckFunc validates a check request's target (namespace, api,
+// verb) before RBAC is evaluated; a non-nil error aborts the check
+// with it.
+type PrecheckFunc func(namespace, api, verb string) *liberrors.Error
+
 // RegisterAuthorizeRoute mounts the one route other apps built on
 // infrapi/lib call to authorize a request against this namespace's own
 // RBAC objects (see Repository.Authorize): POST
@@ -49,7 +54,14 @@ type AuthorizeResponse struct {
 // RBAC grant of its own: a caller can always ask "can I do X", since
 // the answer never reveals more than the caller's own already-resolved
 // identity already could.
-func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFunc) {
+//
+// precheck, when non-nil, runs before any RBAC rule is evaluated and
+// its error (if any) is returned as-is instead of a decision — in
+// practice catalog.Repository.CheckSubscribedApi (namespace exists, api
+// exists, namespace subscribed to it, subscription active for any
+// write verb), injected as a function since the
+// dependency runs catalog -> rbac, never the other way.
+func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, precheck PrecheckFunc) {
 	r.POST("/apis/"+AuthorizationAPI+"/v1/check", gate, func(c *gin.Context) {
 		ac, ok := middleware.GetAuth(c)
 		if !ok {
@@ -61,6 +73,13 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 		if err := c.ShouldBindJSON(&req); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.Authorize", ""))
 			return
+		}
+
+		if precheck != nil {
+			if perr := precheck(req.Namespace, req.Api, req.Verb); perr != nil {
+				httpapi.Fail(c, perr)
+				return
+			}
 		}
 
 		allowed, reason, err := repo.Authorize(ac.UserID, ac.Groups, req.Namespace, req.Api, req.Resource, req.Verb)

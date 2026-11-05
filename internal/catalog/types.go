@@ -24,6 +24,10 @@ package catalog
 var (
 	CatalogAPI   = "catalog.example.com"
 	NamespaceAPI = "apps.example.com"
+	// apiDomain is the deployment's own api domain, kept so
+	// CheckSubscribedApi can map a full API group URN
+	// ("compute.<domain>") back to its ApiRegistration name ("compute").
+	apiDomain = "example.com"
 )
 
 // SetAPIDomain rebuilds CatalogAPI and NamespaceAPI as "catalog.<domain>"
@@ -31,6 +35,7 @@ var (
 func SetAPIDomain(domain string) {
 	CatalogAPI = "catalog." + domain
 	NamespaceAPI = "apps." + domain
+	apiDomain = domain
 }
 
 // ApiRegistrationRef identifies one ApiRegistration by its full

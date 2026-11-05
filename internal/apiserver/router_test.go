@@ -158,11 +158,9 @@ func TestUserinfoSupportsGetAndPost(t *testing.T) {
 }
 
 // TestAuthorizeCheckRoute confirms the RBAC decision endpoint lives at
-// its new home (/apis/authorization.example.com/v1/check, alongside
-// the clustergroups/clusterroles/clusterrolebindings it shares an api
-// group with — see rbac.RegisterAuthorizeRoute) rather than the old
-// /api/v1/authorize, and that it answers {"allowed":false} rather than
-// erroring when the caller holds no matching namespace RBAC at all.
+// /apis/authorization.example.com/v1/check and that, before any RBAC
+// rule is consulted, it refuses a namespace that doesn't exist (see
+// catalog.Repository.CheckSubscribedApi, wired in Build).
 func TestAuthorizeCheckRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -180,10 +178,10 @@ func TestAuthorizeCheckRoute(t *testing.T) {
 	w := httptest.NewRecorder()
 	engine.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404, body: %s", w.Code, w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte(`"allowed":false`)) {
-		t.Fatalf("body = %s, want allowed:false (no namespace RBAC set up)", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte(`namespace \"core\" not found`)) {
+		t.Fatalf("body = %s, want namespace not found", w.Body.String())
 	}
 }
