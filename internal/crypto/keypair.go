@@ -69,7 +69,7 @@ func decodePrivateKeyPEM(data []byte) (*rsa.PrivateKey, error) {
 }
 
 func loadPrivateKeyFile(path string) (*rsa.PrivateKey, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //#nosec G304 -- path is the operator's own config.PatConfig.PrivateKeyPath, never attacker input
 	if err != nil {
 		return nil, fmt.Errorf("pat keypair: read %s: %w", path, err)
 	}

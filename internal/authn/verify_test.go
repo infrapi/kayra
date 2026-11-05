@@ -34,7 +34,7 @@ func newTestManager(t *testing.T) (*oidc.Manager, *rsa.PrivateKey, string) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 
 	secret := pemEncodeRSAPrivateKey(priv)
 	cfg := &config.Config{

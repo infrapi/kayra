@@ -57,10 +57,10 @@ func Verify(m *oidc.Manager, tokenString string) (*Verified, error) {
 		return nil, fmt.Errorf("authn: token is not valid")
 	}
 
-	if iat, err := claims.GetIssuedAt(); err == nil && iat != nil && iat.Time.After(time.Now()) {
+	if iat, err := claims.GetIssuedAt(); err == nil && iat != nil && iat.After(time.Now()) {
 		return nil, fmt.Errorf("authn: token iat %s is in the future", iat.Time)
 	}
-	if exp, err := claims.GetExpirationTime(); err == nil && exp != nil && exp.Time.Before(time.Now()) {
+	if exp, err := claims.GetExpirationTime(); err == nil && exp != nil && exp.Before(time.Now()) {
 		return nil, fmt.Errorf("authn: token exp %s is in the past", exp.Time)
 	}
 

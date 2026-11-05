@@ -72,7 +72,7 @@ func Load() (*File, error) {
 // LoadFrom reads the context file at an explicit path, for callers
 // (tests, KAYRA_CONTEXT_FILE overrides) that already resolved it.
 func LoadFrom(path string) (*File, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //#nosec G304 -- path is this user's own $KAYRA_CONTEXT_FILE/default path, never attacker input
 	if errors.Is(err, os.ErrNotExist) {
 		return &File{Contexts: map[string]Context{}}, nil
 	}

@@ -135,7 +135,7 @@ func asRealBrowserFollowingLinks(t *testing.T, brokerBaseURL string) {
 					return
 				}
 				body, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
+				_ = resp.Body.Close()
 
 				m := hrefRe.FindSubmatch(body)
 				if m == nil {
@@ -235,7 +235,7 @@ func TestAuthorizeChooserPageListsEveryProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, body %s", resp.StatusCode, body)
@@ -273,7 +273,7 @@ func TestAuthorizeNoProviderConfiguredFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("status = %d, want 502 when no provider is configured", resp.StatusCode)
 	}
@@ -298,7 +298,7 @@ func TestAuthorizeRejectsNonLoopbackRedirect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for a non-loopback redirect_uri (open-redirect guard)", resp.StatusCode)
 	}
@@ -312,7 +312,7 @@ func TestCallbackRejectsUnknownState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for an unknown/expired state", resp.StatusCode)
 	}
@@ -337,7 +337,7 @@ func TestConfirmPageEscapesQueryValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, body %s", resp.StatusCode, body)

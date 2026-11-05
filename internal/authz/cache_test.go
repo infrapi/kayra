@@ -22,7 +22,7 @@ func TestCachedResolveUserHitsBackendOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	backend := &countingBackend{info: UserInfo{ID: "jdoe", Attributes: map[string]string{"email": "jdoe@example.com"}}}
 	cached := NewCached(backend, s, store.NewKeys(""), "idm")
@@ -47,7 +47,7 @@ func TestCachedResolveUserExpires(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	backend := &countingBackend{info: UserInfo{ID: "jdoe"}}
 	cached := NewCached(backend, s, store.NewKeys(""), "idm")

@@ -55,7 +55,7 @@ func FetchDiscovery(url, proxy string) (*DiscoveryDoc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("oidc: fetch discovery %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("oidc: discovery %s returned %d", url, resp.StatusCode)
@@ -88,7 +88,7 @@ func FetchJWKS(url, proxy string) ([]JWK, error) {
 	if err != nil {
 		return nil, fmt.Errorf("oidc: fetch jwks %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("oidc: jwks %s returned %d", url, resp.StatusCode)
@@ -124,7 +124,7 @@ func FetchUserinfo(url, token, proxy string) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("oidc: call userinfo %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("oidc: userinfo %s returned %d", url, resp.StatusCode)

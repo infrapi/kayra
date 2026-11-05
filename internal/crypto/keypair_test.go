@@ -12,7 +12,7 @@ func TestLoadOrCreatePatKeypairPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	keys := store.NewKeys("")
 
 	priv1, err := LoadOrCreatePatKeypair(s, keys, config.PatConfig{})

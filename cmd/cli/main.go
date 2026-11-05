@@ -189,7 +189,7 @@ func runContextList(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "CURRENT\tNAME\tPROVIDER\tSERVER\tEXPIRY")
+	_, _ = fmt.Fprintln(w, "CURRENT\tNAME\tPROVIDER\tSERVER\tEXPIRY")
 	for _, name := range f.Names() {
 		c := f.Contexts[name]
 		current := ""
@@ -200,7 +200,7 @@ func runContextList(ctx context.Context, cmd *cli.Command) error {
 		if !c.Expiry.IsZero() {
 			expiry = c.Expiry.Local().Format(time.RFC3339)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, name, c.Provider, c.Server, expiry)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", current, name, c.Provider, c.Server, expiry)
 	}
 	return w.Flush()
 }
@@ -428,7 +428,7 @@ func runWhoami(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return fmt.Errorf("whoami: call %s: %w", userinfoURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -451,7 +451,7 @@ func runWhoami(ctx context.Context, cmd *cli.Command) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
 	for _, name := range names {
-		fmt.Fprintf(w, "%s:\t%s\n", name, formatUserinfoValue(attrs[name]))
+		_, _ = fmt.Fprintf(w, "%s:\t%s\n", name, formatUserinfoValue(attrs[name]))
 	}
 	return w.Flush()
 }
@@ -564,7 +564,7 @@ func checkAuthorized(ctx context.Context, c clicontext.Context, apiDomain, names
 	if err != nil {
 		return false, "", fmt.Errorf("call %s: %w", checkURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

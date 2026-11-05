@@ -647,7 +647,7 @@ func TestReconcilerWithJobLockSerializesAcrossReconcilers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	t.Cleanup(func() { local.Close() })
+	t.Cleanup(func() { _ = local.Close() })
 	shared := newFakeJobLockerStore(local)
 
 	wA := NewReconciler(NewRepository(shared, store.NewKeys("")), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{})

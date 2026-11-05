@@ -306,7 +306,7 @@ func TestSubscriptionRequiresClusterRBAC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	keys := store.NewKeys("")
 
 	repo := NewRepository(s, keys)
@@ -338,7 +338,7 @@ func TestSubscriptionSyncIsGatedOnItsOwnResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	keys := store.NewKeys("")
 
 	repo := NewRepository(s, keys)

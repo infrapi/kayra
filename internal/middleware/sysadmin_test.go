@@ -83,7 +83,7 @@ func newLocalSysadminAuthenticator(t *testing.T, fixtureGroups []string) (*Authe
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	storeKeys := store.NewKeys("")
 
 	m, err := oidc.NewManager(s, storeKeys, cfg)

@@ -95,7 +95,7 @@ func (a *LDAPAuthorizer) dial() (*ldap.Conn, error) {
 	}
 
 	if err := conn.Bind(a.cfg.Connection.BindDN, a.cfg.Connection.Password); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("ldap: bind as %s: %w", a.cfg.Connection.BindDN, err)
 	}
 
@@ -200,7 +200,7 @@ func (a *LDAPAuthorizer) ResolveUser(userID string) (UserInfo, error) {
 	if err != nil {
 		return UserInfo{}, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	entry, err := a.searchUser(conn, a.normalizeUsername(userID))
 	if err != nil {
@@ -227,7 +227,7 @@ func (a *LDAPAuthorizer) Login(username, password string) (UserInfo, error) {
 	if err != nil {
 		return UserInfo{}, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	normalized := a.normalizeUsername(username)
 	entry, err := a.searchUser(conn, normalized)

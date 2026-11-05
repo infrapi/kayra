@@ -101,7 +101,7 @@ func LoginToServer(ctx context.Context, serverBaseURL string, stderr io.Writer) 
 
 	state, err := randomString(32)
 	if err != nil {
-		listener.Close()
+		_ = listener.Close()
 		return nil, err
 	}
 	verifier := oauth2.GenerateVerifier()
@@ -109,9 +109,9 @@ func LoginToServer(ctx context.Context, serverBaseURL string, stderr io.Writer) 
 
 	resultCh := make(chan callbackResult, 1)
 	errCh := make(chan error, 1)
-	srv := &http.Server{Handler: callbackHandler(state, resultCh, errCh)}
+	srv := &http.Server{Handler: callbackHandler(state, resultCh, errCh), ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = srv.Serve(listener) }()
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	base := strings.TrimRight(serverBaseURL, "/")
 	authURL := base + "/oauth2/v1/authorize?" + url.Values{
@@ -121,9 +121,9 @@ func LoginToServer(ctx context.Context, serverBaseURL string, stderr io.Writer) 
 		"code_challenge_method": {"S256"},
 	}.Encode()
 
-	fmt.Fprintf(stderr, "oauth2login: opening browser to log in:\n\n  %s\n\n", authURL)
+	_, _ = fmt.Fprintf(stderr, "oauth2login: opening browser to log in:\n\n  %s\n\n", authURL)
 	if err := OpenBrowser(authURL); err != nil {
-		fmt.Fprintf(stderr, "oauth2login: could not open a browser automatically (%v) — open the URL above by hand\n", err)
+		_, _ = fmt.Fprintf(stderr, "oauth2login: could not open a browser automatically (%v) — open the URL above by hand\n", err)
 	}
 
 	var result callbackResult
@@ -207,11 +207,11 @@ func callbackHandler(wantState string, resultCh chan<- callbackResult, errCh cha
 func writeCallbackPage(w http.ResponseWriter, ok bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if ok {
-		fmt.Fprint(w, "<html><body><p>Login complete — you can close this tab.</p></body></html>")
+		_, _ = fmt.Fprint(w, "<html><body><p>Login complete — you can close this tab.</p></body></html>")
 		return
 	}
 	w.WriteHeader(http.StatusBadRequest)
-	fmt.Fprint(w, "<html><body><p>Login failed — check the terminal and try again.</p></body></html>")
+	_, _ = fmt.Fprint(w, "<html><body><p>Login failed — check the terminal and try again.</p></body></html>")
 }
 
 func randomString(n int) (string, error) {
@@ -238,5 +238,9 @@ func defaultOpenBrowser(url string) error {
 	default:
 		cmd, args = "xdg-open", []string{url}
 	}
-	return exec.Command(cmd, args...).Start()
+	// cmd is always one of the three hardcoded literals above, picked by
+	// runtime.GOOS alone — never attacker-influenced — and url is passed
+	// as a single argv entry, never through a shell, so there is nothing
+	// here for shell metacharacters to reach.
+	return exec.Command(cmd, args...).Start() //#nosec G204
 }

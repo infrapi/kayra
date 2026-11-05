@@ -11,7 +11,7 @@ func TestLocalStorePutGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if err := s.Put("/kayra/foo/bar", []byte("hello")); err != nil {
 		t.Fatalf("Put: %v", err)
@@ -31,7 +31,7 @@ func TestLocalStoreGetMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if _, err := s.Get("/does/not/exist"); err != ErrNotFound {
 		t.Fatalf("Get = %v, want ErrNotFound", err)
@@ -43,7 +43,7 @@ func TestLocalStoreTTLExpiry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if err := s.PutTTL("/kayra/ttl", []byte("v"), 10*time.Millisecond); err != nil {
 		t.Fatalf("PutTTL: %v", err)
@@ -65,7 +65,7 @@ func TestLocalStoreDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	if err := s.Put("/kayra/x", []byte("v")); err != nil {
 		t.Fatalf("Put: %v", err)
@@ -87,7 +87,7 @@ func TestLocalStoreList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	entries := map[string]string{
 		"/kayra/namespaces/ns1/groups/a/config": "a",
@@ -114,7 +114,7 @@ func TestLocalStoreDeletePrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	keys := NewKeys("")
 	for _, e := range []struct{ authz, user string }{
@@ -164,7 +164,7 @@ func TestLocalStoreWatchPutAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -206,7 +206,7 @@ func TestLocalStoreWatchStopsOnContextCancel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	events, err := s.Watch(ctx, "/kayra/")

@@ -66,7 +66,7 @@ func newClaimsTestAuthenticator(t *testing.T, srv *httptest.Server) (*Authentica
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	keys := store.NewKeys("")
 
 	cfg := &config.Config{

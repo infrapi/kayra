@@ -110,7 +110,7 @@ func asBrowser(t *testing.T) {
 				t.Logf("browser double: %v", err)
 				return
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}()
 		return nil
 	}

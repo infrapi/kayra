@@ -57,7 +57,7 @@ func TestManagerRefreshAndFindKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	keys := store.NewKeys("")
 
 	cfg := &config.Config{
@@ -113,7 +113,7 @@ func TestManagerAllKeysAggregatesLocalAndRemote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	keys := store.NewKeys("")
 
 	cfg := &config.Config{

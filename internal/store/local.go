@@ -91,7 +91,7 @@ func (s *LocalStore) Get(key string) ([]byte, error) {
 // readEntry reads and decodes the entry at path, deleting and reporting
 // ErrNotFound if it has expired. Caller must hold s.mu.
 func (s *LocalStore) readEntry(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //#nosec G304 -- path is always s.keyPath(key)'s own output (Get/List) or WalkDir's own result (List), both already confined under s.root
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNotFound
@@ -148,7 +148,7 @@ func (s *LocalStore) DeletePrefix(prefix string) (int64, error) {
 			return nil
 		}
 
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) { //#nosec G122 -- path is WalkDir's own result under s.root, dev/test-only backend, this process holds s.mu for the whole walk
 			return err
 		}
 		deleted++

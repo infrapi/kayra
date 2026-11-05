@@ -139,7 +139,7 @@ func runReconciler(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	repo := catalog.NewRepository(s, keys)
 	r := catalog.NewReconciler(repo, appCfg.AppPlatform, appCfg.AppRegion, cfg.Reconciler)
@@ -208,7 +208,7 @@ func runCacheClean(ctx context.Context, cmd *cli.Command) error {
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	var total int64
 	switch scope {

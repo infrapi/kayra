@@ -12,7 +12,7 @@ func newTestRepo(t *testing.T) *Repository {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return NewRepository(s, store.NewKeys(""))
 }
 

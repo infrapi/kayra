@@ -9,7 +9,7 @@ import (
 
 // Load reads and validates the Kayra YAML configuration file at path.
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //#nosec G304 -- path is the operator's own --config flag/$KAYRA_CONFIG_FILE, never attacker input
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}

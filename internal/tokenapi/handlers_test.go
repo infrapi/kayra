@@ -31,7 +31,7 @@ func TestCreateAndUsePAT(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	keys := store.NewKeys("")
 
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -123,7 +123,7 @@ func TestCreateAndUsePATSnapshotsGroupsForClaimsBackend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	keys := store.NewKeys("")
 
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -205,7 +205,7 @@ func TestUnknownTokenRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocalStore: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
