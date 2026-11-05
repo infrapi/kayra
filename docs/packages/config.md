@@ -285,7 +285,7 @@ Left empty (the default), `SysadminGate` falls back to a single group,
 ```go
 type ReconcilerConfig struct {
 	MaxConcurrentReconciles int                        // <= 0 (the typical case): catalog.DefaultMaxConcurrentReconciles
-	DefaultMode             string                     // free-form mode name — "" keeps a mode-less stack failing reconcile
+	DefaultMode             string                     // free-form mode name — "" keeps a mode-less api registration failing reconcile
 	Mode                    map[string][]ReconcileStep // the HTTP step pipeline reconcile runs for a given mode name
 }
 ```
@@ -297,7 +297,7 @@ reconciler:
 ```
 
 Caps `kayra reconciler`'s goroutine pool, and gives `reconcile` a mode to
-fall back to for a stack with none of its own — see
+fall back to for an api registration with none of its own — see
 [Subscriptions & reconciliation](../architecture/subscriptions.md#concurrency)
 and [#reconcile](../architecture/subscriptions.md#reconcile).
 
@@ -329,7 +329,7 @@ type WaitCondition struct {
 
 `Mode` is keyed by mode name — `"api"`/`"trigger"` in the examples here,
 but any name works, since there's no fixed enum of valid modes, only
-`Stack.Mode`/`DefaultMode` ever being empty is a problem (see
+`ApiRegistration.Mode`/`DefaultMode` ever being empty is a problem (see
 [Reconcile](../architecture/subscriptions.md#reconcile)). Each entry is
 the list of calls `reconcile` runs for real once configured —
 see [Subscriptions & reconciliation](../architecture/subscriptions.md#http-step-pipeline)

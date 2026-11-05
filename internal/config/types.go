@@ -299,30 +299,32 @@ type PatConfig struct {
 type ReconcilerConfig struct {
 	// MaxConcurrentReconciles caps how many reconcile/activate operations
 	// Reconciler runs at once — the goroutine pool size behind every
-	// namespace/subscription activation and every stack-triggered
-	// subscription reconcile. Zero (the key absent, the typical case)
-	// falls back to catalog.DefaultMaxConcurrentReconciles.
+	// namespace/subscription activation and every api-registration
+	// -triggered subscription reconcile. Zero (the key absent, the
+	// typical case) falls back to catalog.DefaultMaxConcurrentReconciles.
 	MaxConcurrentReconciles int `yaml:"max_concurrent_reconciles"`
-	// DefaultMode is used when a Stack's own Mode is unset: without this,
-	// a stack whose owner never bothered to set mode: fails reconcile
-	// forever (see catalog.Reconciler.reconcile), rather than just
-	// assuming the deployment's usual default. Empty (the typical case)
-	// keeps that failing behavior — an explicit Stack.Mode is still
-	// always honored over this when the stack has one.
+	// DefaultMode is used when an ApiRegistration's own Mode is unset:
+	// without this, a registration whose owner never bothered to set
+	// mode: fails reconcile forever (see catalog.Reconciler.reconcile),
+	// rather than just assuming the deployment's usual default. Empty
+	// (the typical case) keeps that failing behavior — an explicit
+	// ApiRegistration.Mode is still always honored over this when the
+	// registration has one.
 	DefaultMode string `yaml:"default_mode"`
-	// Mode names the HTTP step pipeline reconcile runs for a stack whose
-	// Mode (after DefaultMode falls back) resolves to that key — "trigger"
-	// and "api" in every example, but any name works, since this is just
-	// a map. A mode with no entry here keeps reconcile's placeholder
-	// log-only behavior; one that does gets its steps run for real,
-	// in order, each one's success or failure described on ReconcileStep.
+	// Mode names the HTTP step pipeline reconcile runs for an api
+	// registration whose Mode (after DefaultMode falls back) resolves to
+	// that key — "trigger" and "api" in every example, but any name
+	// works, since this is just a map. A mode with no entry here keeps
+	// reconcile's placeholder log-only behavior; one that does gets its
+	// steps run for real, in order, each one's success or failure
+	// described on ReconcileStep.
 	Mode map[string][]ReconcileStep `yaml:"mode"`
 }
 
 // SysadminConfig configures middleware.SysadminGate — the privileged
 // group(s) a caller's resolved groups must intersect to reach the
-// cluster-bootstrap endpoints (rbac's cluster routes, catalog's stack
-// and namespace-collection routes). Authored directly in config rather
+// cluster-bootstrap endpoints (rbac's cluster routes, catalog's api
+// registration and namespace-collection routes). Authored directly in config rather
 // than derived from a template, so a deployment can name real
 // LDAP/IdP groups it already has instead of being locked into a
 // single "$platform-core-sysadmin" convention.
@@ -339,7 +341,7 @@ type SysadminConfig struct {
 // string value reachable inside Data (however deeply nested — Data's own
 // values, object fields, array elements, any combination), and every
 // Headers value renders as a Go text/template first, against a struct
-// exposing ".Subscription" (Stack, Namespace, Platform, Region,
+// exposing ".Subscription" (Api, Namespace, Platform, Region,
 // CurrentSyncID, ExpectedSyncID — all strings) and ".Previous.Outputs"
 // (the preceding step's own Outputs, keyed exactly as that step declared
 // them; empty for the first step).

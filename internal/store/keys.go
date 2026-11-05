@@ -106,16 +106,16 @@ func (k Keys) NamespaceRoleBindingPrefix(namespace string) string {
 	return fmt.Sprintf("%s/namespaces/%s/rolebindings/", k.Prefix, namespace)
 }
 
-// ClusterStackConfig is a cluster-level stack's definition, scoped by
-// platform and region.
-func (k Keys) ClusterStackConfig(platform, region, name string) string {
-	return fmt.Sprintf("%s/cluster/stacks/%s/%s/%s/config", k.Prefix, platform, region, name)
+// ClusterApiRegistrationConfig is a cluster-level API registration's
+// definition, scoped by platform and region.
+func (k Keys) ClusterApiRegistrationConfig(platform, region, name string) string {
+	return fmt.Sprintf("%s/cluster/apiregistrations/%s/%s/%s/config", k.Prefix, platform, region, name)
 }
 
-// ClusterStackPrefix lists every cluster-level stack, across every
-// platform and region.
-func (k Keys) ClusterStackPrefix() string {
-	return fmt.Sprintf("%s/cluster/stacks/", k.Prefix)
+// ClusterApiRegistrationPrefix lists every cluster-level API
+// registration, across every platform and region.
+func (k Keys) ClusterApiRegistrationPrefix() string {
+	return fmt.Sprintf("%s/cluster/apiregistrations/", k.Prefix)
 }
 
 // NamespaceConfig is a namespace's own record — its active flag (the
@@ -128,19 +128,20 @@ func (k Keys) NamespaceConfig(namespace string) string {
 // NamespacesPrefix covers every namespace's entire resource tree (its own
 // config, groups, roles, rolebindings, subscriptions, ...), for scans
 // that must look across every namespace at once (listing every
-// namespace, or checking whether any namespace still subscribes to a
-// stack before deleting it).
+// namespace, or checking whether any namespace still subscribes to an
+// api registration before deleting it).
 func (k Keys) NamespacesPrefix() string {
 	return fmt.Sprintf("%s/namespaces/", k.Prefix)
 }
 
-// NamespaceSubscriptionConfig is one namespace's subscription to a stack
-// by name. Unlike Stack itself, a subscription carries no platform/region
-// of its own: this deployment runs in exactly one platform/region
-// (INFRAPI_APP_PLATFORM/_REGION), so a subscription can only ever mean
-// "the stack named stackName in this deployment's own platform/region."
-func (k Keys) NamespaceSubscriptionConfig(namespace, stackName string) string {
-	return fmt.Sprintf("%s/namespaces/%s/subscriptions/%s/config", k.Prefix, namespace, stackName)
+// NamespaceSubscriptionConfig is one namespace's subscription to an API
+// registration by name. Unlike ApiRegistration itself, a subscription
+// carries no platform/region of its own: this deployment runs in
+// exactly one platform/region (INFRAPI_APP_PLATFORM/_REGION), so a
+// subscription can only ever mean "the registration named apiName in
+// this deployment's own platform/region."
+func (k Keys) NamespaceSubscriptionConfig(namespace, apiName string) string {
+	return fmt.Sprintf("%s/namespaces/%s/subscriptions/%s/config", k.Prefix, namespace, apiName)
 }
 
 // NamespaceSubscriptionPrefix lists every subscription in namespace.
@@ -178,11 +179,11 @@ func (k Keys) ReconcilerNamespaceLock(name string) string {
 }
 
 // ReconcilerSubscriptionLock is the JobLocker key guarding one namespace's
-// subscription to one stack — its initial activation and every later
-// reconcile — so every kayra reconciler process sharing this store
-// agrees on which one of them actually reconciles it at a time, rather
-// than each redundantly reacting to the same watch event — see
-// catalog.Reconciler.
-func (k Keys) ReconcilerSubscriptionLock(namespace, stackName string) string {
-	return fmt.Sprintf("%s/locks/reconciler/namespaces/%s/subscriptions/%s", k.Prefix, namespace, stackName)
+// subscription to one API registration — its initial activation and
+// every later reconcile — so every kayra reconciler process sharing
+// this store agrees on which one of them actually reconciles it at a
+// time, rather than each redundantly reacting to the same watch event
+// — see catalog.Reconciler.
+func (k Keys) ReconcilerSubscriptionLock(namespace, apiName string) string {
+	return fmt.Sprintf("%s/locks/reconciler/namespaces/%s/subscriptions/%s", k.Prefix, namespace, apiName)
 }

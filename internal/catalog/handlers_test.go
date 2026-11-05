@@ -97,7 +97,7 @@ func newTestEngine(t *testing.T) (*gin.Engine, *Repository) {
 	seedClusterRBAC(t, rbacRepo, testAdminGroup, testNamespace)
 
 	engine := gin.New()
-	RegisterStackRoutes(engine, catalogRepo, noopGate, testDeployPlatform, testDeployRegion)
+	RegisterApiRegistrationRoutes(engine, catalogRepo, noopGate, testDeployPlatform, testDeployRegion)
 	RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, fakeAuthGate(testAdmin, testAdminGroup), testDeployPlatform, testDeployRegion)
 	RegisterNamespaceCollectionRoutes(engine, catalogRepo, noopGate)
 	return engine, catalogRepo

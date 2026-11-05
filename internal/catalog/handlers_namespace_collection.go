@@ -31,7 +31,7 @@ func namespaceResponse(n Namespace) gin.H {
 // are the same thing, so there is no separate /tenant child resource —
 // on r, gated by gate (normally middleware.SysadminGate). Creating,
 // renaming or deleting a namespace is a cluster-wide administrative
-// action, same trust tier as a Stack, not something that can be
+// action, same trust tier as an ApiRegistration, not something that can be
 // bootstrapped via per-namespace RBAC (there is nothing to check RBAC
 // against before the namespace exists) — unlike Subscription, this
 // package's namespace-collection routes have no dependency on

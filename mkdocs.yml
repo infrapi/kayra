@@ -64,7 +64,7 @@ nav:
   - Architecture:
       - Overview: architecture/overview.md
       - RBAC & auth: architecture/rbac-and-auth.md
-      - Stacks: architecture/stacks.md
+      - API registrations: architecture/api-registrations.md
       - Namespaces: architecture/namespaces.md
       - Subscriptions & reconciliation: architecture/subscriptions.md
   - CLI: cli.md

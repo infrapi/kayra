@@ -308,7 +308,7 @@ func TestLoadParsesReconcilerDefaultMode(t *testing.T) {
 
 // TestLoadAcceptsAnyDefaultMode confirms default_mode is a free-form
 // name, not a fixed enum: there is no whitelist of valid modes to
-// enforce here — only Stack.Mode/DefaultMode both being empty is ever a
+// enforce here — only ApiRegistration.Mode/DefaultMode both being empty is ever a
 // problem, and that's a catalog.Reconciler.reconcile concern, not a
 // load-time one.
 func TestLoadAcceptsAnyDefaultMode(t *testing.T) {
@@ -328,7 +328,7 @@ reconciler:
   mode:
     api:
       - method: post
-        endpoint: "https://{{ .Subscription.Stack }}.local/sync"
+        endpoint: "https://{{ .Subscription.Api }}.local/sync"
         data:
           sync_id: "{{ .Subscription.ExpectedSyncID }}"
         headers:
@@ -341,7 +341,7 @@ reconciler:
         outputs:
           JobID: ".job_id"
       - method: get
-        endpoint: "https://{{ .Subscription.Stack }}.local/sync/{{ .Previous.Outputs.JobID }}"
+        endpoint: "https://{{ .Subscription.Api }}.local/sync/{{ .Previous.Outputs.JobID }}"
         timeout: "3600s"
 `
 

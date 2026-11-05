@@ -346,7 +346,7 @@ func canICommand() *cli.Command {
 	return &cli.Command{
 		Name:        "can-i",
 		Usage:       "check whether the current login can do <verb> on <resource>",
-		Description: "Tests rbac.Authorize (namespace-scoped Group/Role/RoleBinding) — the authorization path other apps built on infrapi/lib use for their own API. Kayra's own management-plane routes (namespaces, stacks, cluster/namespace groups-roles-rolebindings, subscriptions) are gated by other mechanisms entirely and are never decided by this check — asking about one of those prints a warning alongside the answer.",
+		Description: "Tests rbac.Authorize (namespace-scoped Group/Role/RoleBinding) — the authorization path other apps built on infrapi/lib use for their own API. Kayra's own management-plane routes (namespaces, api registrations, cluster/namespace groups-roles-rolebindings, subscriptions) are gated by other mechanisms entirely and are never decided by this check — asking about one of those prints a warning alongside the answer.",
 		ArgsUsage:   "<verb> <resource>",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "api", Required: true, Usage: "the API group being asked about, e.g. compute.example.com"},
@@ -500,7 +500,7 @@ func resolveAPIDomain(explicit, api string) string {
 //     cluster-scoped Group/Role/RoleBinding check, a different data
 //     set from the namespace-scoped one Authorize itself checks.
 //   - authorization.<domain>'s clustergroups/clusterroles/
-//     clusterrolebindings, catalog.<domain>'s stacks, and
+//     clusterrolebindings, catalog.<domain>'s api registrations, and
 //     apps.<domain>'s namespaces are gated by middleware.SysadminGate
 //     alone — whether the caller's groups intersect sysadmin.groups,
 //     no Rule of any kind consulted.
@@ -529,7 +529,7 @@ func kayraOwnManagementWarning(apiDomain, api, resource string) string {
 	case "subscription." + apiDomain:
 		return "subscriptions are gated by cluster RBAC (CanManageNamespaceRBAC), never by this check — it tests a different, namespace-scoped Group/Role/RoleBinding set"
 	case "catalog." + apiDomain:
-		return "stacks are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
+		return "api registrations are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
 	case "apps." + apiDomain:
 		return "namespaces are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
 	}

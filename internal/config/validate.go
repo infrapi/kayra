@@ -42,8 +42,8 @@ func (c *Config) Validate() error {
 	if c.Reconciler.MaxConcurrentReconciles < 0 {
 		return fmt.Errorf("reconciler.max_concurrent_reconciles: must not be negative")
 	}
-	// DefaultMode is a free-form key into Mode, same as a Stack's own
-	// mode: field — "trigger" and "api" in every example, but nothing
+	// DefaultMode is a free-form key into Mode, same as an
+	// ApiRegistration's own mode: field — "trigger" and "api" in every example, but nothing
 	// hardcoded requires either name, so there is nothing to whitelist
 	// here beyond what Mode's own per-step validation already covers.
 	for mode, steps := range c.Reconciler.Mode {

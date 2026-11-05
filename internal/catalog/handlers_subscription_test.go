@@ -15,12 +15,12 @@ func TestNamespaceSubscriptionCRUD(t *testing.T) {
 	engine, repo := newTestEngine(t)
 	ns := testNamespace
 
-	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/stacks", Stack{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true})
+	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true})
 
 	// active/state are computed: there is no request field that can make
 	// a subscription come back anything but disabled/init.
 	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions", subscriptionCreateRequest{
-		StackName: "vault",
+		ApiName: "vault",
 	})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create: status %d, body %s", w.Code, w.Body.String())
@@ -88,22 +88,23 @@ func TestNamespaceSubscriptionCRUD(t *testing.T) {
 }
 
 // TestSubscriptionResponseComputesExpectedSyncID confirms expected_sync_id
-// is never stored on the subscription itself: it's the referenced stack's
-// own, current SyncID, read fresh on every response — so it moves the
-// instant the stack's SyncID does, with no Reconciler pass required,
+// is never stored on the subscription itself: it's the referenced api
+// registration's own, current SyncID, read fresh on every response —
+// so it moves the instant the registration's SyncID does, with no
+// Reconciler pass required,
 // while current_sync_id (the subscription's own persisted field) only
 // moves once something actually reconciles it.
 func TestSubscriptionResponseComputesExpectedSyncID(t *testing.T) {
 	engine, repo := newTestEngine(t)
 	ns := testNamespace
 
-	if err := repo.PutClusterStack(Stack{
+	if err := repo.PutClusterApiRegistration(ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion,
-		Active: true, SyncID: "stack-sync-1",
+		Active: true, SyncID: "api-sync-1",
 	}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription(ns, Subscription{StackName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription(ns, Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -121,32 +122,32 @@ func TestSubscriptionResponseComputesExpectedSyncID(t *testing.T) {
 	}
 
 	// not yet activated: current_sync_id is empty, but expected_sync_id
-	// already reflects the stack — the two visibly differ.
+	// already reflects the api registration — the two visibly differ.
 	resp := get()
-	if resp.CurrentSyncID != "" || resp.ExpectedSyncID != "stack-sync-1" {
-		t.Fatalf("pre-activation = %+v, want current=\"\" expected=stack-sync-1", resp)
+	if resp.CurrentSyncID != "" || resp.ExpectedSyncID != "api-sync-1" {
+		t.Fatalf("pre-activation = %+v, want current=\"\" expected=api-sync-1", resp)
 	}
 
-	// activated and reconciled to the stack's current SyncID: the two match.
-	if err := repo.ActivateSubscription(ns, "vault", "stack-sync-1"); err != nil {
+	// activated and reconciled to the api registration's current SyncID: the two match.
+	if err := repo.ActivateSubscription(ns, "vault", "api-sync-1"); err != nil {
 		t.Fatalf("ActivateSubscription: %v", err)
 	}
 	resp = get()
-	if resp.CurrentSyncID != "stack-sync-1" || resp.ExpectedSyncID != "stack-sync-1" {
-		t.Fatalf("post-activation = %+v, want both stack-sync-1", resp)
+	if resp.CurrentSyncID != "api-sync-1" || resp.ExpectedSyncID != "api-sync-1" {
+		t.Fatalf("post-activation = %+v, want both api-sync-1", resp)
 	}
 
-	// the stack's SyncID moves on: expected_sync_id follows immediately
+	// the api registration's SyncID moves on: expected_sync_id follows immediately
 	// (computed fresh), current_sync_id does not (nothing reconciled it).
-	if err := repo.PutClusterStack(Stack{
+	if err := repo.PutClusterApiRegistration(ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion,
-		Active: true, SyncID: "stack-sync-2",
+		Active: true, SyncID: "api-sync-2",
 	}); err != nil {
-		t.Fatalf("PutClusterStack (bump sync_id): %v", err)
+		t.Fatalf("PutClusterApiRegistration (bump sync_id): %v", err)
 	}
 	resp = get()
-	if resp.CurrentSyncID != "stack-sync-1" || resp.ExpectedSyncID != "stack-sync-2" {
-		t.Fatalf("post-bump = %+v, want current=stack-sync-1 expected=stack-sync-2 (reconcile pending)", resp)
+	if resp.CurrentSyncID != "api-sync-1" || resp.ExpectedSyncID != "api-sync-2" {
+		t.Fatalf("post-bump = %+v, want current=api-sync-1 expected=api-sync-2 (reconcile pending)", resp)
 	}
 }
 
@@ -159,16 +160,16 @@ func TestSubscriptionForceSync(t *testing.T) {
 	engine, repo := newTestEngine(t)
 	ns := testNamespace
 
-	if err := repo.PutClusterStack(Stack{
+	if err := repo.PutClusterApiRegistration(ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion,
-		Active: true, SyncID: "stack-sync-1",
+		Active: true, SyncID: "api-sync-1",
 	}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription(ns, Subscription{StackName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription(ns, Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
-	if err := repo.ActivateSubscription(ns, "vault", "stack-sync-1"); err != nil {
+	if err := repo.ActivateSubscription(ns, "vault", "api-sync-1"); err != nil {
 		t.Fatalf("ActivateSubscription: %v", err)
 	}
 
@@ -183,8 +184,8 @@ func TestSubscriptionForceSync(t *testing.T) {
 	if resp.CurrentSyncID != "" {
 		t.Fatalf("resp.CurrentSyncID = %q, want empty after force sync", resp.CurrentSyncID)
 	}
-	if resp.ExpectedSyncID != "stack-sync-1" {
-		t.Fatalf("resp.ExpectedSyncID = %q, want stack-sync-1 (unchanged)", resp.ExpectedSyncID)
+	if resp.ExpectedSyncID != "api-sync-1" {
+		t.Fatalf("resp.ExpectedSyncID = %q, want api-sync-1 (unchanged)", resp.ExpectedSyncID)
 	}
 	if !resp.Active || resp.State != SubscriptionStateSuccess {
 		t.Fatalf("resp = %+v, want Active/State untouched by force sync", resp)
@@ -201,7 +202,7 @@ func TestSubscriptionForceSync(t *testing.T) {
 
 // TestSubscriptionForceSyncRequiresExistingSubscription confirms the
 // sync endpoint 404s on a subscription that was never created, same as
-// every other subscription route scoped by :stack.
+// every other subscription route scoped by :api.
 func TestSubscriptionForceSyncRequiresExistingSubscription(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
@@ -215,18 +216,19 @@ func TestSubscriptionForceSyncRequiresExistingSubscription(t *testing.T) {
 // current_sync_id/expected_sync_id are never omitted from a subscription
 // response, even when both are empty — a caller should never have to
 // treat "the key is missing" and "the key is empty" as two different
-// things. The stack is written directly via the repository, bypassing
-// the create-stack route's own sync_id auto-generation (see
-// RegisterStackRoutes' POST /stacks), to exercise a stack whose SyncID
-// is still genuinely empty.
+// things. The api registration is written directly via the repository,
+// bypassing the create-registration route's own sync_id
+// auto-generation (see RegisterApiRegistrationRoutes' POST
+// /apiregistrations), to exercise a registration whose SyncID is
+// still genuinely empty.
 func TestSubscriptionResponseAlwaysIncludesSyncFields(t *testing.T) {
 	engine, repo := newTestEngine(t)
 	ns := testNamespace
 
-	if err := repo.PutClusterStack(Stack{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions", subscriptionCreateRequest{StackName: "vault"})
+	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions", subscriptionCreateRequest{ApiName: "vault"})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -246,33 +248,34 @@ func TestSubscriptionResponseAlwaysIncludesSyncFields(t *testing.T) {
 	}
 }
 
-func TestSubscriptionCreateRejectsMissingStack(t *testing.T) {
+func TestSubscriptionCreateRejectsMissingApiRegistration(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
-		StackName: "does-not-exist",
+		ApiName: "does-not-exist",
 	})
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404, body %s", w.Code, w.Body.String())
 	}
 }
 
-// TestSubscriptionOnlyMatchesStackInDeploymentScope confirms a stack
-// that exists, but in a different platform/region than this deployment's
-// own, is treated as not found by a subscription — there is no way for a
-// bare stack name to mean anything else.
-func TestSubscriptionOnlyMatchesStackInDeploymentScope(t *testing.T) {
+// TestSubscriptionOnlyMatchesApiRegistrationInDeploymentScope confirms
+// an api registration that exists, but in a different platform/region
+// than this deployment's own, is treated as not found by a
+// subscription — there is no way for a bare registration name to mean
+// anything else.
+func TestSubscriptionOnlyMatchesApiRegistrationInDeploymentScope(t *testing.T) {
 	engine, repo := newTestEngine(t)
 
-	if err := repo.PutClusterStack(Stack{Name: "vault", Platform: "other-platform", Region: "other-region", Active: true}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault", Platform: "other-platform", Region: "other-region", Active: true}); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
-		StackName: "vault",
+		ApiName: "vault",
 	})
 	if w.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404 (stack exists, but not in this deployment's platform/region), body %s", w.Code, w.Body.String())
+		t.Fatalf("status = %d, want 404 (api registration exists, but not in this deployment's platform/region), body %s", w.Code, w.Body.String())
 	}
 }
 
@@ -283,10 +286,10 @@ func TestSubscriptionOnlyMatchesStackInDeploymentScope(t *testing.T) {
 func TestSubscriptionCreateIgnoresClientActiveAndState(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/stacks", Stack{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true})
+	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true})
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
-		StackName: "vault", Active: true, State: "bogus",
+		ApiName: "vault", Active: true, State: "bogus",
 	})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201 (active/state are ignored, not bound from the request), body %s", w.Code, w.Body.String())
@@ -311,15 +314,15 @@ func TestSubscriptionRequiresClusterRBAC(t *testing.T) {
 
 	repo := NewRepository(s, keys)
 	rbacRepo := rbac.NewRepository(s, keys)
-	if err := repo.PutClusterStack(Stack{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
 	engine := gin.New()
 	RegisterNamespaceRoutes(engine, repo, rbacRepo, fakeAuthGate("nobody"), testDeployPlatform, testDeployRegion)
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/myns/subscriptions", Subscription{
-		StackName: "vault",
+		ApiName: "vault",
 	})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body %s", w.Code, w.Body.String())
@@ -328,7 +331,7 @@ func TestSubscriptionRequiresClusterRBAC(t *testing.T) {
 
 // TestSubscriptionSyncIsGatedOnItsOwnResource confirms PUT .../sync is
 // checked against resource "subscriptions/sync", distinct from the
-// no-op PUT .../subscriptions/:stack's "subscriptions" — so a role
+// no-op PUT .../subscriptions/:api's "subscriptions" — so a role
 // granting "subscriptions"/"update" alone does not also grant the sync
 // action, and vice versa a role would need "subscriptions/sync" to grant
 // just that.
@@ -343,10 +346,10 @@ func TestSubscriptionSyncIsGatedOnItsOwnResource(t *testing.T) {
 
 	repo := NewRepository(s, keys)
 	rbacRepo := rbac.NewRepository(s, keys)
-	if err := repo.PutClusterStack(Stack{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true, SyncID: "sync-1"}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true, SyncID: "sync-1"}); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription(testNamespace, Subscription{StackName: "vault"}); err != nil {
+	if err := repo.PutNamespaceSubscription(testNamespace, Subscription{ApiName: "vault"}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 	if err := repo.ActivateSubscription(testNamespace, "vault", "sync-1"); err != nil {

@@ -129,12 +129,12 @@ layout lives in one place:
 | `ClusterGroupConfig(name)` | `{prefix}/cluster/groups/{name}/config` |
 | `ClusterRoleConfig(name)` | `{prefix}/cluster/roles/{name}/config` |
 | `ClusterRoleBindingConfig(name)` | `{prefix}/cluster/rolebindings/{name}/config` |
-| `ClusterStackConfig(platform, region, name)` | `{prefix}/cluster/stacks/{platform}/{region}/{name}/config` |
+| `ClusterApiRegistrationConfig(platform, region, name)` | `{prefix}/cluster/apiregistrations/{platform}/{region}/{name}/config` |
 | `NamespaceConfig(namespace)` | `{prefix}/namespaces/{namespace}/config` |
 | `NamespaceGroupConfig(ns, name)` | `{prefix}/namespaces/{ns}/groups/{name}/config` |
 | `NamespaceRoleConfig(ns, name)` | `{prefix}/namespaces/{ns}/roles/{name}/config` |
 | `NamespaceRoleBindingConfig(ns, name)` | `{prefix}/namespaces/{ns}/rolebindings/{name}/config` |
-| `NamespaceSubscriptionConfig(ns, stack)` | `{prefix}/namespaces/{ns}/subscriptions/{stack}/config` |
+| `NamespaceSubscriptionConfig(ns, api)` | `{prefix}/namespaces/{ns}/subscriptions/{api}/config` |
 | `PatToken(hash)` | `{prefix}/tokens/pat/{hash}` |
 | `PatKeypair()` | `{prefix}/keys/pat` |
 

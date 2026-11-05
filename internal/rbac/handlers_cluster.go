@@ -46,8 +46,8 @@ func validateClusterRoleBinding(repo *Repository, rb RoleBinding) *liberrors.Err
 // use the mechanism we try to implement to auth." These routes carry no
 // RequireClusterRBAC check of their own: gate alone decides access, since
 // a cluster bootstrap resource can't depend on the cluster RBAC it itself
-// defines. The infra catalog (Stack) is registered separately, by
-// internal/catalog's own RegisterStackRoutes.
+// defines. The infra catalog (ApiRegistration) is registered
+// separately, by internal/catalog's own RegisterApiRegistrationRoutes.
 func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc) {
 	group := r.Group("/apis/"+AuthorizationAPI+"/v1", gate)
 

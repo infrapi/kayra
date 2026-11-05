@@ -60,11 +60,12 @@ command is only needed again for a genuine break-glass credential.
   namespace-scoped, gated by real resolved directory groups (never a
   synced membership list). See
   [RBAC & auth](docs/architecture/rbac-and-auth.md).
-- **Stack** — a cluster-wide infrastructure component (e.g. "vault"),
-  its own API group. See [Stacks](docs/architecture/stacks.md).
+- **ApiRegistration** — declares that an API group exists and who owns
+  it (e.g. "compute"); Kayra never implements the API itself. See
+  [API registrations](docs/architecture/api-registrations.md).
 - **Namespace** — *is* the tenant, not two things joined by a name.
   See [Namespaces](docs/architecture/namespaces.md).
-- **Subscription** — links a namespace to a stack by name; only
+- **Subscription** — links a namespace to an API registration by name; only
   `kayra reconciler` (a separate process, see
   [Subscriptions & reconciliation](docs/architecture/subscriptions.md))
   ever flips it active.
@@ -98,7 +99,7 @@ own types, storage and HTTP handlers together.
 | `internal/authz` | Resolving a user id to groups/attributes (LDAP or fixture) |
 | `internal/middleware` | The two gin auth middlewares (general + sysadmin) |
 | `internal/rbac` | `Group`/`Role`/`RoleBinding`, cluster + namespace scoped |
-| `internal/catalog` | `Stack`/`Namespace`/`Subscription` + the reconciler |
+| `internal/catalog` | `ApiRegistration`/`Namespace`/`Subscription` + the reconciler |
 | `internal/tokenapi` | Personal access token issuance |
 | `internal/apiserver` | Wires every package above onto one gin engine |
 

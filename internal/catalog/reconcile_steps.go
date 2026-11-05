@@ -45,10 +45,10 @@ type stepTemplateData struct {
 }
 
 // subscriptionTemplateData is the "." Subscription half of
-// stepTemplateData: everything about the subscription/stack pair being
-// reconciled that a step's endpoint/body/headers might need.
+// stepTemplateData: everything about the subscription/api registration
+// pair being reconciled that a step's endpoint/body/headers might need.
 type subscriptionTemplateData struct {
-	Stack          string
+	Api            string
 	Namespace      string
 	Platform       string
 	Region         string
@@ -279,7 +279,7 @@ func containsString(list []string, v string) bool {
 
 // renderTemplate parses and executes text as a Go text/template against
 // data. Every templated field (endpoint, each data value, each rendered
-// header value) goes through this, so "{{ .Subscription.Stack }}" and
+// header value) goes through this, so "{{ .Subscription.Api }}" and
 // "{{ .Previous.Outputs.PipelineID }}" work anywhere in a step.
 func renderTemplate(text string, data stepTemplateData) (string, error) {
 	tmpl, err := template.New("step").Parse(text)

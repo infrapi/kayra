@@ -96,7 +96,7 @@ func RequireClusterRBAC(repo *Repository, api, resource, verb string) gin.Handle
 // own namespace-scoped Subscription routes through the exact same check,
 // against SubscriptionAPI instead. The namespace resource itself
 // (the legacy model's "Tenant") and the infra catalog
-// (Stack/Subscription) are registered separately, by
+// (ApiRegistration/Subscription) are registered separately, by
 // internal/catalog's own RegisterClusterRoutes/RegisterNamespaceRoutes/
 // RegisterNamespaceCollectionRoutes.
 func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc) {

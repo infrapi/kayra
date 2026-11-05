@@ -27,6 +27,7 @@ app:
   url: "http://localhost:8080"
   platform: "sandbox"
   region: "eu-west-1"
+  location: "dc1"
   listen_type: "tcp"
   listen_address: "127.0.0.1:8080"
 
@@ -112,7 +113,7 @@ curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterg
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "thetenant-admins",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-       "groups": ["sandbox-thetenant-admins"]}'
+       "groups": ["sandbox-core-sysadmin"]}'
 
 curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterroles \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
@@ -130,34 +131,39 @@ curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterr
 See [who can manage a namespace's RBAC](architecture/rbac-and-auth.md)
 for how this check is actually evaluated.
 
-## 7. Create a stack and subscribe the tenant to it
+## 7. Register an API and subscribe the tenant to it
 
-`Stack` is cluster-wide infrastructure (e.g. "vault"); a `Subscription`
-links one namespace to one stack by name:
+An `ApiRegistration` declares that an API group exists (e.g. "vault")
+and who owns it — Kayra never implements the API itself, only tracks
+it and notifies on changes. A `Subscription` links one namespace to
+one registration by name:
 
 ```bash
-curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/stacks \
+curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "vault", "owner": "sre"}'
 # sync_id is minted automatically — note it down, or just GET it back below
 
 curl -s -X POST http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"stack_name": "vault"}'
-# {"stack_name":"vault","active":false,"state":"init", ...}
+  -d '{"api_name": "vault"}'
+# {"api_name":"vault","active":false,"state":"init", ...}
 ```
 
 Any caller whose groups are bound to the `subscription.example.com` API
-(step 6's rolebinding covers this) can do the subscribe step — it
-doesn't have to be the bootstrap token.
+can do the subscribe step — it doesn't have to be the bootstrap token;
+`$TOKEN` works here only because step 6's rolebinding happens to grant
+`sandbox-core-sysadmin` (the bootstrap token's own group) that right
+too. A real deployment would bind a tenant's actual admin group there
+instead.
 
 ## 8. Trigger a sync and check status
 
 ```bash
-curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/stacks/vault/sync \
+curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/vault/sync \
   -H "Authorization: Bearer $TOKEN"
 
-curl -s http://localhost:8080/apis/catalog.example.com/v1/stacks/vault/status \
+curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/vault/status \
   -H "Authorization: Bearer $TOKEN"
 ```
 

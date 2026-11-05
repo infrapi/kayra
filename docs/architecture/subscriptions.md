@@ -1,12 +1,12 @@
 # Subscriptions & reconciliation
 
-A `Subscription` links a [namespace](namespaces.md) to a [stack](stacks.md)
-by name. Repository and route code lives in `internal/catalog`, backed by
-[store](../packages/store.md).
+A `Subscription` links a [namespace](namespaces.md) to an
+[API registration](api-registrations.md) by name. Repository and route
+code lives in `internal/catalog`, backed by [store](../packages/store.md).
 
 ```go
 type Subscription struct {
-	StackName     string
+	ApiName       string
 	Active        bool   // computed
 	State         string // init | success | error | undef — computed
 	CurrentSyncID string // computed — the subscription's own last-reconciled-to value
@@ -19,9 +19,9 @@ can only ever mean the `vault` in *this* deployment's own platform/region —
 there's no second one to disambiguate against.
 
 Every response also carries `expected_sync_id` — the referenced
-[stack](stacks.md)'s own, *current* `SyncID`. It is **not** a field on
+[API registration](api-registrations.md)'s own, *current* `SyncID`. It is **not** a field on
 `Subscription` at all: there's nothing to persist, since it's read fresh
-from the stack on every response. Comparing the two tells you, without a
+from the api registration on every response. Comparing the two tells you, without a
 second request, whether a subscription is reconciled (`current_sync_id ==
 expected_sync_id`) or reconcile is pending (they differ, and `kayra
 reconciler` hasn't caught up — or can't, see [Reconcile](#reconcile) — yet).
@@ -31,7 +31,7 @@ missing when there's nothing to report, so a caller never has to treat
 
 ```json
 {
-  "stack_name": "compute",
+  "api_name": "compute",
   "active": true,
   "state": "success",
   "current_sync_id": "2026-01-01T00Z",
@@ -41,7 +41,7 @@ missing when there's nothing to report, so a caller never has to treat
 
 ## Managing one
 
-Full CRUD at `/apis/subscription.example.com/v1/namespaces/:namespace/subscriptions{,/:stack}`,
+Full CRUD at `/apis/subscription.example.com/v1/namespaces/:namespace/subscriptions{,/:api}`,
 gated by [`Authenticator`](rbac-and-auth.md#two-gates-two-trust-tiers) plus
 [`rbac.RequireClusterRBAC(repo, "subscriptions", verb)`](../packages/rbac.md#requireclusterrbac)
 — "subscriptions" is just another `resource` value checked against the
@@ -51,12 +51,12 @@ covers it.
 
 ```bash
 curl -s -X POST http://localhost:8080/apis/subscription.example.com/v1/namespaces/core/subscriptions \
-  -H "Authorization: Bearer $TOKEN" -d '{"stack_name": "compute"}'
+  -H "Authorization: Bearer $TOKEN" -d '{"api_name": "compute"}'
 ```
 
-Create requires only `stack_name`; subscribing to a stack that doesn't
+Create requires only `api_name`; subscribing to an api registration that doesn't
 exist in this deployment's scope is rejected (`404`).
-`PUT .../subscriptions/:stack` is a no-op confirmation — `stack_name` is
+`PUT .../subscriptions/:api` is a no-op confirmation — `api_name` is
 fixed by the path and `active`/`state`/`current_sync_id` are computed, so
 there's nothing left in the body a caller could legitimately change.
 
@@ -68,10 +68,10 @@ curl -s -X PUT http://localhost:8080/apis/subscription.example.com/v1/namespaces
 ```
 
 Resets `current_sync_id` to empty — nothing else: `active`/`state` are left
-exactly as they were. That's the subscription-level mirror of [a stack's
-own `.../sync` shorthand](stacks.md#triggering-reconcile), for forcing one
+exactly as they were. That's the subscription-level mirror of [an api registration's
+own `.../sync` shorthand](api-registrations.md#triggering-reconcile), for forcing one
 specific subscription to re-run its reconcile immediately rather than
-waiting for its stack's `SyncID` to move on. The reset write is itself
+waiting for its api registration's `SyncID` to move on. The reset write is itself
 the entire trigger: `kayra reconciler` picks it up exactly like any other
 change to the subscription — sees `current_sync_id` no longer matches
 `expected_sync_id`, and reconciles again — so there's no separate
@@ -79,7 +79,7 @@ change to the subscription — sees `current_sync_id` no longer matches
 
 Gated on its own `resource` value, `"subscriptions/sync"` + verb
 `"patch"` — not `"subscriptions"` + `"update"` like the no-op `PUT
-.../subscriptions/:stack` above — so a role can grant one without the
+.../subscriptions/:api` above — so a role can grant one without the
 other: resetting a sync is a meaningfully different capability from
 editing a subscription, and `resources: ["*"]` still covers both for an
 existing sysadmin role.
@@ -99,7 +99,7 @@ reconciler`.
 
 `catalog.Reconciler` is the controller that activates a new namespace or
 subscription, and reconciles an already-active subscription when its
-stack's `SyncID` moves on. It runs as its **own** process (see
+api registration's `SyncID` moves on. It runs as its **own** process (see
 [the CLI reference](../cli.md#reconciler)), deliberately not a goroutine
 inside `kayra serve`: independent lifecycles (a reconciler crash doesn't
 take the API down, and vice versa), independent logs, independently
@@ -120,7 +120,7 @@ reconciler:
 ```
 
 Sized at 30 by default (`catalog.DefaultMaxConcurrentReconciles`) so that
-bumping a stack's `SyncID` with hundreds of subscribers doesn't spawn
+bumping an api registration's `SyncID` with hundreds of subscribers doesn't spawn
 hundreds of goroutines at once — submission itself blocks once the pool is
 full, so the bound holds regardless of how large the fan-out is.
 `Reconciler.Run` waits for every in-flight goroutine before returning, so
@@ -138,8 +138,8 @@ how many you run, it isn't split between them.
 
 ### Per-job locking
 
-Two different triggers can land on the exact same namespace/stack pair at
-once *within one process* — a stack's own `SyncID` bump
+Two different triggers can land on the exact same namespace/api pair at
+once *within one process* — an api registration's own `SyncID` bump
 ([the ongoing action](#ongoing-action)'s fan-out) and that same subscription's own
 record being touched (the [initial action](#initial-action)) can both
 dispatch a reconcile for it at nearly the same moment. Left uncoordinated,
@@ -149,7 +149,7 @@ really one logical change.
 
 Every unit of work — one namespace's activation, or one subscription's
 reconcile — is guarded by a lock keyed by that namespace, or
-namespace/stack pair, **always**, regardless of store backend: a racing
+namespace/api pair, **always**, regardless of store backend: a racing
 call doesn't run concurrently, it blocks until the one ahead of it
 releases the key, then gets its turn. Once it does, it re-reads the
 namespace/subscription fresh rather than trusting the (possibly now
@@ -191,11 +191,11 @@ activated.
 
 A subscription record goes through the same shared decision — `ensureReconciled`
 — the [ongoing action](#ongoing-action) fan-out uses, described below: looked up
-against its stack and reconciled if it isn't already both active and at
-that stack's current `SyncID`. For a brand-new subscription that's always
+against its api registration and reconciled if it isn't already both active and at
+that registration's current `SyncID`. For a brand-new subscription that's always
 true (`Active: false` can never already match), so in practice this is
 what activates it for the first time — stamping `CurrentSyncID` with the
-stack's **current** `SyncID` once [reconcile](#reconcile) actually
+registration's **current** `SyncID` once [reconcile](#reconcile) actually
 succeeds, so it starts out already reconciled
 (`current_sync_id == expected_sync_id`).
 
@@ -204,28 +204,28 @@ succeeds, so it starts out already reconciled
 The "ongoing" action is the mechanism behind a sentence like *"we bumped
 compute's sync id, now reconcile every tenant subscribed to it"*:
 
-1. An operator (or `PUT .../stacks/:name/sync`, see [Stacks](stacks.md#triggering-reconcile))
-   changes a stack's `SyncID` to any new value — which is also, from the
+1. An operator (or `PUT .../apiregistrations/:name/sync`, see [API registrations](api-registrations.md#triggering-reconcile))
+   changes an api registration's `SyncID` to any new value — which is also, from the
    API's point of view, every active subscriber's `expected_sync_id`
    changing at once, with no write to any of them.
-2. `Reconciler` observes the stack write and finds every namespace with an
-   **active** subscription to that stack.
-3. Each one whose own `CurrentSyncID` doesn't already match the stack's
+2. `Reconciler` observes the api registration write and finds every
+   namespace with an **active** subscription to it.
+3. Each one whose own `CurrentSyncID` doesn't already match the registration's
    goes through `ensureReconciled` — the exact same decision the
    [initial action](#initial-action) uses: [reconcile](#reconcile), then
    only on success update `CurrentSyncID` to match, closing the gap
    `expected_sync_id` already showed.
 
 ```text
-ensureReconciled(stack, sub):
-  already active and CurrentSyncID == stack.SyncID? ──► nothing to do
-  reconcile(stack) fails?                            ──► nothing to do
+ensureReconciled(reg, sub):
+  already active and CurrentSyncID == reg.SyncID? ──► nothing to do
+  reconcile(reg) fails?                            ──► nothing to do
                                                            (retried next time
                                                             something touches
                                                             this subscription
                                                             or, for a new one,
-                                                            its stack)
-  reconcile(stack) succeeds                          ──► CurrentSyncID = stack.SyncID
+                                                            its api registration)
+  reconcile(reg) succeeds                          ──► CurrentSyncID = reg.SyncID
                                                            (+ Active = true, first time)
 ```
 
@@ -234,7 +234,7 @@ ongoing action only ever moves `CurrentSyncID` forward, and only once
 `reconcile` reports success for it, never ahead of that. A subscription
 that isn't active yet is skipped by the *ongoing action*'s fan-out
 specifically (step 2 above only looks at active subscriptions) — it's
-left entirely to the initial action, so a stack write alone never retries
+left entirely to the initial action, so an api registration write alone never retries
 one that failed to activate; writing to the subscription's own record
 again does (`reconcileExisting` does this for every record,
 unconditionally, on every `kayra reconciler` startup). Every write
@@ -245,17 +245,17 @@ same watch.
 
 ### Reconcile
 
-`Stack.Mode` is a free-form key into `reconciler.mode` (`config.ReconcilerConfig.Mode`)
+`ApiRegistration.Mode` is a free-form key into `reconciler.mode` (`config.ReconcilerConfig.Mode`)
 — `"trigger"` and `"api"` in every example here, but any name works,
 since it's just a map. There is no fixed enum of valid modes: only an
 *empty* mode is ever a problem.
 
-A stack with **no mode at all** (nothing of its own, and no
+An api registration with **no mode at all** (nothing of its own, and no
 `reconciler.default_mode` to fall back to — see below) makes `reconcile`
 **fail**, since there's no way to carry out reconciliation without
 knowing which pipeline to run. `ensureReconciled` never advances
 `CurrentSyncID` — or flips a brand-new subscription to active — when
-that happens, so a misconfigured stack's subscriptions visibly stay
+that happens, so a misconfigured api registration's subscriptions visibly stay
 unsynced (`current_sync_id` empty or stale against `expected_sync_id`)
 rather than being silently marked done.
 
@@ -266,7 +266,7 @@ name — including every deployment that hasn't configured
 `reconciler.mode` at all yet — falls back to the original placeholder:
 log which mode would run, and succeed unconditionally.
 
-A stack with no `mode` of its own doesn't have to fail forever, though:
+An api registration with no `mode` of its own doesn't have to fail forever, though:
 `reconciler.default_mode` (see [the CLI reference](../cli.md#reconciler)) gives
 `reconcile` something to fall back to —
 
@@ -275,8 +275,8 @@ reconciler:
   default_mode: trigger # any mode name; "api" and "trigger" are just this doc's examples
 ```
 
-— for every stack that never sets one, without having to touch each one
-individually. An explicit `Stack.Mode`, when a stack has one, always wins
+— for every api registration that never sets one, without having to touch each one
+individually. An explicit `ApiRegistration.Mode`, when a registration has one, always wins
 over the default; only an *absent* one falls back to it.
 
 ### HTTP step pipeline
@@ -289,7 +289,7 @@ reconciler:
   mode:
     api:
       - method: post
-        endpoint: "https://{{ .Subscription.Stack }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync"
+        endpoint: "https://{{ .Subscription.Api }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync"
         data:
           sync_id: "{{ .Subscription.ExpectedSyncID }}"
         headers:
@@ -298,7 +298,7 @@ reconciler:
         timeout: "3600s"
         async: true
       - method: get
-        endpoint: "https://{{ .Subscription.Stack }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync/{{ .Subscription.ExpectedSyncID }}"
+        endpoint: "https://{{ .Subscription.Api }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync/{{ .Subscription.ExpectedSyncID }}"
         headers:
           Authorization: {type: Bearer, value: "yyyyyyyyyyyyyyyy"}
         timeout: "3600s"
@@ -312,7 +312,7 @@ reachable inside `data` — however deeply nested, `data`'s own values, an
 object field, an array element, any combination — renders as a Go
 [`text/template`](https://pkg.go.dev/text/template) against:
 
-- `.Subscription` — `Stack`, `Namespace`, `Platform`, `Region`,
+- `.Subscription` — `Api`, `Namespace`, `Platform`, `Region`,
   `CurrentSyncID`, `ExpectedSyncID` (all strings; the same values
   [the response's two sync fields](#active-statecurrentsyncid-are-computed)
   expose).
@@ -375,7 +375,7 @@ that step's error, never what the error was.
 Every reconciler log line along the reconcile path — from the initial
 "activated"/"reconciled" decision in [`ensureReconciled`](#initial-action)
 down to each individual step above — always carries both `lock_id` and
-`sync_id`, regardless of outcome. `sync_id` is the stack's `SyncID` being
+`sync_id`, regardless of outcome. `sync_id` is the api registration's `SyncID` being
 reconciled toward; `lock_id` is the [concurrency slot](#concurrency) (or
 [distributed lock](#per-job-locking)) that ran it. Neither is ever
 omitted, even on success, specifically so that concurrent or

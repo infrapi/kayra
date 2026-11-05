@@ -8,11 +8,12 @@ import (
 	"github.com/infrapi/kayra/internal/store"
 )
 
-// Repository persists the catalog's Stack/Namespace/Subscription records
-// under the etcd/local key layout internal/store.Keys defines, sharing
-// the same "/config" record convention internal/rbac uses (via
-// internal/store's generic JSON helpers) so both packages' keys can
-// coexist under the same namespace tree without colliding.
+// Repository persists the catalog's ApiRegistration/Namespace/
+// Subscription records under the etcd/local key layout
+// internal/store.Keys defines, sharing the same "/config" record
+// convention internal/rbac uses (via internal/store's generic JSON
+// helpers) so both packages' keys can coexist under the same namespace
+// tree without colliding.
 type Repository struct {
 	store store.Store
 	keys  store.Keys
@@ -23,57 +24,58 @@ func NewRepository(s store.Store, keys store.Keys) *Repository {
 	return &Repository{store: s, keys: keys}
 }
 
-// --- Cluster-scoped stacks ---
+// --- Cluster-scoped API registrations ---
 
-func (r *Repository) PutClusterStack(s Stack) error {
-	return store.PutJSON(r.store, r.keys.ClusterStackConfig(s.Platform, s.Region, s.Name), s)
+func (r *Repository) PutClusterApiRegistration(reg ApiRegistration) error {
+	return store.PutJSON(r.store, r.keys.ClusterApiRegistrationConfig(reg.Platform, reg.Region, reg.Name), reg)
 }
 
-func (r *Repository) GetClusterStack(platform, region, name string) (Stack, error) {
-	var s Stack
-	err := store.GetJSON(r.store, r.keys.ClusterStackConfig(platform, region, name), &s)
-	return s, err
+func (r *Repository) GetClusterApiRegistration(platform, region, name string) (ApiRegistration, error) {
+	var reg ApiRegistration
+	err := store.GetJSON(r.store, r.keys.ClusterApiRegistrationConfig(platform, region, name), &reg)
+	return reg, err
 }
 
-func (r *Repository) ListClusterStacks() ([]Stack, error) {
-	raw, err := store.ListConfigValues(r.store, r.keys.ClusterStackPrefix())
+func (r *Repository) ListClusterApiRegistrations() ([]ApiRegistration, error) {
+	raw, err := store.ListConfigValues(r.store, r.keys.ClusterApiRegistrationPrefix())
 	if err != nil {
 		return nil, err
 	}
-	stacks := make([]Stack, len(raw))
+	regs := make([]ApiRegistration, len(raw))
 	for i, data := range raw {
-		if err := json.Unmarshal(data, &stacks[i]); err != nil {
-			return nil, fmt.Errorf("catalog: unmarshal cluster stack: %w", err)
+		if err := json.Unmarshal(data, &regs[i]); err != nil {
+			return nil, fmt.Errorf("catalog: unmarshal cluster api registration: %w", err)
 		}
 	}
-	return stacks, nil
+	return regs, nil
 }
 
-func (r *Repository) DeleteClusterStack(platform, region, name string) error {
-	if err := r.store.Delete(r.keys.ClusterStackConfig(platform, region, name)); err != nil {
-		return fmt.Errorf("catalog: delete cluster stack %s/%s/%s: %w", platform, region, name, err)
+func (r *Repository) DeleteClusterApiRegistration(platform, region, name string) error {
+	if err := r.store.Delete(r.keys.ClusterApiRegistrationConfig(platform, region, name)); err != nil {
+		return fmt.Errorf("catalog: delete cluster api registration %s/%s/%s: %w", platform, region, name, err)
 	}
 	return nil
 }
 
-// stackIsReferenced reports whether any other Stack's DependsOn, or any
-// namespace's Subscription, still points at the stack identified by
-// platform/region/name — checked before allowing a delete. A Subscription
-// carries no platform/region of its own (see Subscription), so it can
-// only ever reference a stack in this deployment's own
-// deploymentPlatform/deploymentRegion; subscriptions are skipped entirely
-// when deleting a stack outside that scope, since none could reference it.
-func (r *Repository) stackIsReferenced(platform, region, name, deploymentPlatform, deploymentRegion string) (bool, error) {
-	stacks, err := r.ListClusterStacks()
+// apiRegistrationIsReferenced reports whether any other ApiRegistration's
+// DependsOn, or any namespace's Subscription, still points at the
+// registration identified by platform/region/name — checked before
+// allowing a delete. A Subscription carries no platform/region of its
+// own (see Subscription), so it can only ever reference a registration
+// in this deployment's own deploymentPlatform/deploymentRegion;
+// subscriptions are skipped entirely when deleting a registration
+// outside that scope, since none could reference it.
+func (r *Repository) apiRegistrationIsReferenced(platform, region, name, deploymentPlatform, deploymentRegion string) (bool, error) {
+	regs, err := r.ListClusterApiRegistrations()
 	if err != nil {
 		return false, err
 	}
-	ref := StackRef{Platform: platform, Region: region, Name: name}
-	for _, s := range stacks {
-		if s.Platform == platform && s.Region == region && s.Name == name {
-			continue // a stack doesn't count as referencing itself
+	ref := ApiRegistrationRef{Platform: platform, Region: region, Name: name}
+	for _, reg := range regs {
+		if reg.Platform == platform && reg.Region == region && reg.Name == name {
+			continue // a registration doesn't count as referencing itself
 		}
-		for _, dep := range s.DependsOn {
+		for _, dep := range reg.DependsOn {
 			if dep == ref {
 				return true, nil
 			}
@@ -164,12 +166,12 @@ func (r *Repository) ListNamespaces() ([]Namespace, error) {
 // --- Namespace-scoped subscriptions ---
 
 func (r *Repository) PutNamespaceSubscription(namespace string, sub Subscription) error {
-	return store.PutJSON(r.store, r.keys.NamespaceSubscriptionConfig(namespace, sub.StackName), sub)
+	return store.PutJSON(r.store, r.keys.NamespaceSubscriptionConfig(namespace, sub.ApiName), sub)
 }
 
-func (r *Repository) GetNamespaceSubscription(namespace, stackName string) (Subscription, error) {
+func (r *Repository) GetNamespaceSubscription(namespace, apiName string) (Subscription, error) {
 	var sub Subscription
-	err := store.GetJSON(r.store, r.keys.NamespaceSubscriptionConfig(namespace, stackName), &sub)
+	err := store.GetJSON(r.store, r.keys.NamespaceSubscriptionConfig(namespace, apiName), &sub)
 	return sub, err
 }
 
@@ -187,16 +189,16 @@ func (r *Repository) ListNamespaceSubscriptions(namespace string) ([]Subscriptio
 	return subs, nil
 }
 
-// ActivateSubscription marks namespace's subscription to stackName as
+// ActivateSubscription marks namespace's subscription to apiName as
 // successfully provisioned and reconciled to syncID (the referenced
-// stack's own SyncID at the moment of activation). Same trust boundary as
-// ActivateNamespace: the public API always writes a subscription
-// Active:false/State:init/CurrentSyncID:"", so this is the only path that
-// can ever move it to active/success — called exactly once, by
-// Reconciler, the first time it observes a subscription still in that
-// state.
-func (r *Repository) ActivateSubscription(namespace, stackName, syncID string) error {
-	sub, err := r.GetNamespaceSubscription(namespace, stackName)
+// registration's own SyncID at the moment of activation). Same trust
+// boundary as ActivateNamespace: the public API always writes a
+// subscription Active:false/State:init/CurrentSyncID:"", so this is the
+// only path that can ever move it to active/success — called exactly
+// once, by Reconciler, the first time it observes a subscription still
+// in that state.
+func (r *Repository) ActivateSubscription(namespace, apiName, syncID string) error {
+	sub, err := r.GetNamespaceSubscription(namespace, apiName)
 	if err != nil {
 		return err
 	}
@@ -209,12 +211,12 @@ func (r *Repository) ActivateSubscription(namespace, stackName, syncID string) e
 	return r.PutNamespaceSubscription(namespace, sub)
 }
 
-// SetSubscriptionSyncID updates namespace's subscription to stackName's
+// SetSubscriptionSyncID updates namespace's subscription to apiName's
 // CurrentSyncID to syncID, leaving Active/State untouched — once a
 // subscription is active, reconciling it again (see Reconciler) only
 // ever moves CurrentSyncID forward, never touches Active again.
-func (r *Repository) SetSubscriptionSyncID(namespace, stackName, syncID string) error {
-	sub, err := r.GetNamespaceSubscription(namespace, stackName)
+func (r *Repository) SetSubscriptionSyncID(namespace, apiName, syncID string) error {
+	sub, err := r.GetNamespaceSubscription(namespace, apiName)
 	if err != nil {
 		return err
 	}
@@ -222,17 +224,17 @@ func (r *Repository) SetSubscriptionSyncID(namespace, stackName, syncID string) 
 	return r.PutNamespaceSubscription(namespace, sub)
 }
 
-// ListSubscriptionsToStack returns every namespace's subscription to
-// stackName, keyed by namespace name — used by Reconciler to find every
-// subscription a stack's own SyncID change must reconcile.
-func (r *Repository) ListSubscriptionsToStack(stackName string) (map[string]Subscription, error) {
+// ListSubscriptionsToApi returns every namespace's subscription to
+// apiName, keyed by namespace name — used by Reconciler to find every
+// subscription an api registration's own SyncID change must reconcile.
+func (r *Repository) ListSubscriptionsToApi(apiName string) (map[string]Subscription, error) {
 	entries, err := r.store.List(r.keys.NamespacesPrefix())
 	if err != nil {
-		return nil, fmt.Errorf("catalog: scan namespaces for subscriptions to %s: %w", stackName, err)
+		return nil, fmt.Errorf("catalog: scan namespaces for subscriptions to %s: %w", apiName, err)
 	}
 
 	prefix := r.keys.NamespacesPrefix()
-	suffix := fmt.Sprintf("/subscriptions/%s/config", stackName)
+	suffix := fmt.Sprintf("/subscriptions/%s/config", apiName)
 	result := make(map[string]Subscription)
 	for key, data := range entries {
 		if !strings.HasSuffix(key, suffix) {
@@ -248,9 +250,9 @@ func (r *Repository) ListSubscriptionsToStack(stackName string) (map[string]Subs
 	return result, nil
 }
 
-func (r *Repository) DeleteNamespaceSubscription(namespace, stackName string) error {
-	if err := r.store.Delete(r.keys.NamespaceSubscriptionConfig(namespace, stackName)); err != nil {
-		return fmt.Errorf("catalog: delete subscription %s/%s: %w", namespace, stackName, err)
+func (r *Repository) DeleteNamespaceSubscription(namespace, apiName string) error {
+	if err := r.store.Delete(r.keys.NamespaceSubscriptionConfig(namespace, apiName)); err != nil {
+		return fmt.Errorf("catalog: delete subscription %s/%s: %w", namespace, apiName, err)
 	}
 	return nil
 }

@@ -63,7 +63,7 @@ internal/oauth2login  the CLI-side half of that same flow (cmd/cli only)
 internal/clicontext  cmd/cli's own ~/.config/kayra/config (kubeconfig-style contexts)
 internal/middleware  gin Authenticator and SysadminGate
 internal/rbac        cluster/namespace groups, roles, rolebindings
-internal/catalog     stacks, namespaces (tenants), subscriptions, Reconciler
+internal/catalog     api registrations, namespaces (tenants), subscriptions, Reconciler
 internal/tokenapi    personal access token issuance
 internal/httpapi     RFC 9457 error response helper
 internal/apiserver   wires every other package onto one gin engine

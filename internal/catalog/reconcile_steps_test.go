@@ -17,7 +17,7 @@ import (
 
 func testData() stepTemplateData {
 	return stepTemplateData{Subscription: subscriptionTemplateData{
-		Stack: "compute", Namespace: "core", Platform: "sandbox", Region: "eu-west-1",
+		Api: "compute", Namespace: "core", Platform: "sandbox", Region: "eu-west-1",
 		CurrentSyncID: "old-id", ExpectedSyncID: "new-id",
 	}}
 }
@@ -82,7 +82,7 @@ func TestRunStepsRendersNestedData(t *testing.T) {
 			"ref": "{{ .Subscription.Platform }}",
 			"variables": []any{
 				map[string]any{"key": "TG_KAYRA_TENANT_NAME", "value": "{{ .Subscription.Namespace }}"},
-				map[string]any{"key": "TG_KAYRA_STACK_NAME", "value": "{{ .Subscription.Stack }}"},
+				map[string]any{"key": "TG_KAYRA_API_NAME", "value": "{{ .Subscription.Api }}"},
 				map[string]any{"key": "PLUMBING_TERRAFORM_CHECK_MAX", "value": "50"},
 			},
 		},
@@ -515,7 +515,7 @@ func TestReconcileRunsConfiguredStepsForMode(t *testing.T) {
 		},
 	})
 
-	stack := Stack{Name: "compute", Mode: "api", SyncID: "sync-xyz"}
+	stack := ApiRegistration{Name: "compute", Mode: "api", SyncID: "sync-xyz"}
 	if err := w.reconcile(stack, "core", Subscription{}, 0); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -528,7 +528,7 @@ func TestReconcileFallsBackToPlaceholderWithNoStepsConfigured(t *testing.T) {
 	repo := newTestRepo(t)
 	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{})
 
-	if err := w.reconcile(Stack{Name: "compute", Mode: "trigger"}, "core", Subscription{}, 0); err != nil {
+	if err := w.reconcile(ApiRegistration{Name: "compute", Mode: "trigger"}, "core", Subscription{}, 0); err != nil {
 		t.Fatalf("reconcile: want nil (placeholder success), got %v", err)
 	}
 }

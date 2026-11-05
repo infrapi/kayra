@@ -142,13 +142,13 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	rbac.RegisterNamespaceRoutes(engine, rbacRepo, authenticator.Middleware())
 	rbac.RegisterAuthorizeRoute(engine, rbacRepo, authenticator.Middleware())
 
-	// catalog.Reconciler (the namespace/subscription/stack reconcile
-	// controller) deliberately does not run here: it's its own "kayra
-	// reconciler" CLI command/process (see cmd/kayra), not a goroutine
-	// mixed into the API server — easier to debug and scale
+	// catalog.Reconciler (the namespace/subscription/api registration
+	// reconcile controller) deliberately does not run here: it's its own
+	// "kayra reconciler" CLI command/process (see cmd/kayra), not a
+	// goroutine mixed into the API server — easier to debug and scale
 	// independently, and a crash in one never takes down the other.
 	catalogRepo := catalog.NewRepository(s, keys)
-	catalog.RegisterStackRoutes(engine, catalogRepo, sysadminGate, appCfg.AppPlatform, appCfg.AppRegion)
+	catalog.RegisterApiRegistrationRoutes(engine, catalogRepo, sysadminGate, appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, authenticator.Middleware(), appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceCollectionRoutes(engine, catalogRepo, sysadminGate)
 

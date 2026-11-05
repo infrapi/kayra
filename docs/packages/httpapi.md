@@ -9,7 +9,7 @@ using [infrapi/lib's `pkg/errors`](https://infrapi.github.io/lib/packages/errors
 RFC 9457 problem-detail payload.
 
 ```go
-httpapi.Fail(c, liberrors.New(http.StatusNotFound, "catalog.GetStack", "stack %q not found", name))
+httpapi.Fail(c, liberrors.New(http.StatusNotFound, "catalog.GetApiRegistration", "api registration %q not found", name))
 ```
 
 Writes `err` as the response body (`liberrors.MediaType` content type) and

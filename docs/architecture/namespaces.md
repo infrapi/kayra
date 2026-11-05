@@ -18,7 +18,7 @@ type Namespace struct {
 separate `/tenant` child resource. Full CRUD at `/apis/apps.example.com/v1/namespaces`
 (collection) and `/apis/apps.example.com/v1/namespaces/:namespace` (one), gated by
 [`SysadminGate`](rbac-and-auth.md#two-gates-two-trust-tiers) — same trust
-tier as [Stack](stacks.md), since creating a namespace can't depend on a
+tier as [ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
 cluster `RoleBinding` scoped to a namespace that doesn't exist yet.
 
 ```bash

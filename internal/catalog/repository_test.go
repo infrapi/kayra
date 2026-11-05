@@ -6,117 +6,117 @@ import (
 	"github.com/infrapi/kayra/internal/store"
 )
 
-func TestClusterStackRoundTripListDelete(t *testing.T) {
+func TestClusterApiRegistrationRoundTripListDelete(t *testing.T) {
 	repo := newTestRepo(t)
 
-	vault := Stack{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}
-	pki := Stack{
+	vault := ApiRegistration{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}
+	pki := ApiRegistration{
 		Name: "pki", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
-		DependsOn: []StackRef{{Platform: testDeployPlatform, Region: testDeployRegion, Name: "vault"}},
+		DependsOn: []ApiRegistrationRef{{Platform: testDeployPlatform, Region: testDeployRegion, Name: "vault"}},
 	}
-	if err := repo.PutClusterStack(vault); err != nil {
-		t.Fatalf("PutClusterStack(vault): %v", err)
+	if err := repo.PutClusterApiRegistration(vault); err != nil {
+		t.Fatalf("PutClusterApiRegistration(vault): %v", err)
 	}
-	if err := repo.PutClusterStack(pki); err != nil {
-		t.Fatalf("PutClusterStack(pki): %v", err)
+	if err := repo.PutClusterApiRegistration(pki); err != nil {
+		t.Fatalf("PutClusterApiRegistration(pki): %v", err)
 	}
 
-	got, err := repo.GetClusterStack(testDeployPlatform, testDeployRegion, "pki")
+	got, err := repo.GetClusterApiRegistration(testDeployPlatform, testDeployRegion, "pki")
 	if err != nil {
-		t.Fatalf("GetClusterStack: %v", err)
+		t.Fatalf("GetClusterApiRegistration: %v", err)
 	}
 	if len(got.DependsOn) != 1 || got.DependsOn[0].Name != "vault" {
-		t.Fatalf("GetClusterStack(pki).DependsOn = %v, want [vault]", got.DependsOn)
+		t.Fatalf("GetClusterApiRegistration(pki).DependsOn = %v, want [vault]", got.DependsOn)
 	}
 
-	stacks, err := repo.ListClusterStacks()
+	regs, err := repo.ListClusterApiRegistrations()
 	if err != nil {
-		t.Fatalf("ListClusterStacks: %v", err)
+		t.Fatalf("ListClusterApiRegistrations: %v", err)
 	}
-	if len(stacks) != 2 {
-		t.Fatalf("ListClusterStacks = %v, want 2 entries", stacks)
+	if len(regs) != 2 {
+		t.Fatalf("ListClusterApiRegistrations = %v, want 2 entries", regs)
 	}
 
 	// vault is referenced by pki's DependsOn: must not be deletable...
 	// (the handler enforces this; here we just verify the detection.)
-	referenced, err := repo.stackIsReferenced(testDeployPlatform, testDeployRegion, "vault", testDeployPlatform, testDeployRegion)
+	referenced, err := repo.apiRegistrationIsReferenced(testDeployPlatform, testDeployRegion, "vault", testDeployPlatform, testDeployRegion)
 	if err != nil {
-		t.Fatalf("stackIsReferenced: %v", err)
+		t.Fatalf("apiRegistrationIsReferenced: %v", err)
 	}
 	if !referenced {
-		t.Fatalf("stackIsReferenced(vault) = false, want true (pki depends on it)")
+		t.Fatalf("apiRegistrationIsReferenced(vault) = false, want true (pki depends on it)")
 	}
 
 	// ...but pki itself, which nothing depends on, is not referenced.
-	referenced, err = repo.stackIsReferenced(testDeployPlatform, testDeployRegion, "pki", testDeployPlatform, testDeployRegion)
+	referenced, err = repo.apiRegistrationIsReferenced(testDeployPlatform, testDeployRegion, "pki", testDeployPlatform, testDeployRegion)
 	if err != nil {
-		t.Fatalf("stackIsReferenced: %v", err)
+		t.Fatalf("apiRegistrationIsReferenced: %v", err)
 	}
 	if referenced {
-		t.Fatalf("stackIsReferenced(pki) = true, want false")
+		t.Fatalf("apiRegistrationIsReferenced(pki) = true, want false")
 	}
 
-	if err := repo.DeleteClusterStack(testDeployPlatform, testDeployRegion, "pki"); err != nil {
-		t.Fatalf("DeleteClusterStack: %v", err)
+	if err := repo.DeleteClusterApiRegistration(testDeployPlatform, testDeployRegion, "pki"); err != nil {
+		t.Fatalf("DeleteClusterApiRegistration: %v", err)
 	}
-	if _, err := repo.GetClusterStack(testDeployPlatform, testDeployRegion, "pki"); err != store.ErrNotFound {
-		t.Fatalf("GetClusterStack after delete = %v, want ErrNotFound", err)
+	if _, err := repo.GetClusterApiRegistration(testDeployPlatform, testDeployRegion, "pki"); err != store.ErrNotFound {
+		t.Fatalf("GetClusterApiRegistration after delete = %v, want ErrNotFound", err)
 	}
 }
 
-func TestStackIsReferencedBySubscription(t *testing.T) {
+func TestApiRegistrationIsReferencedBySubscription(t *testing.T) {
 	repo := newTestRepo(t)
 
-	stack := Stack{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}
-	if err := repo.PutClusterStack(stack); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	reg := ApiRegistration{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}
+	if err := repo.PutClusterApiRegistration(reg); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
-	referenced, err := repo.stackIsReferenced(testDeployPlatform, testDeployRegion, "vault", testDeployPlatform, testDeployRegion)
+	referenced, err := repo.apiRegistrationIsReferenced(testDeployPlatform, testDeployRegion, "vault", testDeployPlatform, testDeployRegion)
 	if err != nil {
-		t.Fatalf("stackIsReferenced: %v", err)
+		t.Fatalf("apiRegistrationIsReferenced: %v", err)
 	}
 	if referenced {
-		t.Fatalf("stackIsReferenced = true before any subscription exists")
+		t.Fatalf("apiRegistrationIsReferenced = true before any subscription exists")
 	}
 
-	sub := Subscription{StackName: "vault", Active: true, State: SubscriptionStateInit}
+	sub := Subscription{ApiName: "vault", Active: true, State: SubscriptionStateInit}
 	if err := repo.PutNamespaceSubscription("myns", sub); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
-	referenced, err = repo.stackIsReferenced(testDeployPlatform, testDeployRegion, "vault", testDeployPlatform, testDeployRegion)
+	referenced, err = repo.apiRegistrationIsReferenced(testDeployPlatform, testDeployRegion, "vault", testDeployPlatform, testDeployRegion)
 	if err != nil {
-		t.Fatalf("stackIsReferenced: %v", err)
+		t.Fatalf("apiRegistrationIsReferenced: %v", err)
 	}
 	if !referenced {
-		t.Fatalf("stackIsReferenced = false, want true (myns subscribes to it)")
+		t.Fatalf("apiRegistrationIsReferenced = false, want true (myns subscribes to it)")
 	}
 }
 
-// TestStackIsReferencedIgnoresSubscriptionsOutsideDeploymentScope confirms
+// TestApiRegistrationIsReferencedIgnoresSubscriptionsOutsideDeploymentScope confirms
 // a subscription (which carries no platform/region) is only ever
-// consulted when checking a stack that's actually in this deployment's
+// consulted when checking a reg that's actually in this deployment's
 // own platform/region — it is meaningless, and must be skipped, for a
-// stack anywhere else.
-func TestStackIsReferencedIgnoresSubscriptionsOutsideDeploymentScope(t *testing.T) {
+// reg anywhere else.
+func TestApiRegistrationIsReferencedIgnoresSubscriptionsOutsideDeploymentScope(t *testing.T) {
 	repo := newTestRepo(t)
 
-	stack := Stack{Name: "vault", Platform: "other-platform", Region: "other-region", Active: true}
-	if err := repo.PutClusterStack(stack); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	reg := ApiRegistration{Name: "vault", Platform: "other-platform", Region: "other-region", Active: true}
+	if err := repo.PutClusterApiRegistration(reg); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	sub := Subscription{StackName: "vault", Active: true, State: SubscriptionStateInit}
+	sub := Subscription{ApiName: "vault", Active: true, State: SubscriptionStateInit}
 	if err := repo.PutNamespaceSubscription("myns", sub); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
-	referenced, err := repo.stackIsReferenced("other-platform", "other-region", "vault", testDeployPlatform, testDeployRegion)
+	referenced, err := repo.apiRegistrationIsReferenced("other-platform", "other-region", "vault", testDeployPlatform, testDeployRegion)
 	if err != nil {
-		t.Fatalf("stackIsReferenced: %v", err)
+		t.Fatalf("apiRegistrationIsReferenced: %v", err)
 	}
 	if referenced {
-		t.Fatalf("stackIsReferenced = true, want false (subscription can only ever mean the deployment's own platform/region)")
+		t.Fatalf("apiRegistrationIsReferenced = true, want false (subscription can only ever mean the deployment's own platform/region)")
 	}
 }
 
@@ -165,7 +165,7 @@ func TestListNamespacesDoesNotLeakSubscriptionResources(t *testing.T) {
 	if err := repo.PutNamespace(Namespace{Name: "myns", Active: true}); err != nil {
 		t.Fatalf("PutNamespace: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{StackName: "vault"}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault"}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -182,7 +182,7 @@ func TestNamespaceSubscriptionRoundTripListDelete(t *testing.T) {
 	repo := newTestRepo(t)
 	ns := "myns"
 
-	sub := Subscription{StackName: "vault", Active: true, State: SubscriptionStateSuccess}
+	sub := Subscription{ApiName: "vault", Active: true, State: SubscriptionStateSuccess}
 	if err := repo.PutNamespaceSubscription(ns, sub); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}

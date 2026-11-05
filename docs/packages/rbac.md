@@ -9,7 +9,7 @@ Stores and serves the cluster- and namespace-scoped `Group`/`Role`/
 (`CanManageNamespaceRBAC`) that decides who can manage them, and the check
 (`Authorize`) any app built on `infrapi/lib` calls to decide what an
 already-authenticated caller may do against its own
-`/api/v1/namespaces/:namespace/stacks/:stack/<resource>`-shaped routes.
+`/apis/compute.example.com/v1/namespaces/:namespace/<resource>`-shaped routes.
 
 ## Types
 

@@ -176,7 +176,7 @@ authorizations:
 sysadmin:
   # Group(s) middleware.SysadminGate requires a caller's resolved
   # groups to intersect, to reach the cluster-bootstrap endpoints
-  # (rbac's cluster routes, catalog's stack/namespace-collection
+  # (rbac's cluster routes, catalog's api registration/namespace-collection
   # routes). Resolved the exact same way any other endpoint resolves
   # groups — live LDAP lookup, or straight from an already-verified
   # token for a claims-backed authorizations.<name> — so any
@@ -195,10 +195,10 @@ reconciler:
   default_mode: api
 
   # mode.<name> is the HTTP step pipeline reconcile actually runs for a
-  # stack whose mode (after default_mode falls back) is <name> — a mode
+  # api registration whose mode (after default_mode falls back) is <name> — a mode
   # with no entry here keeps the log-only placeholder. Endpoint, every
   # data value, and every headers value renders as a Go text/template
-  # against ".Subscription" (Stack, Namespace, Platform, Region,
+  # against ".Subscription" (Api, Namespace, Platform, Region,
   # CurrentSyncID, ExpectedSyncID) and ".Previous.Outputs" (the
   # preceding step's own outputs; empty for the first step).
   #
@@ -211,7 +211,7 @@ reconciler:
   mode:
     api:
       - method: post
-        endpoint: "https://{{ .Subscription.Stack }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync"
+        endpoint: "https://{{ .Subscription.Api }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync"
         data:
           sync_id: "{{ .Subscription.ExpectedSyncID }}"
         headers:
@@ -222,7 +222,7 @@ reconciler:
         timeout: "3600s"
 
       - method: get
-        endpoint: "https://{{ .Subscription.Stack }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync/{{ .Subscription.ExpectedSyncID }}"
+        endpoint: "https://{{ .Subscription.Api }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync/{{ .Subscription.ExpectedSyncID }}"
         headers:
           Content-Type: "application/json"
           Authorization:

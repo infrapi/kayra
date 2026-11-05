@@ -145,21 +145,21 @@ for) a directory group of its own.
 ## Authorizing other apps' requests
 
 Any app built on `infrapi/lib` exposing routes shaped
-`/api/v1/namespaces/:namespace/stacks/:stack/<resource>` can authorize a
-request against **that namespace's own** `Group`/`Role`/`RoleBinding`
-objects (the ones its admins create via
+`/apis/compute.example.com/v1/namespaces/:namespace/<resource>` can
+authorize a request against **that namespace's own**
+`Group`/`Role`/`RoleBinding` objects (the ones its admins create via
 `RegisterNamespaceRoutes`, once `CanManageNamespaceRBAC` let them in) by
 calling Kayra's `POST /apis/authorization.example.com/v1/check`,
 gated by `Authenticator` like every other namespace-scoped route:
 
 ```json
 // request, Authorization: Bearer <the caller's own token>
-{"namespace": "core", "stack": "compute.example.com", "resource": "vm", "verb": "list"}
+{"namespace": "core", "api": "compute.example.com", "resource": "vm", "verb": "list"}
 // response
 {"allowed": true}
 ```
 
-`Namespace`/`Stack` come straight from the URL (`Stack` is the calling
+`Namespace`/`Api` come straight from the URL (`Api` is the calling
 app's own full API group URN, e.g. "compute.example.com", matching how
 it's actually reachable — never the bare app name); `Resource`/`Verb`
 are derived from the rest of the path and the HTTP method — verbs match

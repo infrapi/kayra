@@ -45,13 +45,13 @@ func TestReconcilerActivatesNewNamespace(t *testing.T) {
 func TestReconcilerActivatesNewSubscription(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterStack(Stack{
+	if err := repo.PutClusterApiRegistration(ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "trigger",
 	}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{StackName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -67,7 +67,7 @@ func TestReconcilerActivatesNewSubscription(t *testing.T) {
 	}, "subscription myns/vault to become active/success")
 
 	// the initial activation stamps the subscription's CurrentSyncID with
-	// the stack's SyncID at the time it was first seen.
+	// the reg's SyncID at the time it was first seen.
 	sub, err := repo.GetNamespaceSubscription("myns", "vault")
 	if err != nil {
 		t.Fatalf("GetNamespaceSubscription: %v", err)
@@ -106,23 +106,23 @@ func TestReconcilerIgnoresAlreadyActiveRecords(t *testing.T) {
 	}
 }
 
-// TestReconcilerReconcilesActiveSubscriptionOnStackSyncIDChange confirms
-// bumping a stack's SyncID (a plain admin PUT, no separate endpoint) is
+// TestReconcilerReconcilesActiveSubscriptionOnApiRegistrationSyncIDChange confirms
+// bumping a reg's SyncID (a plain admin PUT, no separate endpoint) is
 // the entire reconcile trigger: every namespace already actively
 // subscribed to it gets its own SyncID updated to match, with Active left
 // untouched.
-func TestReconcilerReconcilesActiveSubscriptionOnStackSyncIDChange(t *testing.T) {
+func TestReconcilerReconcilesActiveSubscriptionOnApiRegistrationSyncIDChange(t *testing.T) {
 	repo := newTestRepo(t)
 
-	stack := Stack{
+	reg := ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "api",
 	}
-	if err := repo.PutClusterStack(stack); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	if err := repo.PutClusterApiRegistration(reg); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 	if err := repo.PutNamespaceSubscription("myns", Subscription{
-		StackName: "vault", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "sync-1",
+		ApiName: "vault", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "sync-1",
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
@@ -134,12 +134,12 @@ func TestReconcilerReconcilesActiveSubscriptionOnStackSyncIDChange(t *testing.T)
 	}()
 
 	// let the initial reconcile pass run (sub is already active/success,
-	// so it must be a no-op) before bumping the stack's SyncID.
+	// so it must be a no-op) before bumping the reg's SyncID.
 	time.Sleep(300 * time.Millisecond)
 
-	stack.SyncID = "sync-2"
-	if err := repo.PutClusterStack(stack); err != nil {
-		t.Fatalf("PutClusterStack (bump sync_id): %v", err)
+	reg.SyncID = "sync-2"
+	if err := repo.PutClusterApiRegistration(reg); err != nil {
+		t.Fatalf("PutClusterApiRegistration (bump sync_id): %v", err)
 	}
 
 	waitFor(t, func() bool {
@@ -156,34 +156,34 @@ func TestReconcilerReconcilesActiveSubscriptionOnStackSyncIDChange(t *testing.T)
 	}
 }
 
-// TestReconcilerStackUpdateSkipsInactiveSubscriptions confirms a stack
+// TestReconcilerApiRegistrationUpdateSkipsInactiveSubscriptions confirms a reg
 // update never touches a subscription that isn't active yet — that one
 // is left entirely to handleNewSubscription (the initial action), so it
 // isn't force-reconciled to a stale SyncID before it's even been
 // activated.
-func TestReconcilerStackUpdateSkipsInactiveSubscriptions(t *testing.T) {
+func TestReconcilerApiRegistrationUpdateSkipsInactiveSubscriptions(t *testing.T) {
 	repo := newTestRepo(t)
 
-	stack := Stack{
+	reg := ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "trigger",
 	}
-	if err := repo.PutClusterStack(stack); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	if err := repo.PutClusterApiRegistration(reg); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
 	// a subscription that exists but was never activated (simulating a
 	// reconciler that hasn't gotten to it yet).
 	if err := repo.PutNamespaceSubscription("myns", Subscription{
-		StackName: "vault", State: SubscriptionStateInit,
+		ApiName: "vault", State: SubscriptionStateInit,
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
 	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: ""})
-	stack.SyncID = "sync-2"
+	reg.SyncID = "sync-2"
 	var wg sync.WaitGroup
-	w.handleStackPut(context.Background(), &wg, mustMarshal(t, stack))
+	w.handleApiRegistrationPut(context.Background(), &wg, mustMarshal(t, reg))
 	wg.Wait()
 
 	sub, err := repo.GetNamespaceSubscription("myns", "vault")
@@ -195,22 +195,22 @@ func TestReconcilerStackUpdateSkipsInactiveSubscriptions(t *testing.T) {
 	}
 }
 
-// TestReconcilerSkipsSubscriptionWhenStackSyncIDEmpty confirms a stack
+// TestReconcilerSkipsSubscriptionWhenApiRegistrationSyncIDEmpty confirms a reg
 // with no SyncID yet never has its subscribers reconciled: reconcile
-// exists to catch a subscription up to a specific SyncID, and a stack
+// exists to catch a subscription up to a specific SyncID, and a reg
 // that was never assigned one has nothing to catch up to (see
-// ensureReconciled). Once the stack is given a SyncID, the exact same
+// ensureReconciled). Once the reg is given a SyncID, the exact same
 // subscription reconciles normally.
-func TestReconcilerSkipsSubscriptionWhenStackSyncIDEmpty(t *testing.T) {
+func TestReconcilerSkipsSubscriptionWhenApiRegistrationSyncIDEmpty(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterStack(Stack{
+	if err := repo.PutClusterApiRegistration(ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		Mode: "trigger", // SyncID deliberately left empty.
 	}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	sub := Subscription{StackName: "vault", State: SubscriptionStateInit}
+	sub := Subscription{ApiName: "vault", State: SubscriptionStateInit}
 	if err := repo.PutNamespaceSubscription("myns", sub); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
@@ -223,16 +223,16 @@ func TestReconcilerSkipsSubscriptionWhenStackSyncIDEmpty(t *testing.T) {
 		t.Fatalf("GetNamespaceSubscription: %v", err)
 	}
 	if got.Active || got.CurrentSyncID != "" {
-		t.Fatalf("sub = %+v, want untouched (still disabled, CurrentSyncID empty) since the stack has no sync_id yet", got)
+		t.Fatalf("sub = %+v, want untouched (still disabled, CurrentSyncID empty) since the reg has no sync_id yet", got)
 	}
 
-	stack, err := repo.GetClusterStack(testDeployPlatform, testDeployRegion, "vault")
+	reg, err := repo.GetClusterApiRegistration(testDeployPlatform, testDeployRegion, "vault")
 	if err != nil {
-		t.Fatalf("GetClusterStack: %v", err)
+		t.Fatalf("GetClusterApiRegistration: %v", err)
 	}
-	stack.SyncID = "sync-1"
-	if err := repo.PutClusterStack(stack); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	reg.SyncID = "sync-1"
+	if err := repo.PutClusterApiRegistration(reg); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 	w.handleNewSubscription(context.Background(), "myns", "vault", mustMarshal(t, sub), 0)
 
@@ -241,31 +241,31 @@ func TestReconcilerSkipsSubscriptionWhenStackSyncIDEmpty(t *testing.T) {
 		t.Fatalf("GetNamespaceSubscription: %v", err)
 	}
 	if !got.Active || got.CurrentSyncID != "sync-1" {
-		t.Fatalf("sub = %+v, want active/sync-1 now that the stack has a sync_id", got)
+		t.Fatalf("sub = %+v, want active/sync-1 now that the reg has a sync_id", got)
 	}
 }
 
-// TestReconcilerHandleStackPutRespectsCanaryNamespaces confirms a
-// non-empty Stack.CanaryNamespaces restricts handleStackPut's fan-out to
+// TestReconcilerHandleApiRegistrationPutRespectsCanaryNamespaces confirms a
+// non-empty ApiRegistration.CanaryNamespaces restricts handleApiRegistrationPut's fan-out to
 // just those namespaces: an active, unreconciled subscriber not on the
 // list is left exactly as it was — pending — rather than reconciled,
 // while one that is on the list reconciles normally. Clearing
 // CanaryNamespaces (the release step of the canary workflow — see PUT
-// .../stacks/:name/sync) then lets the same fan-out reach everyone still
+// .../apiregistrations/:name/sync) then lets the same fan-out reach everyone still
 // behind.
-func TestReconcilerHandleStackPutRespectsCanaryNamespaces(t *testing.T) {
+func TestReconcilerHandleApiRegistrationPutRespectsCanaryNamespaces(t *testing.T) {
 	repo := newTestRepo(t)
 
-	stack := Stack{
+	reg := ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "trigger",
 	}
-	if err := repo.PutClusterStack(stack); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+	if err := repo.PutClusterApiRegistration(reg); err != nil {
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 	for _, ns := range []string{"canary-ns", "other-ns"} {
 		if err := repo.PutNamespaceSubscription(ns, Subscription{
-			StackName: "vault", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "sync-1",
+			ApiName: "vault", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "sync-1",
 		}); err != nil {
 			t.Fatalf("PutNamespaceSubscription(%s): %v", ns, err)
 		}
@@ -276,16 +276,16 @@ func TestReconcilerHandleStackPutRespectsCanaryNamespaces(t *testing.T) {
 	// bump SyncID with a canary restriction: only canary-ns should
 	// reconcile. Persisted first, same as a real admin PUT would (the
 	// write is what Watch delivers the event from in the first place) —
-	// ensureReconciled re-reads the stack fresh once it holds the per-job
+	// ensureReconciled re-reads the reg fresh once it holds the per-job
 	// lock, so what's actually in the store must agree with the event
-	// value handleStackPut is handed below.
-	stack.SyncID = "sync-2"
-	stack.CanaryNamespaces = []string{"canary-ns"}
-	if err := repo.PutClusterStack(stack); err != nil {
-		t.Fatalf("PutClusterStack (bump sync_id, canary): %v", err)
+	// value handleApiRegistrationPut is handed below.
+	reg.SyncID = "sync-2"
+	reg.CanaryNamespaces = []string{"canary-ns"}
+	if err := repo.PutClusterApiRegistration(reg); err != nil {
+		t.Fatalf("PutClusterApiRegistration (bump sync_id, canary): %v", err)
 	}
 	var wg sync.WaitGroup
-	w.handleStackPut(context.Background(), &wg, mustMarshal(t, stack))
+	w.handleApiRegistrationPut(context.Background(), &wg, mustMarshal(t, reg))
 	wg.Wait()
 
 	canarySub, err := repo.GetNamespaceSubscription("canary-ns", "vault")
@@ -305,11 +305,11 @@ func TestReconcilerHandleStackPutRespectsCanaryNamespaces(t *testing.T) {
 	}
 
 	// release: same SyncID, no restriction — other-ns now reconciles too.
-	stack.CanaryNamespaces = nil
-	if err := repo.PutClusterStack(stack); err != nil {
-		t.Fatalf("PutClusterStack (release): %v", err)
+	reg.CanaryNamespaces = nil
+	if err := repo.PutClusterApiRegistration(reg); err != nil {
+		t.Fatalf("PutClusterApiRegistration (release): %v", err)
 	}
-	w.handleStackPut(context.Background(), &wg, mustMarshal(t, stack))
+	w.handleApiRegistrationPut(context.Background(), &wg, mustMarshal(t, reg))
 	wg.Wait()
 
 	otherSub, err = repo.GetNamespaceSubscription("other-ns", "vault")
@@ -323,26 +323,26 @@ func TestReconcilerHandleStackPutRespectsCanaryNamespaces(t *testing.T) {
 
 // TestReconcileErrorsOnlyWhenModeIsEmpty confirms mode is a free-form key
 // into reconciler.mode, not a fixed enum: reconcile only ever fails for
-// having no mode at all (no Stack.Mode and no reconciler.default_mode).
+// having no mode at all (no ApiRegistration.Mode and no reconciler.default_mode).
 // Any non-empty name succeeds — here via the log-only placeholder, since
 // none of them have steps configured.
 func TestReconcileErrorsOnlyWhenModeIsEmpty(t *testing.T) {
 	repo := newTestRepo(t)
 	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{})
 
-	if err := w.reconcile(Stack{Name: "vault", Mode: ""}, "myns", Subscription{}, 0); err == nil {
+	if err := w.reconcile(ApiRegistration{Name: "vault", Mode: ""}, "myns", Subscription{}, 0); err == nil {
 		t.Fatal("reconcile with empty mode and no default_mode: want error, got nil")
 	}
 	for _, mode := range []string{"trigger", "api", "anything-else"} {
-		if err := w.reconcile(Stack{Name: "vault", Mode: mode}, "myns", Subscription{}, 0); err != nil {
+		if err := w.reconcile(ApiRegistration{Name: "vault", Mode: mode}, "myns", Subscription{}, 0); err != nil {
 			t.Fatalf("reconcile with mode %q: want nil error, got %v", mode, err)
 		}
 	}
 }
 
 // TestReconcileFallsBackToDefaultMode confirms a Reconciler configured
-// with defaultMode runs that mode's steps for a stack with no Mode of its
-// own, and that an explicit Stack.Mode is never overridden by it — each
+// with defaultMode runs that mode's steps for a reg with no Mode of its
+// own, and that an explicit ApiRegistration.Mode is never overridden by it — each
 // mode here has its own steps hitting a different server, so which one
 // actually ran is directly observable.
 func TestReconcileFallsBackToDefaultMode(t *testing.T) {
@@ -368,7 +368,7 @@ func TestReconcileFallsBackToDefaultMode(t *testing.T) {
 	})
 
 	// Mode unset: falls back to default_mode ("trigger").
-	if err := w.reconcile(Stack{Name: "vault", Mode: ""}, "myns", Subscription{}, 0); err != nil {
+	if err := w.reconcile(ApiRegistration{Name: "vault", Mode: ""}, "myns", Subscription{}, 0); err != nil {
 		t.Fatalf("reconcile with Mode unset: %v", err)
 	}
 	if !triggerCalled.Load() || apiCalled.Load() {
@@ -379,7 +379,7 @@ func TestReconcileFallsBackToDefaultMode(t *testing.T) {
 	apiCalled.Store(false)
 
 	// Explicit Mode: "api" wins over default_mode's "trigger".
-	if err := w.reconcile(Stack{Name: "vault", Mode: "api"}, "myns", Subscription{}, 0); err != nil {
+	if err := w.reconcile(ApiRegistration{Name: "vault", Mode: "api"}, "myns", Subscription{}, 0); err != nil {
 		t.Fatalf("reconcile with Mode=api: %v", err)
 	}
 	if !apiCalled.Load() || triggerCalled.Load() {
@@ -387,19 +387,19 @@ func TestReconcileFallsBackToDefaultMode(t *testing.T) {
 	}
 }
 
-// TestReconcilerDefaultModeActivatesModeLessStack confirms a subscription
-// to a stack with no Mode of its own still activates, end to end, when
+// TestReconcilerDefaultModeActivatesModeLessApiRegistration confirms a subscription
+// to a reg with no Mode of its own still activates, end to end, when
 // the Reconciler itself is configured with a default_mode.
-func TestReconcilerDefaultModeActivatesModeLessStack(t *testing.T) {
+func TestReconcilerDefaultModeActivatesModeLessApiRegistration(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterStack(Stack{
+	if err := repo.PutClusterApiRegistration(ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", // Mode deliberately left unset.
 	}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{StackName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -416,10 +416,10 @@ func TestReconcilerDefaultModeActivatesModeLessStack(t *testing.T) {
 }
 
 // TestReconcilerReconcileFailureLeavesSubscriptionUnsynced confirms a
-// subscription whose stack has no usable mode stays exactly as unsynced
+// subscription whose reg has no usable mode stays exactly as unsynced
 // as it started — CurrentSyncID is never advanced ahead of reconcile
 // actually succeeding — and that it's retried from scratch (nothing ever
-// marked it "done" in the meantime) once the stack's mode is fixed and
+// marked it "done" in the meantime) once the reg's mode is fixed and
 // something re-evaluates the subscription: here, a fresh Reconciler's
 // startup reconcile pass, which — unlike a live watch, especially
 // LocalStore's poll-and-diff one — lists every record directly rather
@@ -427,13 +427,13 @@ func TestReconcilerDefaultModeActivatesModeLessStack(t *testing.T) {
 func TestReconcilerReconcileFailureLeavesSubscriptionUnsynced(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterStack(Stack{
+	if err := repo.PutClusterApiRegistration(ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", // Mode deliberately left unset: reconcile can never succeed.
 	}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{StackName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -453,11 +453,11 @@ func TestReconcilerReconcileFailureLeavesSubscriptionUnsynced(t *testing.T) {
 		t.Fatalf("sub = %+v, want still inactive with empty CurrentSyncID (reconcile never succeeds)", got)
 	}
 
-	if err := repo.PutClusterStack(Stack{
+	if err := repo.PutClusterApiRegistration(ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "trigger",
 	}); err != nil {
-		t.Fatalf("PutClusterStack (fix mode): %v", err)
+		t.Fatalf("PutClusterApiRegistration (fix mode): %v", err)
 	}
 
 	ctx2, cancel2 := context.WithCancel(context.Background())
@@ -469,7 +469,7 @@ func TestReconcilerReconcileFailureLeavesSubscriptionUnsynced(t *testing.T) {
 	waitFor(t, func() bool {
 		got, err := repo.GetNamespaceSubscription("myns", "vault")
 		return err == nil && got.Active && got.CurrentSyncID == "sync-1"
-	}, "subscription myns/vault to activate once the stack's mode is fixed")
+	}, "subscription myns/vault to activate once the reg's mode is fixed")
 }
 
 func TestNewReconcilerDefaultsMaxConcurrentReconciles(t *testing.T) {
@@ -491,7 +491,7 @@ func TestNewReconcilerDefaultsMaxConcurrentReconciles(t *testing.T) {
 // TestReconcilerDispatchBoundsConcurrency confirms dispatch never runs
 // more than the configured pool size at once, even when far more jobs are
 // submitted than that — the mechanism handleNewNamespace,
-// handleNewSubscription and handleStackPut's reconcile loop all share.
+// handleNewSubscription and handleApiRegistrationPut's reconcile loop all share.
 func TestReconcilerDispatchBoundsConcurrency(t *testing.T) {
 	repo := newTestRepo(t)
 	const poolSize = 3
@@ -752,8 +752,8 @@ func TestReconcilerWithJobLockSerializesWithinOneProcess(t *testing.T) {
 
 // TestEnsureReconciledCoalescesRacingCallsForSameSubscription confirms
 // the actual payoff of withJobLock plus ensureReconciled's
-// re-read-after-lock: two calls racing for the same namespace/stack —
-// e.g. handleStackPut's fan-out and handleNewSubscription dispatching for
+// re-read-after-lock: two calls racing for the same namespace/api registration —
+// e.g. handleApiRegistrationPut's fan-out and handleNewSubscription dispatching for
 // the same pair at nearly the same moment — never both run reconcile. The
 // loser blocks on the lock, and once it gets its turn, sees (from a fresh
 // read, not the stale snapshot it was dispatched with) that the winner
@@ -768,13 +768,13 @@ func TestEnsureReconciledCoalescesRacingCallsForSameSubscription(t *testing.T) {
 	defer srv.Close()
 
 	repo := newTestRepo(t)
-	if err := repo.PutClusterStack(Stack{
+	if err := repo.PutClusterApiRegistration(ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion,
 		Active: true, SyncID: "sync-1", Mode: "trigger",
 	}); err != nil {
-		t.Fatalf("PutClusterStack: %v", err)
+		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{StackName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -784,9 +784,9 @@ func TestEnsureReconciledCoalescesRacingCallsForSameSubscription(t *testing.T) {
 		},
 	})
 
-	stack, err := repo.GetClusterStack(testDeployPlatform, testDeployRegion, "vault")
+	reg, err := repo.GetClusterApiRegistration(testDeployPlatform, testDeployRegion, "vault")
 	if err != nil {
-		t.Fatalf("GetClusterStack: %v", err)
+		t.Fatalf("GetClusterApiRegistration: %v", err)
 	}
 	sub, err := repo.GetNamespaceSubscription("myns", "vault")
 	if err != nil {
@@ -798,7 +798,7 @@ func TestEnsureReconciledCoalescesRacingCallsForSameSubscription(t *testing.T) {
 	run := func() {
 		defer wg.Done()
 		<-ready
-		w.ensureReconciled(context.Background(), stack, "myns", sub, 0)
+		w.ensureReconciled(context.Background(), reg, "myns", sub, 0)
 	}
 	wg.Add(2)
 	go run()

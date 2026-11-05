@@ -23,9 +23,9 @@ One `kayra.yaml`, two things resolved from it:
   `libconfig.NewConfigFromMap`/`GetAppConfig`, which still owns the
   `INFRAPI_APP_*` validation rules (required fields, `oneof`/`fqdn`/
   `http_url`/`hostname_port`): name, platform, region, listen address.
-  Every package that needs "this instance's own platform/region" (stack
-  addressing, the sysadmin group name) reads the resolved `AppConfig`,
-  never a request.
+  Every package that needs "this instance's own platform/region" (API
+  registration addressing, the sysadmin group name) reads the resolved
+  `AppConfig`, never a request.
 - Everything else — Kayra's own [config](../packages/config.md): the
   storage backend, `authentifications.<name>` (how a bearer token is
   verified and whose claim is the user id) and `authorizations.<name>`
@@ -46,12 +46,14 @@ API.
 
 ## Catalog
 
-The business domain: cluster-wide infrastructure **stacks**, per-tenant
+The business domain: cluster-wide **API registrations**, per-tenant
 **namespaces**, and the **subscriptions** linking them — ported from the
 legacy Postgres/GORM tool, now etcd-backed. Split across
 three pages, since each has its own management story:
 
-- [Stacks](stacks.md) — the cluster-wide infra component definitions.
+- [API registrations](api-registrations.md) — records declaring that an
+  API group exists and who owns it; Kayra never implements the API
+  itself.
 - [Namespaces](namespaces.md) — the legacy model's "Tenant".
 - [Subscriptions & reconciliation](subscriptions.md) — the link between
   them, plus `kayra reconciler`, the controller that activates and

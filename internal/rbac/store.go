@@ -21,7 +21,7 @@ func NewRepository(s store.Store, keys store.Keys) *Repository {
 
 // putJSON/getJSON/listConfigValues delegate to internal/store's generic
 // JSON-record helpers — shared with internal/catalog, which persists
-// Stack/Namespace/Subscription under the same "/config" convention.
+// ApiRegistration/Namespace/Subscription under the same "/config" convention.
 func putJSON(s store.Store, key string, v any) error {
 	return store.PutJSON(s, key, v)
 }

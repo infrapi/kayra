@@ -37,7 +37,8 @@ Loads the Kayra YAML config, resolves its `app:` block into
 ### reconciler
 
 Runs [`catalog.Reconciler`](architecture/subscriptions.md#reconciler) — the
-namespace/subscription/stack reconcile controller — as its **own** process,
+namespace/subscription/api registration reconcile controller — as its
+**own** process,
 deliberately not a goroutine inside `serve`.
 
 ```bash
@@ -58,20 +59,20 @@ reconciler:
 ```
 
 See [Subscriptions & reconciliation](architecture/subscriptions.md#reconciler) for
-why this matters — a single stack `sync_id` bump can fan out into
+why this matters — a single api registration `sync_id` bump can fan out into
 reconciling every one of its subscribers at once.
 
-A stack with no `mode` of its own otherwise fails
+An api registration with no `mode` of its own otherwise fails
 [reconcile](architecture/subscriptions.md#reconcile) forever;
 `reconciler.default_mode` gives it one to fall back to instead:
 
 ```yaml
 reconciler:
   default_mode: trigger # any mode name you use under reconciler.mode — omit
-                         # to keep a mode-less stack failing reconcile
+                         # to keep a mode-less api registration failing reconcile
 ```
 
-A stack's own `mode` always wins over this when it has one.
+An api registration's own `mode` always wins over this when it has one.
 
 What a mode actually *does* is itself configurable:
 `reconciler.mode.<mode>` is an HTTP step pipeline — see
@@ -243,7 +244,7 @@ management-plane routes are decided by it:
 | `authorization.<domain>`'s `groups`/`roles`/`rolebindings` | cluster RBAC (`CanManageNamespaceRBAC`) — a different, cluster-scoped `Group`/`Role`/`RoleBinding` set |
 | `subscription.<domain>`'s `subscriptions` | cluster RBAC (`CanManageNamespaceRBAC`), same as above |
 | `authorization.<domain>`'s `clustergroups`/`clusterroles`/`clusterrolebindings` | the sysadmin group alone (`SysadminGate`) — no `Rule` consulted at all |
-| `catalog.<domain>`'s `stacks` | `SysadminGate` alone |
+| `catalog.<domain>`'s `apiregistrations` | `SysadminGate` alone |
 | `apps.<domain>`'s `namespaces` | `SysadminGate` alone |
 
 Asking about one of these still gets a real, truthful answer — "does

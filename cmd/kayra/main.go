@@ -114,7 +114,7 @@ func serveCommand() *cli.Command {
 func reconcilerCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "reconciler",
-		Usage:  "run the catalog namespace/subscription/stack reconciler",
+		Usage:  "run the catalog namespace/subscription/api registration reconciler",
 		Action: runReconciler,
 	}
 }

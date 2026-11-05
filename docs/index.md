@@ -3,7 +3,7 @@
 Authentication, namespace creation and IAM policy service, built on
 [`infrapi/lib`](https://infrapi.github.io/lib/).
 
-Three resources — cluster-wide **stacks**, per-tenant **namespaces**, and
+Three resources — cluster-wide **API registrations**, per-tenant **namespaces**, and
 the **subscriptions** linking them — sit behind the same bearer-auth and
 cluster-RBAC model every other endpoint uses, with a separate `kayra
 reconciler` process turning disabled records active.
@@ -21,9 +21,9 @@ reconciler` process turning disabled records active.
 | Run Kayra for the first time | [Getting started](getting-started.md) |
 | Understand how the pieces fit together | [Architecture overview](architecture/overview.md) |
 | See who can authenticate and who can manage what | [RBAC & auth](architecture/rbac-and-auth.md) |
-| Create or update a stack | [Stacks](architecture/stacks.md) |
+| Create or update an API registration | [API registrations](architecture/api-registrations.md) |
 | Create or update a tenant | [Namespaces](architecture/namespaces.md) |
-| Subscribe a tenant to a stack, or trigger reconcile | [Subscriptions & reconciliation](architecture/subscriptions.md) |
+| Subscribe a tenant to an API registration, or trigger reconcile | [Subscriptions & reconciliation](architecture/subscriptions.md) |
 | Run a command (`serve`, `reconciler`, `cache clean`, `token mint`) or log in (`kayra-cli login`) | [CLI](cli.md) |
 | Look up one `internal/*` package's API | [Packages](packages/apiserver.md) |
 | Build, test, or work on the docs themselves | [Development](development.md) |
