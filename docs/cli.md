@@ -206,3 +206,81 @@ earlier login never requires authenticating again. Override the path with
 | `use` | `<name>` | switch the current context |
 | `delete` | `<name>` | remove a saved context |
 | `token` | `[name]` | print a context's bearer token (defaults to current) |
+
+### auth (can-i, whoami)
+
+Two checks that ask a server about the current login itself, rather
+than managing it.
+
+#### can-i
+
+Mirrors `kubectl auth can-i`: asks the server's own
+[`/apis/authorization.<domain>/v1/check`](architecture/rbac-and-auth.md#authorizing-other-apps-requests)
+whether the current context's already-authenticated identity is
+granted `<verb>` on `<resource>` for `--api` — the decision is always
+the server's, never asserted locally.
+
+```bash
+./kayra-cli auth can-i get pods --api compute.example.com --namespace core
+# yes
+
+./kayra-cli auth can-i delete pods --api compute.example.com --namespace core
+# no
+# kayra-cli: your role does not grant this action
+```
+
+Prints `yes`/`no` to stdout and exits `0`/`1` accordingly — scriptable
+exactly like `kubectl auth can-i`. A denial's reason (when the server
+gives one) goes to stderr, never mixed into stdout.
+
+**This only ever tests `rbac.Authorize`** — namespace-scoped
+`Group`/`Role`/`RoleBinding` objects, the mechanism *other* apps built
+on infrapi/lib use to authorize their own API. None of Kayra's own
+management-plane routes are decided by it:
+
+| Asking about... | Actually gated by |
+|---|---|
+| `authorization.<domain>`'s `groups`/`roles`/`rolebindings` | cluster RBAC (`CanManageNamespaceRBAC`) — a different, cluster-scoped `Group`/`Role`/`RoleBinding` set |
+| `subscription.<domain>`'s `subscriptions` | cluster RBAC (`CanManageNamespaceRBAC`), same as above |
+| `authorization.<domain>`'s `clustergroups`/`clusterroles`/`clusterrolebindings` | the sysadmin group alone (`SysadminGate`) — no `Rule` consulted at all |
+| `catalog.<domain>`'s `stacks` | `SysadminGate` alone |
+| `apps.<domain>`'s `namespaces` | `SysadminGate` alone |
+
+Asking about one of these still gets a real, truthful answer — "does
+a stored `Rule` grant this" — just not necessarily the answer to "will
+the real endpoint let me." `can-i` prints a warning to stderr whenever
+`--api`/the verb's resource names one of them, so a "yes" or "no"
+here is never mistaken for the real decision. For anything
+`SysadminGate`-gated, compare [`whoami`](#whoami)'s `groups` against
+`sysadmin.groups` in the server's own config yourself — neither this
+command nor the server exposes that comparison any other way.
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--api` | — | required; the API group being asked about, e.g. `compute.example.com` — never Kayra's own `authorization.<domain>` |
+| `--namespace` | — | required; the namespace to check against |
+| `--api-domain` | everything in `--api` past its first label, else `example.com` | this deployment's own `app.api_domain` — only used to reach `/apis/authorization.<domain>/v1/check` itself; `--api compute.example.com` alone is enough, since the check endpoint lives on that same domain |
+| `--context` | current context | saved context to use instead |
+
+#### whoami
+
+Prints exactly what the server's own `GET /oauth2/userinfo` returns
+for the current login — `sub`, `provider`, `authorization`, `groups`,
+plus whatever `authorizations.<name>` attributes (`email`, `name`,
+...) that backend resolved. This is the same identity any `can-i`
+decision, or any other RBAC check against this token, is actually made
+against.
+
+```bash
+./kayra-cli auth whoami
+# authorization:  idm
+# email:           jdoe@example.com
+# groups:          sandbox-core-sysadmin, sandbox-thetenant-admins
+# name:            John Doe
+# provider:        self
+# sub:             jdoe
+```
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--context` | current context | saved context to use instead |

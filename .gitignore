@@ -4,3 +4,5 @@ site/
 # go test coverage artifacts (make test)
 cover.out
 coverage.html
+kayra
+kayra-cli
