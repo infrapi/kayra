@@ -69,6 +69,15 @@ jobs:
         if: steps.semrel.outputs.version != ''
         run: git fetch --tags origin
 
+      # go-semantic-release leaves its own working notes (e.g.
+      # .generated-go-semantic-release-changelog.md, .semrel/) behind as
+      # untracked files — GoReleaser refuses to run against a dirty git
+      # state. -x also clears gitignored files, harmless here since
+      # nothing before GoReleaser's own build needs any of them.
+      - name: Clean up go-semantic-release's own working files
+        if: steps.semrel.outputs.version != ''
+        run: git clean -ffdx
+
       - uses: actions/setup-go@v7
         if: steps.semrel.outputs.version != ''
         with:
