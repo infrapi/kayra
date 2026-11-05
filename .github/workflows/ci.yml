@@ -56,3 +56,30 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           allow-initial-development-versions: true
+
+      # go-semantic-release creates the tag via the GitHub API using
+      # GITHUB_TOKEN — events from that token never cascade into other
+      # workflows (GitHub's own anti-loop protection), so a separate
+      # workflow listening for `push: tags` would never fire. Running
+      # GoReleaser right here, in the same job, sidesteps that entirely.
+      # semrel's own `version` output is empty when this push triggered
+      # no release (e.g. no releasable commits), so there's nothing to
+      # build.
+      - name: Fetch the tag semantic-release just created
+        if: steps.semrel.outputs.version != ''
+        run: git fetch --tags origin
+
+      - uses: actions/setup-go@v7
+        if: steps.semrel.outputs.version != ''
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: goreleaser/goreleaser-action@v6
+        if: steps.semrel.outputs.version != ''
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
