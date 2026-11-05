@@ -19,7 +19,13 @@ import (
 )
 
 // Context is one saved login: enough to know which server and
-// provider a token belongs to, plus the credential itself.
+// provider a token belongs to, plus the credential itself. ApiDomain
+// is that server's own app.api_domain, relayed by `login` (see
+// oauth2login.Result.ApiDomain) so later commands (`auth can-i`, the
+// generic verbs) never have to guess it as "example.com" — a context
+// saved before this field existed, or via `context use`/a hand-edited
+// config, simply carries it empty, same fallback as if the server
+// itself never set one.
 type Context struct {
 	Server    string    `yaml:"server"`
 	Provider  string    `yaml:"provider,omitempty"`
@@ -27,6 +33,7 @@ type Context struct {
 	Token     string    `yaml:"token"`
 	TokenType string    `yaml:"token_type,omitempty"`
 	Expiry    time.Time `yaml:"expiry,omitempty"`
+	ApiDomain string    `yaml:"api_domain,omitempty"`
 }
 
 // File is the on-disk ~/.config/kayra/config.

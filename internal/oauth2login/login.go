@@ -57,11 +57,15 @@ const callbackPath = "/callback"
 // Result is a completed login's outcome — AccessToken is what a caller
 // uses as this request's bearer token against Kayra's own API (and
 // against the provider's userinfo endpoint, for a claims-backed
-// authorizations.<name> entry).
+// authorizations.<name> entry). ApiDomain is this server's own
+// resolved app.api_domain, relayed through the broker (see
+// oauth2broker.pending.ApiDomain) so a caller (cmd/cli's `login`) can
+// save it alongside the token instead of ever having to guess it.
 type Result struct {
 	AccessToken string
 	TokenType   string
 	Expiry      time.Time
+	ApiDomain   string
 }
 
 // OpenBrowser is swappable for tests — both this package's own and
@@ -157,18 +161,20 @@ func LoginToServer(ctx context.Context, serverBaseURL string, stderr io.Writer) 
 		return nil, fmt.Errorf("oauth2login: exchange code for token: %w", err)
 	}
 
-	return &Result{AccessToken: token.AccessToken, TokenType: token.TokenType, Expiry: token.Expiry}, nil
+	return &Result{AccessToken: token.AccessToken, TokenType: token.TokenType, Expiry: token.Expiry, ApiDomain: result.ApiDomain}, nil
 }
 
 // callbackResult is what the loopback listener below hands back once
 // the broker's relayed redirect lands on it: the authorization code,
 // plus the public token_endpoint/client_id the broker resolved
 // alongside it — everything LoginToServer needs to finish the PKCE
-// exchange itself, having started with none of it.
+// exchange itself, having started with none of it — and the server's
+// own api_domain, carried along for Result but otherwise unused here.
 type callbackResult struct {
 	Code          string
 	TokenEndpoint string
 	ClientID      string
+	ApiDomain     string
 }
 
 // callbackHandler answers the provider's (broker-relayed) redirect: a
@@ -199,7 +205,7 @@ func callbackHandler(wantState string, resultCh chan<- callbackResult, errCh cha
 			return
 		}
 		writeCallbackPage(w, true)
-		resultCh <- callbackResult{Code: code, TokenEndpoint: q.Get("token_endpoint"), ClientID: q.Get("client_id")}
+		resultCh <- callbackResult{Code: code, TokenEndpoint: q.Get("token_endpoint"), ClientID: q.Get("client_id"), ApiDomain: q.Get("api_domain")}
 	})
 	return mux
 }

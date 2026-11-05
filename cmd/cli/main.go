@@ -39,11 +39,11 @@ func main() {
 		Name:    "kayra-cli",
 		Usage:   "the portable Kayra client — log in and manage saved logins against any Kayra server's own API",
 		Version: version,
-		Commands: []*cli.Command{
+		Commands: append([]*cli.Command{
 			loginCommand(),
 			contextCommand(),
 			authCommand(),
-		},
+		}, verbCommands()...),
 		CommandNotFound: func(ctx context.Context, cmd *cli.Command, name string) {
 			fmt.Fprintf(os.Stderr, "kayra-cli: unknown command %q\n\n", name)
 			_ = cli.ShowAppHelp(cmd)
@@ -119,6 +119,7 @@ func runLogin(ctx context.Context, cmd *cli.Command) error {
 		Token:     result.AccessToken,
 		TokenType: result.TokenType,
 		Expiry:    result.Expiry,
+		ApiDomain: result.ApiDomain,
 	})
 	if err := f.Save(); err != nil {
 		return err
@@ -218,6 +219,9 @@ func runContextCurrent(ctx context.Context, cmd *cli.Command) error {
 	fmt.Printf("name:     %s\nprovider: %s\nserver:   %s\n", name, c.Provider, c.Server)
 	if c.Username != "" {
 		fmt.Printf("username: %s\n", c.Username)
+	}
+	if c.ApiDomain != "" {
+		fmt.Printf("api_domain: %s\n", c.ApiDomain)
 	}
 	if !c.Expiry.IsZero() {
 		fmt.Printf("expiry:   %s\n", c.Expiry.Local().Format(time.RFC3339))
@@ -371,7 +375,7 @@ func runCanI(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	api := cmd.String("api")
-	apiDomain := resolveAPIDomain(cmd.String("api-domain"), api)
+	apiDomain := resolveAPIDomain(cmd.String("api-domain"), api, c.ApiDomain)
 
 	if warning := kayraOwnManagementWarning(apiDomain, api, resource); warning != "" {
 		fmt.Fprintln(os.Stderr, "kayra-cli: warning:", warning)
@@ -471,19 +475,27 @@ func formatUserinfoValue(v any) string {
 	return strings.Join(parts, ", ")
 }
 
-// resolveAPIDomain picks --api-domain when the caller set it, or else
-// derives it from api itself: api is normally its own app's full URN
-// ("compute.example.com"), and this deployment's own authorization.*
-// check endpoint is mounted on that exact same domain — only the first
-// label ("compute") differs. A bare api with no dot at all (unusual,
-// but not invalid — see rbac.Rule.Apis) has no domain to derive, so
-// this falls back to the server's own documented default.
-func resolveAPIDomain(explicit, api string) string {
+// resolveAPIDomain picks, in order: --api-domain when the caller set
+// it; else whatever api itself already carries (api is normally its
+// own app's full URN, "compute.example.com", and this deployment's
+// authorization.* check/verb endpoints are mounted on that exact same
+// domain — only the first label, "compute", differs) — a bare api
+// with no dot at all (unusual, but not invalid, see rbac.Rule.Apis)
+// has no domain to derive this way; else contextDomain, the current
+// login's own saved api_domain (see clicontext.Context.ApiDomain,
+// written by `login` — see oauth2login.Result.ApiDomain), when the
+// login actually has one; else the server's own documented default,
+// for a context saved before this existed or a server that never
+// relays one.
+func resolveAPIDomain(explicit, api, contextDomain string) string {
 	if explicit != "" {
 		return explicit
 	}
 	if i := strings.Index(api, "."); i >= 0 {
 		return api[i+1:]
+	}
+	if contextDomain != "" {
+		return contextDomain
 	}
 	return "example.com"
 }

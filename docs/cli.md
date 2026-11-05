@@ -167,6 +167,13 @@ own public token endpoint/client ID back at the end so this CLI can finish
 the PKCE exchange itself, with zero prior knowledge of which provider it
 was.
 
+The server's own `app.api_domain` is relayed the same way and saved into
+the context alongside the token — `auth can-i` and the
+[generic verbs](#kayra-cli-get-create-update-patch-delete) read it back
+from there, so they never have to guess `example.com` for a server that
+configured something else. A context saved before this existed (or one
+created by hand) simply has none, same fallback as before.
+
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--server` | — | required; the Kayra server's base URL |
@@ -260,7 +267,7 @@ command nor the server exposes that comparison any other way.
 |------|---------|---------|
 | `--api` | — | required; the API group being asked about, e.g. `compute.example.com` — never Kayra's own `authorization.<domain>` |
 | `--namespace` | — | required; the namespace to check against |
-| `--api-domain` | everything in `--api` past its first label, else `example.com` | this deployment's own `app.api_domain` — only used to reach `/apis/authorization.<domain>/v1/check` itself; `--api compute.example.com` alone is enough, since the check endpoint lives on that same domain |
+| `--api-domain` | everything in `--api` past its first label, else the current context's own saved `api_domain` (see `login`), else `example.com` | this deployment's own `app.api_domain` — only used to reach `/apis/authorization.<domain>/v1/check` itself; `--api compute.example.com` alone is enough, since the check endpoint lives on that same domain |
 | `--context` | current context | saved context to use instead |
 
 #### whoami
@@ -284,4 +291,69 @@ against.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
+| `--context` | current context | saved context to use instead |
+
+## kayra-cli (get, create, update, patch, delete)
+
+kubectl-style top-level verbs — a thin, generic REST client against
+*any* app's own API, following the exact URN/route convention Kayra's
+own resources use (see
+[RBAC & auth](architecture/rbac-and-auth.md#authorizing-other-apps-requests)):
+
+```
+{server}/apis/<api>.<domain>/v1/namespaces/<namespace>/<resource>[/<name>]   # -n given: namespace-scoped
+{server}/apis/<api>.<domain>/v1/<resource>[/<name>]                          # -n omitted: cluster-scoped
+```
+
+authenticated with the current context's own bearer token. Kayra
+itself never implements any of these APIs (see
+[API registrations](architecture/api-registrations.md)) — this is just
+the one HTTP convention every app following it shares, so one verb set
+works against all of them, Kayra's own resources included — both
+namespace-scoped (`subscription`'s subscriptions, `authorization`'s
+per-namespace groups/roles/rolebindings) and cluster-scoped
+(`catalog`'s `apiregistrations`, `authorization`'s
+`clustergroups`/`clusterroles`/`clusterrolebindings`):
+
+```bash
+# namespace-scoped: -n selects .../namespaces/<ns>/<resource>
+./kayra-cli get subscription -n thetenant subscriptions
+# []
+./kayra-cli create subscription -n thetenant subscriptions -d '{"api_name": "vault"}'
+# {"api_name": "vault", "active": false, "state": "init", ...}
+./kayra-cli get subscription -n thetenant subscriptions vault
+./kayra-cli update subscription -n thetenant subscriptions vault/sync -d '{}'
+./kayra-cli delete subscription -n thetenant subscriptions vault
+
+# cluster-scoped: no -n, addresses .../<resource> directly
+./kayra-cli create catalog apiregistrations -d '{"name": "vault", "owner": "sre"}'
+./kayra-cli get catalog apiregistrations
+./kayra-cli create authorization clustergroups -d '{"name": "g", "metadata": {...}, "groups": [...]}'
+```
+
+`get` maps to `GET` either way — no trailing `<name>` lists the whole
+collection (`.../<resource>`), a `<name>` fetches that one item
+(`.../<resource>/<name>`), exactly like `kubectl get` itself (and
+exactly how Kayra's own collection vs. item routes already distinguish
+the two) — there is no separate `list` verb. `create` is `POST`,
+`update` is `PUT`, `patch` is `PATCH`, `delete` is `DELETE` —
+`update`/`patch`/`delete` all require `<name>`; `create`/`update`/
+`patch` all require a body. A sub-resource action is just part of
+`<name>` (`vault/sync` above — "PATCH .../vm/:id/reboot" in the
+general case, see
+[RBAC & auth](architecture/rbac-and-auth.md#authorizing-other-apps-requests)),
+never a separate argument.
+
+The response body is printed pretty-printed as-is — this never
+interprets or re-shapes it, since it has no idea what shape any given
+`<api>`'s own resource actually is. A non-2xx response still prints
+the body (typically the same RFC 9457 problem-detail shape
+[`httpapi.Fail`](packages/httpapi.md) uses) and exits `1`.
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--namespace`, `-n` | — | the namespace to address — omit for a cluster-scoped resource |
+| `--api-domain` | everything in `<api>` past its first label, else the current context's own saved `api_domain` (see `login`), else `example.com` | same resolution as `auth can-i`'s flag of the same name |
+| `--data`, `-d` | — | request body, as a raw JSON string (`create`/`update`/`patch` only) |
+| `--filename`, `-f` | — | request body, read from a file — `-` for stdin (`create`/`update`/`patch` only) |
 | `--context` | current context | saved context to use instead |

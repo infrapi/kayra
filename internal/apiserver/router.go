@@ -92,8 +92,21 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 
 	baseURL := appCfg.AppUrl
 
+	// Empty cfg.App.APIDomain falls back to "example.com" — every API
+	// group internal/rbac and internal/catalog mount, and every
+	// Role.Rules entry an operator authors, is "<group>.<domain>", so
+	// this must be resolved before either package registers a single
+	// route, and before oauth2broker (which relays it to `kayra-cli
+	// login` so the CLI never has to guess it either).
+	apiDomain := cfg.App.APIDomain
+	if apiDomain == "" {
+		apiDomain = "example.com"
+	}
+	rbac.SetAPIDomain(apiDomain)
+	catalog.SetAPIDomain(apiDomain)
+
 	oidc.RegisterRoutes(engine, manager, baseURL)
-	oauth2broker.RegisterRoutes(engine, cfg, s, keys, baseURL)
+	oauth2broker.RegisterRoutes(engine, cfg, s, keys, baseURL, apiDomain)
 
 	userinfoHandler := func(c *gin.Context) {
 		ac, ok := middleware.GetAuth(c)
@@ -125,17 +138,6 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		sysadminGroups = []string{middleware.SysadminGroupFor(appCfg.AppPlatform)}
 	}
 	sysadminGate := middleware.SysadminGate(authenticator, sysadminGroups)
-
-	// Empty cfg.App.APIDomain falls back to "example.com" — every API
-	// group internal/rbac and internal/catalog mount, and every
-	// Role.Rules entry an operator authors, is "<group>.<domain>", so
-	// this must be set before either package registers a single route.
-	apiDomain := cfg.App.APIDomain
-	if apiDomain == "" {
-		apiDomain = "example.com"
-	}
-	rbac.SetAPIDomain(apiDomain)
-	catalog.SetAPIDomain(apiDomain)
 
 	rbacRepo := rbac.NewRepository(s, keys)
 	rbac.RegisterClusterRoutes(engine, rbacRepo, sysadminGate)
