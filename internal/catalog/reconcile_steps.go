@@ -48,7 +48,10 @@ type stepTemplateData struct {
 // stepTemplateData: everything about the subscription/api registration
 // pair being reconciled that a step's endpoint/body/headers might need.
 type subscriptionTemplateData struct {
+	// Api is the registration's long name (its id); ShortName its
+	// optional alias, empty when the registration has none.
 	Api            string
+	ShortName      string
 	Namespace      string
 	Platform       string
 	Region         string

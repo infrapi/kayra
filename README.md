@@ -1,88 +1,67 @@
 # Kayra
 
 Authentication, namespace creation and IAM policy service, built on
-[`github.com/infrapi/lib`](https://github.com/infrapi/lib).
+[`infrapi/lib`](https://infrapi.github.io/lib/).
 
-New here? Start with the [quickstart](docs/getting-started.md) — build,
-run, bootstrap a token, and create a tenant end to end with `curl`.
+Three resources — cluster-wide **API registrations**, per-tenant
+**namespaces**, and the **subscriptions** linking them — sit behind the
+same bearer-auth and cluster-RBAC model every other endpoint uses, with
+a separate `kayra reconciler` process turning disabled records active.
 
-## Build & test
+New here? Start with the [quickstart](https://infrapi.github.io/kayra/getting-started/) — install,
+run, bootstrap a token, and create a tenant end to end with `kayra-cli`.
 
-```bash
-go build ./...
-go vet ./...
-go test ./...
-```
+## Why "Kayra"
+
+In Altai Turkic mythology, Kayra Han, son of Tengri, rose from the
+primordial waters, shaped the land and gave each of his sons a realm to
+govern. Kayra does the same here: it creates namespaces, decides who
+rules what through RBAC, and leaves each API to the team that owns it.
 
 ## Two binaries
 
-- **`cmd/kayra`** — the server binary: `serve`, `reconciler`, `cache
-  clean`, `token mint`. Always reads `kayra.yaml` directly. Not
+- **`kayra`** (`cmd/kayra`) — the server: `serve`, `reconciler`,
+  `cache clean`, `token mint`. Reads `kayra.yaml` directly; not
   something a plain end user runs.
-- **`cmd/cli`** (`kayra-cli`) — the portable client an end user logs
-  in with. Never reads `kayra.yaml` or any local config — see the
-  [CLI reference](docs/cli.md).
+- **`kayra-cli`** (`cmd/cli`) — the portable client an end user logs in
+  with. Never reads `kayra.yaml` or any local config — see the
+  [CLI reference](https://infrapi.github.io/kayra/cli/).
 
-```bash
-go build -o kayra ./cmd/kayra
-./kayra --config kayra.yaml serve
-# or: export KAYRA_CONFIG_FILE=kayra.yaml && ./kayra serve
-# --help works at every level: ./kayra --help, ./kayra cache --help, ...
-```
-
-One YAML file covers everything — `app:` (infrapi/lib's shared
+One YAML file configures the server — `app:` (infrapi/lib's shared
 `INFRAPI_APP_*` bootstrap config), plus the database backend,
 authentication providers and authorization backends. See
-[`examples/kayra.yaml`](examples/kayra.yaml) for a fully commented,
-runnable copy, and [config](docs/packages/config.md) for the full
-reference.
-
-## Bootstrapping the first token
-
-A brand new deployment has no user, group or RBAC object yet — nothing
-to log in *against*. `kayra token mint` signs a JWT straight from a
-configured local signing key, embedding whatever groups you ask for:
-
-```bash
-./kayra --config kayra.yaml token mint --provider self --group sandbox-core-sysadmin
-```
-
-That only works if the named provider's authorization backend is
-`claims`-typed (the token's own `groups` claim is trusted directly,
-never re-checked against a directory — see
-[`examples/kayra.yaml`](examples/kayra.yaml)'s `self-claims` entry).
-Past bootstrap, real users log in normally (`kayra-cli login`) and this
-command is only needed again for a genuine break-glass credential.
+[`examples/kayra.yaml`](https://github.com/infrapi/kayra/blob/main/examples/kayra.yaml) for a fully commented
+copy, and [config](https://infrapi.github.io/kayra/packages/config/) for the full reference.
 
 ## Core concepts
 
 - **RBAC** — `Group`/`Role`/`RoleBinding`, cluster- and
   namespace-scoped, gated by real resolved directory groups (never a
   synced membership list). See
-  [RBAC & auth](docs/architecture/rbac-and-auth.md).
+  [RBAC & auth](https://infrapi.github.io/kayra/architecture/rbac-and-auth/).
 - **ApiRegistration** — declares that an API group exists and who owns
-  it (e.g. "compute"); Kayra never implements the API itself. See
-  [API registrations](docs/architecture/api-registrations.md).
+  it (e.g. "compute.example.com", its long name and id); Kayra never implements the API itself. See
+  [API registrations](https://infrapi.github.io/kayra/architecture/api-registrations/).
 - **Namespace** — *is* the tenant, not two things joined by a name.
-  See [Namespaces](docs/architecture/namespaces.md).
+  See [Namespaces](https://infrapi.github.io/kayra/architecture/namespaces/).
 - **Subscription** — links a namespace to an API registration by name; only
   `kayra reconciler` (a separate process, see
-  [Subscriptions & reconciliation](docs/architecture/subscriptions.md))
+  [Subscriptions & reconciliation](https://infrapi.github.io/kayra/architecture/subscriptions/))
   ever flips it active.
 
-## Clearing cached entries
+## Where to start
 
-Resolved users and provider JWKS keys are cached in the store with a
-TTL — a config change (a new `member_regex`, a rotated key) only takes
-effect for already-cached entries once cleared or expired:
-
-```bash
-./kayra --config kayra.yaml cache clean                                       # everything
-./kayra --config kayra.yaml cache clean --scope auth                          # all JWKS caches
-./kayra --config kayra.yaml cache clean --scope auth --provider okta          # one provider's JWKS
-./kayra --config kayra.yaml cache clean --scope users --authz idm             # one backend's users
-./kayra --config kayra.yaml cache clean --scope users --authz idm --user jdoe # one user
-```
+| I want to... | Go to |
+|---|---|
+| Run Kayra for the first time | [Getting started](https://infrapi.github.io/kayra/getting-started/) |
+| Understand how the pieces fit together | [Architecture overview](https://infrapi.github.io/kayra/architecture/overview/) |
+| See who can authenticate and who can manage what | [RBAC & auth](https://infrapi.github.io/kayra/architecture/rbac-and-auth/) |
+| Create or update an API registration | [API registrations](https://infrapi.github.io/kayra/architecture/api-registrations/) |
+| Create or update a tenant | [Namespaces](https://infrapi.github.io/kayra/architecture/namespaces/) |
+| Subscribe a tenant to an API registration, or trigger reconcile | [Subscriptions & reconciliation](https://infrapi.github.io/kayra/architecture/subscriptions/) |
+| Run a command (`serve`, `reconciler`, `cache clean`, `token mint`) or use `kayra-cli` | [CLI](https://infrapi.github.io/kayra/cli/) |
+| Look up one `internal/*` package's API | [Packages](https://infrapi.github.io/kayra/packages/apiserver/) |
+| Build, test, or work on the docs themselves | [Development](https://infrapi.github.io/kayra/development/) |
 
 ## Layout
 
@@ -105,6 +84,6 @@ own types, storage and HTTP handlers together.
 
 `cmd/kayra` wires all of it together; `cmd/cli` depends on none of it.
 
-## More
+## License
 
-See [the docs](docs/index.md) for the full architecture reference.
+MIT, see [LICENSE](https://github.com/infrapi/kayra/blob/main/LICENSE).

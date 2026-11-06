@@ -76,8 +76,8 @@ Two independent invocations of the one binary, not one process doing both
 jobs:
 
 ```bash
-./kayra serve      # the HTTP API
-./kayra reconciler # the catalog reconcile controller
+kayra serve      # the HTTP API
+kayra reconciler # the catalog reconcile controller
 ```
 
 See [the CLI reference](../cli.md) and

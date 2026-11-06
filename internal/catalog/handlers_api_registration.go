@@ -36,7 +36,9 @@ type apiRegistrationStatusResponse struct {
 	Subscriptions []subscriptionSyncStatus `json:"subscriptions"`
 }
 
-// validateApiRegistration checks that reg has a name and that every
+// validateApiRegistration checks that reg's name is a long api name
+// (IsLongApiName), that its optional short_name is a single label not
+// already used by another registration here, and that every
 // entry in DependsOn resolves to an existing ApiRegistration — the
 // legacy Postgres model enforced neither (no real FK, no app-level
 // check either). Platform/Region need no check here:
@@ -46,6 +48,21 @@ type apiRegistrationStatusResponse struct {
 func validateApiRegistration(repo *Repository, reg ApiRegistration) *liberrors.Error {
 	if reg.Name == "" {
 		return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "name is required")
+	}
+	if !IsLongApiName(reg.Name) {
+		return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "name %q must be the api's long name, a lowercase DNS name such as \"compute.example.com\"", reg.Name)
+	}
+	if reg.ShortName != "" {
+		if !IsShortApiName(reg.ShortName) {
+			return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "short_name %q must be a single lowercase DNS label such as \"compute\"", reg.ShortName)
+		}
+		other, found, err := repo.findByShortName(reg.Platform, reg.Region, reg.ShortName)
+		if err != nil {
+			return liberrors.Wrap(err, http.StatusInternalServerError, "catalog.ApiRegistration", "")
+		}
+		if found && other.Name != reg.Name {
+			return liberrors.New(http.StatusConflict, "catalog.ApiRegistration", "short_name %q is already used by api registration %q", reg.ShortName, other.Name)
+		}
 	}
 	for _, dep := range reg.DependsOn {
 		if dep.Platform == "" || dep.Region == "" || dep.Name == "" {

@@ -341,7 +341,7 @@ type SysadminConfig struct {
 // string value reachable inside Data (however deeply nested — Data's own
 // values, object fields, array elements, any combination), and every
 // Headers value renders as a Go text/template first, against a struct
-// exposing ".Subscription" (Api, Namespace, Platform, Region,
+// exposing ".Subscription" (Api, ShortName, Namespace, Platform, Region,
 // CurrentSyncID, ExpectedSyncID — all strings) and ".Previous.Outputs"
 // (the preceding step's own Outputs, keyed exactly as that step declared
 // them; empty for the first step).

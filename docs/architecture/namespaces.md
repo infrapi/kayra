@@ -21,10 +21,19 @@ separate `/tenant` child resource. Full CRUD at `/apis/apps.example.com/v1/names
 tier as [ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
 cluster `RoleBinding` scoped to a namespace that doesn't exist yet.
 
-```bash
-curl -s -X POST http://localhost:8080/apis/apps.example.com/v1/namespaces \
-  -H "Authorization: Bearer $TOKEN" -d '{"name": "core"}'
-```
+=== "kayra-cli"
+
+    ```bash
+    kayra-cli create apps namespaces -d '{"name": "core"}'
+    ```
+
+=== "curl"
+
+    ```bash
+    curl -s -X POST http://localhost:8080/apis/apps.example.com/v1/namespaces \
+      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      -d '{"name": "core"}'
+    ```
 
 `PUT` is a no-op confirmation kept for API shape compatibility: the path
 segment is the only thing that ever identified a namespace, and

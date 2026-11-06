@@ -11,13 +11,13 @@ import (
 )
 
 // subscriptionCreateRequest is the request body for creating a
-// subscription: api_name is the only thing a caller controls. Active
+// subscription: api is the only thing a caller controls. Active
 // and State are computed, deliberately absent here — a subscription is
 // always created disabled/init, and can only ever be moved to
 // active/success by Repository.ActivateSubscription (an internal-only
 // path no HTTP route exposes).
 type subscriptionCreateRequest struct {
-	ApiName string `json:"api_name"`
+	ApiName string `json:"api"`
 }
 
 // subscriptionResponse is what every subscription handler returns.
@@ -31,7 +31,7 @@ type subscriptionCreateRequest struct {
 // Neither field is omitempty: both are always reported, "" when there's
 // nothing to report, rather than silently missing from the body.
 type subscriptionResponse struct {
-	ApiName        string `json:"api_name"`
+	ApiName        string `json:"api"`
 	Active         bool   `json:"active"`
 	State          string `json:"state"`
 	CurrentSyncID  string `json:"current_sync_id"`
@@ -63,10 +63,19 @@ func buildSubscriptionResponse(repo *Repository, sub Subscription, deploymentPla
 // string parsing on State.
 func validateSubscription(repo *Repository, sub Subscription, deploymentPlatform, deploymentRegion string) *liberrors.Error {
 	if sub.ApiName == "" {
-		return liberrors.New(http.StatusBadRequest, "catalog.Subscription", "api_name is required")
+		return liberrors.New(http.StatusBadRequest, "catalog.Subscription", "api is required")
 	}
 	if !ValidSubscriptionState(sub.State) {
 		return liberrors.New(http.StatusBadRequest, "catalog.Subscription", "state %q is not one of init, success, error, undef", sub.State)
+	}
+	if !IsLongApiName(sub.ApiName) {
+		msg := "api %q must be the api's long name, e.g. \"compute.example.com\""
+		args := []any{sub.ApiName}
+		if reg, found, err := repo.findByShortName(deploymentPlatform, deploymentRegion, sub.ApiName); err == nil && found {
+			msg = "api %q is a short name: subscribe with its long name %q"
+			args = append(args, reg.Name)
+		}
+		return liberrors.New(http.StatusBadRequest, "catalog.Subscription", msg, args...)
 	}
 	if _, err := repo.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, sub.ApiName); err != nil {
 		return notFoundOrInternal(err, "catalog.Subscription", "api registration %q not found in %s/%s", sub.ApiName, deploymentPlatform, deploymentRegion)

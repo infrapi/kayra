@@ -31,7 +31,7 @@ missing when there's nothing to report, so a caller never has to treat
 
 ```json
 {
-  "api_name": "compute",
+  "api": "compute.example.com",
   "active": true,
   "state": "success",
   "current_sync_id": "2026-01-01T00Z",
@@ -49,23 +49,44 @@ same cluster `Role.Rules` [RBAC & auth](rbac-and-auth.md#who-can-manage-a-namesp
 describes, so an existing sysadmin role using `resources: ["*"]` already
 covers it.
 
-```bash
-curl -s -X POST http://localhost:8080/apis/subscription.example.com/v1/namespaces/core/subscriptions \
-  -H "Authorization: Bearer $TOKEN" -d '{"api_name": "compute"}'
-```
+=== "kayra-cli"
 
-Create requires only `api_name`; subscribing to an api registration that doesn't
-exist in this deployment's scope is rejected (`404`).
-`PUT .../subscriptions/:api` is a no-op confirmation — `api_name` is
+    ```bash
+    kayra-cli create subscription -n core subscriptions -d '{"api": "compute.example.com"}'
+    ```
+
+=== "curl"
+
+    ```bash
+    curl -s -X POST http://localhost:8080/apis/subscription.example.com/v1/namespaces/core/subscriptions \
+      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      -d '{"api": "compute.example.com"}'
+    ```
+
+Create requires only `api`, which must be the registration's **long
+name** (`compute.example.com`) — a short name is refused (`400`, the
+error names the long one to use when a registration has that
+`short_name`); subscribing to an api registration that doesn't exist in
+this deployment's scope is rejected (`404`).
+`PUT .../subscriptions/:api` is a no-op confirmation — `api` is
 fixed by the path and `active`/`state`/`current_sync_id` are computed, so
 there's nothing left in the body a caller could legitimately change.
 
 ### Forcing a re-sync
 
-```bash
-curl -s -X PUT http://localhost:8080/apis/subscription.example.com/v1/namespaces/sre/subscriptions/dev/sync \
-  -H "Authorization: Bearer $TOKEN"
-```
+=== "kayra-cli"
+
+    ```bash
+    kayra-cli update subscription -n sre subscriptions dev.example.com/sync -d '{}'
+    ```
+
+=== "curl"
+
+    ```bash
+    curl -s -X PUT http://localhost:8080/apis/subscription.example.com/v1/namespaces/sre/subscriptions/dev.example.com/sync \
+      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      -d '{}'
+    ```
 
 Resets `current_sync_id` to empty — nothing else: `active`/`state` are left
 exactly as they were. That's the subscription-level mirror of [an api registration's
@@ -94,7 +115,7 @@ reconciler`.
 ## Reconciler
 
 ```bash
-./kayra reconciler
+kayra reconciler
 ```
 
 `catalog.Reconciler` is the controller that activates a new namespace or
@@ -289,7 +310,7 @@ reconciler:
   mode:
     api:
       - method: post
-        endpoint: "https://{{ .Subscription.Api }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync"
+        endpoint: "https://{{ .Subscription.ShortName }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync"
         data:
           sync_id: "{{ .Subscription.ExpectedSyncID }}"
         headers:
@@ -298,7 +319,7 @@ reconciler:
         timeout: "3600s"
         async: true
       - method: get
-        endpoint: "https://{{ .Subscription.Api }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync/{{ .Subscription.ExpectedSyncID }}"
+        endpoint: "https://{{ .Subscription.ShortName }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync/{{ .Subscription.ExpectedSyncID }}"
         headers:
           Authorization: {type: Bearer, value: "yyyyyyyyyyyyyyyy"}
         timeout: "3600s"
@@ -312,7 +333,7 @@ reachable inside `data` — however deeply nested, `data`'s own values, an
 object field, an array element, any combination — renders as a Go
 [`text/template`](https://pkg.go.dev/text/template) against:
 
-- `.Subscription` — `Api`, `Namespace`, `Platform`, `Region`,
+- `.Subscription` — `Api` (the long name), `ShortName` (empty when the registration has none), `Namespace`, `Platform`, `Region`,
   `CurrentSyncID`, `ExpectedSyncID` (all strings; the same values
   [the response's two sync fields](#active-statecurrentsyncid-are-computed)
   expose).

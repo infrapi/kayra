@@ -5,49 +5,53 @@ import (
 	"testing"
 )
 
-func TestApiNameFromURN(t *testing.T) {
-	cases := map[string]struct {
-		name string
-		ok   bool
-	}{
-		"compute.example.com":   {"compute", true},
-		"compute.other.com":     {"", false},
-		"a.compute.example.com": {"", false},
-		".example.com":          {"", false},
-		"example.com":           {"", false},
-		"compute":               {"", false},
+func TestApiNameForms(t *testing.T) {
+	long := map[string]bool{
+		"compute.example.com": true,
+		"dev.giservices.io":   true,
+		"compute":             false,
+		"Compute.example.com": false,
+		".example.com":        false,
+		"compute..com":        false,
 	}
-	for urn, want := range cases {
-		name, ok := ApiNameFromURN(urn)
-		if name != want.name || ok != want.ok {
-			t.Errorf("ApiNameFromURN(%q) = (%q, %v), want (%q, %v)", urn, name, ok, want.name, want.ok)
+	for name, want := range long {
+		if got := IsLongApiName(name); got != want {
+			t.Errorf("IsLongApiName(%q) = %v, want %v", name, got, want)
+		}
+	}
+	short := map[string]bool{
+		"compute":             true,
+		"dev-1":               true,
+		"compute.example.com": false,
+		"-dev":                false,
+		"":                    false,
+	}
+	for name, want := range short {
+		if got := IsShortApiName(name); got != want {
+			t.Errorf("IsShortApiName(%q) = %v, want %v", name, got, want)
 		}
 	}
 }
 
 func TestCheckSubscribedApi(t *testing.T) {
 	repo := newTestRepo(t)
-	if err := repo.PutNamespace(Namespace{Name: "core"}); err != nil {
-		t.Fatal(err)
+	for _, ns := range []string{"core", "other", "pending"} {
+		if err := repo.PutNamespace(Namespace{Name: ns}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := repo.PutNamespace(Namespace{Name: "other"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "compute", Platform: testDeployPlatform, Region: testDeployRegion}); err != nil {
+	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "compute.example.com", ShortName: "compute", Platform: testDeployPlatform, Region: testDeployRegion}); err != nil {
 		t.Fatal(err)
 	}
 	// Registered elsewhere only: must not count as existing here.
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "dns", Platform: "prod", Region: testDeployRegion}); err != nil {
+	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "dns.example.com", Platform: "prod", Region: testDeployRegion}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.PutNamespaceSubscription("core", Subscription{ApiName: "compute", Active: true, State: SubscriptionStateSuccess}); err != nil {
+	if err := repo.PutNamespaceSubscription("core", Subscription{ApiName: "compute.example.com", Active: true, State: SubscriptionStateSuccess}); err != nil {
 		t.Fatal(err)
 	}
 	// Subscribed but never reconciled: read-only.
-	if err := repo.PutNamespace(Namespace{Name: "pending"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := repo.PutNamespaceSubscription("pending", Subscription{ApiName: "compute", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("pending", Subscription{ApiName: "compute.example.com", State: SubscriptionStateInit}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -58,7 +62,7 @@ func TestCheckSubscribedApi(t *testing.T) {
 		{"active, read", "core", "compute.example.com", "list", 0},
 		{"active, write", "core", "compute.example.com", "create", 0},
 		{"namespace missing", "nope", "compute.example.com", "get", http.StatusNotFound},
-		{"api outside domain", "core", "compute.other.com", "get", http.StatusNotFound},
+		{"short name is not an id", "core", "compute", "get", http.StatusNotFound},
 		{"api not registered", "core", "vault.example.com", "get", http.StatusNotFound},
 		{"api registered in another platform", "core", "dns.example.com", "get", http.StatusNotFound},
 		{"namespace not subscribed", "other", "compute.example.com", "get", http.StatusForbidden},

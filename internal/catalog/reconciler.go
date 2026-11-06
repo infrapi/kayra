@@ -536,6 +536,7 @@ func (r *Reconciler) reconcile(reg ApiRegistration, namespace string, sub Subscr
 
 	data := stepTemplateData{Subscription: subscriptionTemplateData{
 		Api:            reg.Name,
+		ShortName:      reg.ShortName,
 		Namespace:      namespace,
 		Platform:       r.deploymentPlatform,
 		Region:         r.deploymentRegion,

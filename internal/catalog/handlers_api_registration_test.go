@@ -10,7 +10,7 @@ func TestClusterApiRegistrationCRUD(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{
-		Name: "vault", Active: true, Owner: "sre-a",
+		Name: "vault.example.com", Active: true, Owner: "sre-a",
 	})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create: status %d, body %s", w.Code, w.Body.String())
@@ -24,11 +24,11 @@ func TestClusterApiRegistrationCRUD(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &regs); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if len(regs) != 1 || regs[0].Name != "vault" {
+	if len(regs) != 1 || regs[0].Name != "vault.example.com" {
 		t.Fatalf("list = %v, want [vault]", regs)
 	}
 
-	w = doJSON(t, engine, http.MethodGet, "/apis/catalog.example.com/v1/apiregistrations/vault", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("get: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -38,7 +38,7 @@ func TestClusterApiRegistrationCRUD(t *testing.T) {
 		t.Fatalf("get missing: status %d, want 404", w.Code)
 	}
 
-	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault", ApiRegistration{Owner: "sre-b", Active: true})
+	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com", ApiRegistration{Owner: "sre-b", Active: true})
 	if w.Code != http.StatusOK {
 		t.Fatalf("update: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -46,7 +46,7 @@ func TestClusterApiRegistrationCRUD(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &updated); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if updated.Owner != "sre-b" || updated.Name != "vault" {
+	if updated.Owner != "sre-b" || updated.Name != "vault.example.com" {
 		t.Fatalf("update response = %+v", updated)
 	}
 
@@ -55,11 +55,11 @@ func TestClusterApiRegistrationCRUD(t *testing.T) {
 		t.Fatalf("update missing: status %d, want 404", w.Code)
 	}
 
-	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com", nil)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete: status %d, body %s", w.Code, w.Body.String())
 	}
-	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com", nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("delete missing: status %d, want 404", w.Code)
 	}
@@ -71,9 +71,9 @@ func TestClusterApiRegistrationCRUD(t *testing.T) {
 func TestApiRegistrationSync(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault", Active: true})
+	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault.example.com", Active: true})
 
-	w := doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault/sync", nil)
+	w := doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com/sync", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("sync: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -85,7 +85,7 @@ func TestApiRegistrationSync(t *testing.T) {
 		t.Fatalf("sync response = %+v, want a non-empty sync_id", first)
 	}
 
-	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault/sync", nil)
+	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com/sync", nil)
 	var second ApiRegistration
 	if err := json.Unmarshal(w.Body.Bytes(), &second); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -95,7 +95,7 @@ func TestApiRegistrationSync(t *testing.T) {
 	}
 
 	// an explicit sync_id is still settable through the normal update.
-	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault", ApiRegistration{SyncID: "custom-id"})
+	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com", ApiRegistration{SyncID: "custom-id"})
 	var explicit ApiRegistration
 	if err := json.Unmarshal(w.Body.Bytes(), &explicit); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -120,7 +120,7 @@ func TestApiRegistrationSync(t *testing.T) {
 func TestApiRegistrationCreateGeneratesDefaultSyncID(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault", Active: true})
+	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault.example.com", Active: true})
 	var created ApiRegistration
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -129,7 +129,7 @@ func TestApiRegistrationCreateGeneratesDefaultSyncID(t *testing.T) {
 		t.Fatalf("created.SyncID is empty, want a generated default")
 	}
 
-	w = doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "pki", Active: true, SyncID: "explicit-id"})
+	w = doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "pki.example.com", Active: true, SyncID: "explicit-id"})
 	var explicit ApiRegistration
 	if err := json.Unmarshal(w.Body.Bytes(), &explicit); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -146,29 +146,29 @@ func TestApiRegistrationCreateGeneratesDefaultSyncID(t *testing.T) {
 func TestApiRegistrationStatus(t *testing.T) {
 	engine, repo := newTestEngine(t)
 
-	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault", Active: true})
-	reg, err := repo.GetClusterApiRegistration(testDeployPlatform, testDeployRegion, "vault")
+	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault.example.com", Active: true})
+	reg, err := repo.GetClusterApiRegistration(testDeployPlatform, testDeployRegion, "vault.example.com")
 	if err != nil {
 		t.Fatalf("GetClusterApiRegistration: %v", err)
 	}
 
 	if err := repo.PutNamespaceSubscription("synced-ns", Subscription{
-		ApiName: "vault", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: reg.SyncID,
+		ApiName: "vault.example.com", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: reg.SyncID,
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 	if err := repo.PutNamespaceSubscription("stale-ns", Subscription{
-		ApiName: "vault", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "old-sync-id",
+		ApiName: "vault.example.com", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "old-sync-id",
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 	if err := repo.PutNamespaceSubscription("pending-ns", Subscription{
-		ApiName: "vault", State: SubscriptionStateInit,
+		ApiName: "vault.example.com", State: SubscriptionStateInit,
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
-	w := doJSON(t, engine, http.MethodGet, "/apis/catalog.example.com/v1/apiregistrations/vault/status", nil)
+	w := doJSON(t, engine, http.MethodGet, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com/status", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -176,7 +176,7 @@ func TestApiRegistrationStatus(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if resp.Name != "vault" || resp.SyncID != reg.SyncID {
+	if resp.Name != "vault.example.com" || resp.SyncID != reg.SyncID {
 		t.Fatalf("resp = %+v, want name=vault sync_id=%q", resp, reg.SyncID)
 	}
 	if len(resp.Subscriptions) != 2 {
@@ -206,12 +206,12 @@ func TestApiRegistrationStatus(t *testing.T) {
 func TestApiRegistrationSyncCanaryRollout(t *testing.T) {
 	engine, repo := newTestEngine(t)
 
-	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault", Active: true})
-	if err := repo.PutNamespaceSubscription("canary-ns", Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
+	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault.example.com", Active: true})
+	if err := repo.PutNamespaceSubscription("canary-ns", Subscription{ApiName: "vault.example.com", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
-	w := doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault/sync", map[string]any{
+	w := doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com/sync", map[string]any{
 		"canary_namespaces": []string{"canary-ns"},
 	})
 	if w.Code != http.StatusOK {
@@ -231,7 +231,7 @@ func TestApiRegistrationSyncCanaryRollout(t *testing.T) {
 	// a namespace that isn't actually subscribed is rejected outright,
 	// rather than silently accepted as a canary target that can never
 	// be reconciled.
-	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault/sync", map[string]any{
+	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com/sync", map[string]any{
 		"canary_namespaces": []string{"not-subscribed"},
 	})
 	if w.Code != http.StatusNotFound {
@@ -243,7 +243,7 @@ func TestApiRegistrationSyncCanaryRollout(t *testing.T) {
 	// it wants kept, sync_id included) must not touch the pending
 	// canary restriction — that one field is never settable through
 	// this route at all, unlike every other field here.
-	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault", ApiRegistration{Active: true, Owner: "sre", SyncID: canaried.SyncID})
+	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com", ApiRegistration{Active: true, Owner: "sre", SyncID: canaried.SyncID})
 	var midRollout ApiRegistration
 	if err := json.Unmarshal(w.Body.Bytes(), &midRollout); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -255,7 +255,7 @@ func TestApiRegistrationSyncCanaryRollout(t *testing.T) {
 	// release: no canary_namespaces named, and a rollout is pending, so
 	// this reuses the already-canaried sync_id rather than minting a new
 	// one, and clears the restriction.
-	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault/sync", nil)
+	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com/sync", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("release sync: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -272,7 +272,7 @@ func TestApiRegistrationSyncCanaryRollout(t *testing.T) {
 
 	// with no rollout pending, a plain sync goes back to minting a fresh
 	// sync_id, exactly like before canary existed at all.
-	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault/sync", nil)
+	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com/sync", nil)
 	var ordinary ApiRegistration
 	if err := json.Unmarshal(w.Body.Bytes(), &ordinary); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -293,7 +293,7 @@ func TestApiRegistrationRoutesAreScopedToDeployment(t *testing.T) {
 
 	// a client-supplied platform/region is silently overridden.
 	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{
-		Name: "vault", Platform: "some-other-platform", Region: "some-other-region",
+		Name: "vault.example.com", Platform: "some-other-platform", Region: "some-other-region",
 	})
 	var created ApiRegistration
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
@@ -307,7 +307,7 @@ func TestApiRegistrationRoutesAreScopedToDeployment(t *testing.T) {
 	// directly (bypassing HTTP, as a sibling deployment sharing the
 	// same store would), must not show up in this instance's list or
 	// be reachable by name.
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault", Platform: "other-platform", Region: "other-region"}); err != nil {
+	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault.example.com", Platform: "other-platform", Region: "other-region"}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
@@ -325,8 +325,8 @@ func TestApiRegistrationCreateRejectsMissingDependsOn(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{
-		Name: "pki", Active: true,
-		DependsOn: []ApiRegistrationRef{{Platform: testDeployPlatform, Region: testDeployRegion, Name: "vault"}},
+		Name: "pki.example.com", Active: true,
+		DependsOn: []ApiRegistrationRef{{Platform: testDeployPlatform, Region: testDeployRegion, Name: "vault.example.com"}},
 	})
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 (vault does not exist yet), body %s", w.Code, w.Body.String())
@@ -336,23 +336,23 @@ func TestApiRegistrationCreateRejectsMissingDependsOn(t *testing.T) {
 func TestApiRegistrationDeleteBlockedWhileDependedOn(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault", Active: true})
+	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault.example.com", Active: true})
 	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{
-		Name: "pki", Active: true,
-		DependsOn: []ApiRegistrationRef{{Platform: testDeployPlatform, Region: testDeployRegion, Name: "vault"}},
+		Name: "pki.example.com", Active: true,
+		DependsOn: []ApiRegistrationRef{{Platform: testDeployPlatform, Region: testDeployRegion, Name: "vault.example.com"}},
 	})
 
-	w := doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault", nil)
+	w := doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com", nil)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("delete depended-on api registration: status %d, want 409, body %s", w.Code, w.Body.String())
 	}
 
 	// deleting the dependent registration first, then the dependency, works.
-	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/pki", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/pki.example.com", nil)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete pki: status %d, body %s", w.Code, w.Body.String())
 	}
-	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com", nil)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete vault after pki removed: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -361,15 +361,15 @@ func TestApiRegistrationDeleteBlockedWhileDependedOn(t *testing.T) {
 func TestApiRegistrationDeleteBlockedWhileSubscribedTo(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault", Active: true})
+	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault.example.com", Active: true})
 	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
-		ApiName: "vault",
+		ApiName: "vault.example.com",
 	})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create subscription: status %d, body %s", w.Code, w.Body.String())
 	}
 
-	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/apiregistrations/vault.example.com", nil)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("delete subscribed-to api registration: status %d, want 409, body %s", w.Code, w.Body.String())
 	}

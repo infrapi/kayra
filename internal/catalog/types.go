@@ -24,10 +24,6 @@ package catalog
 var (
 	CatalogAPI   = "catalog.example.com"
 	NamespaceAPI = "apps.example.com"
-	// apiDomain is the deployment's own api domain, kept so
-	// CheckSubscribedApi can map a full API group URN
-	// ("compute.<domain>") back to its ApiRegistration name ("compute").
-	apiDomain = "example.com"
 )
 
 // SetAPIDomain rebuilds CatalogAPI and NamespaceAPI as "catalog.<domain>"
@@ -35,7 +31,6 @@ var (
 func SetAPIDomain(domain string) {
 	CatalogAPI = "catalog." + domain
 	NamespaceAPI = "apps." + domain
-	apiDomain = domain
 }
 
 // ApiRegistrationRef identifies one ApiRegistration by its full
@@ -60,7 +55,16 @@ type ApiRegistrationRef struct {
 // a dependency carried no data beyond the two registration references,
 // so it is folded directly into the owning ApiRegistration.
 type ApiRegistration struct {
-	Name        string               `json:"name" yaml:"name"`
+	// Name is the api's id: its long name, the full API group URN it is
+	// reachable under (e.g. "compute.example.com") — the only name a
+	// Subscription, a /v1/check request or a Role rule ever refers to it
+	// by. See IsLongApiName.
+	Name string `json:"name" yaml:"name"`
+	// ShortName is an optional single-label alias (e.g. "compute"),
+	// unique within this platform/region, for display and templating
+	// only (see subscriptionTemplateData.ShortName): it never identifies
+	// the registration anywhere — a Subscription naming it is refused.
+	ShortName   string               `json:"short_name" yaml:"short_name"`
 	Platform    string               `json:"platform" yaml:"platform"`
 	Region      string               `json:"region" yaml:"region"`
 	Active      bool                 `json:"active" yaml:"active"`
@@ -96,14 +100,15 @@ type ApiRegistration struct {
 	Mode string `json:"mode" yaml:"mode"`
 }
 
-// Subscription links a namespace to one ApiRegistration by name, ported
+// Subscription links a namespace to one ApiRegistration by its long
+// name (ApiRegistration.Name, never its ShortName), ported
 // from the legacy "subscriptions" table. Unlike ApiRegistration itself,
 // it carries no platform/region: this deployment runs in exactly one
 // platform/region (INFRAPI_APP_PLATFORM/_REGION), so "subscribed to api
 // X" can only ever mean the X in this deployment's own platform/region
 // — there is no second one to disambiguate against.
 type Subscription struct {
-	ApiName string `json:"api_name" yaml:"api_name"`
+	ApiName string `json:"api" yaml:"api"`
 	Active  bool   `json:"active" yaml:"active"`
 	// State is one of SubscriptionStateInit/Success/Error/Undef. Stored
 	// as a string, unlike the legacy model's raw persisted int ordinal:

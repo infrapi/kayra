@@ -158,6 +158,17 @@ func contextCommand() *cli.Command {
 				Action: runContextCurrent,
 			},
 			{
+				Name:      "set",
+				Usage:     "save a context from an existing bearer token (e.g. a `kayra token mint` bootstrap token) and make it current",
+				ArgsUsage: "<name>",
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "server", Required: true, Usage: "Kayra server base URL, e.g. http://localhost:8080"},
+					&cli.StringFlag{Name: "token", Required: true, Usage: "bearer token to save"},
+					&cli.StringFlag{Name: "api-domain", Usage: "the server's own app.api_domain (defaults to example.com when left empty)"},
+				},
+				Action: runContextSet,
+			},
+			{
 				Name:      "use",
 				Usage:     "switch the current context",
 				ArgsUsage: "<name>",
@@ -226,6 +237,34 @@ func runContextCurrent(ctx context.Context, cmd *cli.Command) error {
 	if !c.Expiry.IsZero() {
 		fmt.Printf("expiry:   %s\n", c.Expiry.Local().Format(time.RFC3339))
 	}
+	return nil
+}
+
+// runContextSet saves --token as context <name> without any login
+// flow — the way in for a bootstrap token minted by `kayra token mint`,
+// before any real login provider can be used. It always becomes the
+// current context, exactly like a login.
+func runContextSet(ctx context.Context, cmd *cli.Command) error {
+	name := cmd.Args().First()
+	if name == "" {
+		return fmt.Errorf("context: usage: kayra-cli context set <name> --server <url> --token <token>")
+	}
+
+	f, err := clicontext.Load()
+	if err != nil {
+		return err
+	}
+	f.SetContext(name, clicontext.Context{
+		Server:    cmd.String("server"),
+		Token:     cmd.String("token"),
+		TokenType: "Bearer",
+		ApiDomain: cmd.String("api-domain"),
+	})
+	if err := f.Save(); err != nil {
+		return err
+	}
+
+	fmt.Printf("kayra-cli: saved context %q (now current)\n", name)
 	return nil
 }
 

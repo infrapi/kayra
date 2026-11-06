@@ -2,22 +2,43 @@ package catalog
 
 import (
 	"net/http"
-	"strings"
+	"regexp"
 
 	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
-// ApiNameFromURN maps a full API group URN ("compute.<domain>") to the
-// ApiRegistration name it designates ("compute"). ok is false when urn
-// is not a single label directly under this deployment's own api
-// domain (see SetAPIDomain) — no registration could ever match it.
-func ApiNameFromURN(urn string) (name string, ok bool) {
-	name, found := strings.CutSuffix(urn, "."+apiDomain)
-	if !found || name == "" || strings.Contains(name, ".") {
-		return "", false
+var (
+	dnsLabel     = `[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?`
+	longApiName  = regexp.MustCompile(`^` + dnsLabel + `(\.` + dnsLabel + `)+$`)
+	shortApiName = regexp.MustCompile(`^` + dnsLabel + `$`)
+)
+
+// IsLongApiName reports whether name is a valid api id: a lowercase DNS
+// name of at least two labels, e.g. "compute.example.com".
+func IsLongApiName(name string) bool { return longApiName.MatchString(name) }
+
+// IsShortApiName reports whether name is a valid ApiRegistration
+// ShortName: a single lowercase DNS label, e.g. "compute".
+func IsShortApiName(name string) bool { return shortApiName.MatchString(name) }
+
+// findByShortName returns the registration in platform/region whose
+// ShortName is shortName, if any — used to point a caller who passed a
+// short name where the long one is required at the right value.
+func (r *Repository) findByShortName(platform, region, shortName string) (ApiRegistration, bool, error) {
+	if shortName == "" {
+		return ApiRegistration{}, false, nil
 	}
-	return name, true
+	regs, err := r.ListClusterApiRegistrations()
+	if err != nil {
+		return ApiRegistration{}, false, err
+	}
+	for _, reg := range regs {
+		if reg.Platform == platform && reg.Region == region && reg.ShortName == shortName {
+			return reg, true, nil
+		}
+	}
+	return ApiRegistration{}, false, nil
 }
 
 // CheckSubscribedApi is the precondition every RBAC check against an
@@ -25,40 +46,37 @@ func ApiNameFromURN(urn string) (name string, ok bool) {
 // in this order, each failure returned as its own error:
 //
 //  1. namespace exists (404),
-//  2. apiURN names an ApiRegistration that exists in this deployment's
-//     own deploymentPlatform/deploymentRegion (404),
-//  3. namespace is subscribed to that registration (403),
+//  2. api (its long name, e.g. "compute.example.com") is an
+//     ApiRegistration in this deployment's own
+//     deploymentPlatform/deploymentRegion (404),
+//  3. namespace is subscribed to it (403),
 //  4. for any verb other than a read (see IsReadVerb), that subscription
 //     is active (403): until Reconciler has activated it (see
 //     Repository.ActivateSubscription) nothing has been provisioned for
 //     namespace yet, so it may only read, never create or change.
 //
 // Any store failure other than store.ErrNotFound is a 500.
-func (r *Repository) CheckSubscribedApi(namespace, apiURN, verb, deploymentPlatform, deploymentRegion string) *liberrors.Error {
+func (r *Repository) CheckSubscribedApi(namespace, api, verb, deploymentPlatform, deploymentRegion string) *liberrors.Error {
 	const origin = "catalog.CheckSubscribedApi"
 
 	if _, err := r.GetNamespace(namespace); err != nil {
 		return notFoundOrInternal(err, origin, "namespace %q not found", namespace)
 	}
 
-	apiName, ok := ApiNameFromURN(apiURN)
-	if !ok {
-		return liberrors.New(http.StatusNotFound, origin, "api %q not found: not an api group of domain %q", apiURN, apiDomain)
-	}
-	if _, err := r.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, apiName); err != nil {
-		return notFoundOrInternal(err, origin, "api %q not found in %s/%s", apiURN, deploymentPlatform, deploymentRegion)
+	if _, err := r.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, api); err != nil {
+		return notFoundOrInternal(err, origin, "api %q not found in %s/%s", api, deploymentPlatform, deploymentRegion)
 	}
 
-	sub, err := r.GetNamespaceSubscription(namespace, apiName)
+	sub, err := r.GetNamespaceSubscription(namespace, api)
 	if err != nil {
 		if err == store.ErrNotFound {
-			return liberrors.New(http.StatusForbidden, origin, "namespace %q is not subscribed to api %q", namespace, apiURN)
+			return liberrors.New(http.StatusForbidden, origin, "namespace %q is not subscribed to api %q", namespace, api)
 		}
-		return liberrors.Wrap(err, http.StatusInternalServerError, origin, "read subscription of namespace %q to api %q", namespace, apiURN)
+		return liberrors.Wrap(err, http.StatusInternalServerError, origin, "read subscription of namespace %q to api %q", namespace, api)
 	}
 
 	if !sub.Active && !IsReadVerb(verb) {
-		return liberrors.New(http.StatusForbidden, origin, "subscription of namespace %q to api %q is not active (state %q): only read verbs (get, list) are allowed until it is reconciled", namespace, apiURN, sub.State)
+		return liberrors.New(http.StatusForbidden, origin, "subscription of namespace %q to api %q is not active (state %q): only read verbs (get, list) are allowed until it is reconciled", namespace, api, sub.State)
 	}
 	return nil
 }

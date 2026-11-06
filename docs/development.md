@@ -43,6 +43,14 @@ Pages live in `docs/` and the navigation is declared in `mkdocs.yml`. A new
 page must be added to `nav:`, otherwise the CI build — which runs `mkdocs
 build --strict` — fails.
 
+`README.md` is the only copy of the home page text: `docs/index.md` is a
+one-line `--8<-- "README.md"` snippet include, exactly like infrapi/lib.
+Edit the README, not the include. Since the same text renders both on
+GitHub and on this site, every link in the README is absolute: site
+pages as `https://infrapi.github.io/kayra/<page>/`, repository files as
+`https://github.com/infrapi/kayra/blob/main/<path>`. A relative link
+would break in one of the two places.
+
 `.github/workflows/docs.yml` builds the site on every push and PR, and on
 `main` also publishes it through GitHub Pages (Settings > Pages > Source =
 "GitHub Actions"). There is no manual deploy step.

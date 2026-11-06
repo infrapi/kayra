@@ -211,7 +211,7 @@ reconciler:
   mode:
     api:
       - method: post
-        endpoint: "https://{{ .Subscription.Api }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync"
+        endpoint: "https://{{ .Subscription.ShortName }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync"
         data:
           sync_id: "{{ .Subscription.ExpectedSyncID }}"
         headers:
@@ -222,7 +222,7 @@ reconciler:
         timeout: "3600s"
 
       - method: get
-        endpoint: "https://{{ .Subscription.Api }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync/{{ .Subscription.ExpectedSyncID }}"
+        endpoint: "https://{{ .Subscription.ShortName }}.local.services/api/v1/namespaces/{{ .Subscription.Namespace }}/sync/{{ .Subscription.ExpectedSyncID }}"
         headers:
           Content-Type: "application/json"
           Authorization:

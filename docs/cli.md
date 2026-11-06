@@ -26,7 +26,7 @@ Runs the HTTP API — every route [apiserver.Build](packages/apiserver.md)
 wires up.
 
 ```bash
-./kayra --config kayra.yaml serve
+kayra --config kayra.yaml serve
 ```
 
 Loads the Kayra YAML config, resolves its `app:` block into
@@ -42,7 +42,7 @@ namespace/subscription/api registration reconcile controller — as its
 deliberately not a goroutine inside `serve`.
 
 ```bash
-./kayra --config kayra.yaml reconciler
+kayra --config kayra.yaml reconciler
 ```
 
 Stops cleanly on `SIGINT`/`SIGTERM`: the signal cancels the context
@@ -88,11 +88,11 @@ Clears cached entries directly in the configured store — see
 what gets cached and why.
 
 ```bash
-./kayra --config kayra.yaml cache clean                              # everything
-./kayra --config kayra.yaml cache clean --scope auth                 # all JWKS caches
-./kayra --config kayra.yaml cache clean --scope auth --provider okta # one provider's JWKS
-./kayra --config kayra.yaml cache clean --scope users --authz idm           # one backend's users
-./kayra --config kayra.yaml cache clean --scope users --authz idm --user jdoe # one user
+kayra --config kayra.yaml cache clean                              # everything
+kayra --config kayra.yaml cache clean --scope auth                 # all JWKS caches
+kayra --config kayra.yaml cache clean --scope auth --provider okta # one provider's JWKS
+kayra --config kayra.yaml cache clean --scope users --authz idm           # one backend's users
+kayra --config kayra.yaml cache clean --scope users --authz idm --user jdoe # one user
 ```
 
 | Flag | Applies to | Meaning |
@@ -110,7 +110,7 @@ a first bearer token into a brand new deployment: before any user,
 group or RBAC object exists, there's nothing to log in *against*.
 
 ```bash
-./kayra --config kayra.yaml token mint \
+kayra --config kayra.yaml token mint \
   --provider self --group sandbox-core-sysadmin --ttl 1h
 ```
 
@@ -144,7 +144,7 @@ A browser-based OAuth2 flow against a Kayra server you only know the URL
 of — the one way to authenticate with this binary.
 
 ```bash
-./kayra-cli login --server https://kayra.example.com
+kayra-cli login --server https://kayra.example.com
 # oauth2login: opening browser to log in:
 #
 #   https://kayra.example.com/oauth2/v1/authorize?...
@@ -192,25 +192,29 @@ earlier login never requires authenticating again. Override the path with
 `$KAYRA_CONTEXT_FILE`.
 
 ```bash
-./kayra-cli login --server https://kayra.internal
-./kayra-cli login --server https://kayra-staging.internal --context-name staging
+kayra-cli login --server https://kayra.internal
+kayra-cli login --server https://kayra-staging.internal --context-name staging
 
-./kayra-cli context list
+kayra-cli context list
 # CURRENT  NAME                       SERVER                            EXPIRY
 #          kayra.internal           https://kayra.internal          2026-11-03T16:04:05+01:00
 # *        staging                    https://kayra-staging.internal  2026-11-03T17:04:05+01:00
 
-./kayra-cli context use kayra.internal  # switch back without logging in again
-./kayra-cli context current               # show the active context's details
-./kayra-cli context token                 # print the active context's bearer token
-./kayra-cli context token staging         # print a specific context's token
-./kayra-cli context delete staging        # drop a saved login
+# save an existing token (e.g. a `kayra token mint` bootstrap token) without logging in
+kayra-cli context set bootstrap --server http://localhost:8080 --token "$TOKEN"
+
+kayra-cli context use kayra.internal  # switch back without logging in again
+kayra-cli context current               # show the active context's details
+kayra-cli context token                 # print the active context's bearer token
+kayra-cli context token staging         # print a specific context's token
+kayra-cli context delete staging        # drop a saved login
 ```
 
 | Subcommand | Args | Meaning |
 |------------|------|---------|
 | `list` | — | list saved contexts, marking the current one with `*` |
 | `current` | — | print the current context's name, server, expiry |
+| `set` | `<name>` | save `--token` for `--server` (optionally `--api-domain`) as a context and make it current — no login flow |
 | `use` | `<name>` | switch the current context |
 | `delete` | `<name>` | remove a saved context |
 | `token` | `[name]` | print a context's bearer token (defaults to current) |
@@ -229,10 +233,10 @@ granted `<verb>` on `<resource>` for `--api` — the decision is always
 the server's, never asserted locally.
 
 ```bash
-./kayra-cli auth can-i get pods --api compute.example.com --namespace core
+kayra-cli auth can-i get pods --api compute.example.com --namespace core
 # yes
 
-./kayra-cli auth can-i delete pods --api compute.example.com --namespace core
+kayra-cli auth can-i delete pods --api compute.example.com --namespace core
 # no
 # kayra-cli: your role does not grant this action
 ```
@@ -280,7 +284,7 @@ decision, or any other RBAC check against this token, is actually made
 against.
 
 ```bash
-./kayra-cli auth whoami
+kayra-cli auth whoami
 # authorization:  idm
 # email:           jdoe@example.com
 # groups:          sandbox-core-sysadmin, sandbox-thetenant-admins
@@ -315,21 +319,58 @@ per-namespace groups/roles/rolebindings) and cluster-scoped
 (`catalog`'s `apiregistrations`, `authorization`'s
 `clustergroups`/`clusterroles`/`clusterrolebindings`):
 
-```bash
-# namespace-scoped: -n selects .../namespaces/<ns>/<resource>
-./kayra-cli get subscription -n thetenant subscriptions
-# []
-./kayra-cli create subscription -n thetenant subscriptions -d '{"api_name": "vault"}'
-# {"api_name": "vault", "active": false, "state": "init", ...}
-./kayra-cli get subscription -n thetenant subscriptions vault
-./kayra-cli update subscription -n thetenant subscriptions vault/sync -d '{}'
-./kayra-cli delete subscription -n thetenant subscriptions vault
+Each example's `curl` tab is the exact request the verb sends, against
+`http://localhost:8080` with `app.api_domain` left at `example.com` —
+take the token from the current context with
+`TOKEN=$(kayra-cli context token)`.
 
-# cluster-scoped: no -n, addresses .../<resource> directly
-./kayra-cli create catalog apiregistrations -d '{"name": "vault", "owner": "sre"}'
-./kayra-cli get catalog apiregistrations
-./kayra-cli create authorization clustergroups -d '{"name": "g", "metadata": {...}, "groups": [...]}'
-```
+=== "kayra-cli"
+
+    ```bash
+    # namespace-scoped: -n selects .../namespaces/<ns>/<resource>
+    kayra-cli get subscription -n thetenant subscriptions
+    # []
+    kayra-cli create subscription -n thetenant subscriptions -d '{"api": "vault.example.com"}'
+    # {"api": "vault.example.com", "active": false, "state": "init", ...}
+    kayra-cli get subscription -n thetenant subscriptions vault.example.com
+    kayra-cli update subscription -n thetenant subscriptions vault.example.com/sync -d '{}'
+    kayra-cli delete subscription -n thetenant subscriptions vault.example.com
+
+    # cluster-scoped: no -n, addresses .../<resource> directly
+    kayra-cli create catalog apiregistrations -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
+    kayra-cli get catalog apiregistrations
+    kayra-cli create authorization clustergroups -d '{"name": "g", "metadata": {...}, "groups": [...]}'
+    ```
+
+=== "curl"
+
+    ```bash
+    # namespace-scoped: -n selects .../namespaces/<ns>/<resource>
+    curl -s http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions \
+      -H "Authorization: Bearer $TOKEN"
+    # []
+    curl -s -X POST http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions \
+      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      -d '{"api": "vault.example.com"}'
+    # {"api": "vault.example.com", "active": false, "state": "init", ...}
+    curl -s http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
+      -H "Authorization: Bearer $TOKEN"
+    curl -s -X PUT http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com/sync \
+      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      -d '{}'
+    curl -s -X DELETE http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
+      -H "Authorization: Bearer $TOKEN"
+
+    # cluster-scoped: no -n, addresses .../<resource> directly
+    curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
+      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
+    curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
+      -H "Authorization: Bearer $TOKEN"
+    curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clustergroups \
+      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      -d '{"name": "g", "metadata": {...}, "groups": [...]}'
+    ```
 
 `get` maps to `GET` either way — no trailing `<name>` lists the whole
 collection (`.../<resource>`), a `<name>` fetches that one item

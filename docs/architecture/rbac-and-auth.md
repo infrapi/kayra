@@ -71,7 +71,7 @@ live lookup, or (for a claims-backed `authorizations.<name>`) straight out
 of the caller's own already-verified token/userinfo.
 
 ```bash
-./kayra-cli login --server https://kayra.example.com
+kayra-cli login --server https://kayra.example.com
 ```
 
 ## The RBAC model
@@ -167,7 +167,7 @@ failure:
 | Condition | Status | Detail |
 |---|---|---|
 | the namespace doesn't exist | `404` | `namespace "core" not found` |
-| `api` isn't `<name>.<app.api_domain>`, or no `ApiRegistration` named `<name>` exists in this deployment's platform/region | `404` | `api "compute.example.com" not found ...` |
+| no `ApiRegistration` whose long name (its id) is `api` exists in this deployment's platform/region — a short name never matches | `404` | `api "compute.example.com" not found in sandbox/eu-west-1` |
 | the namespace has no subscription to that registration | `403` | `namespace "core" is not subscribed to api "compute.example.com"` |
 | the subscription is not active yet (never reconciled) and `verb` is anything but `get`/`list` | `403` | `subscription of namespace "core" to api "compute.example.com" is not active (state "init"): only read verbs (get, list) are allowed until it is reconciled` |
 
