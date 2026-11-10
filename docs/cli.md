@@ -268,7 +268,7 @@ kayra-cli auth can-i get pods --api compute.example.com --namespace core
 
 kayra-cli auth can-i delete pods --api compute.example.com --namespace core
 # no
-# kayra-cli: your role does not grant this action
+# kayra-cli: your roles in namespace "core" grant api "compute.example.com", but not "delete" on "pods"
 ```
 
 Prints `yes`/`no` to stdout and exits `0`/`1` accordingly — scriptable

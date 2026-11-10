@@ -124,8 +124,8 @@ func TestSubscriptionResponseComputesExpectedSyncID(t *testing.T) {
 	// not yet activated: current_sync_id is empty, but expected_sync_id
 	// already reflects the api registration — the two visibly differ.
 	resp := get()
-	if resp.CurrentSyncID != "" || resp.ExpectedSyncID != "api-sync-1" {
-		t.Fatalf("pre-activation = %+v, want current=\"\" expected=api-sync-1", resp)
+	if resp.CurrentSyncID != "" || resp.ExpectedSyncID != "api-sync-1" || resp.Synced {
+		t.Fatalf("pre-activation = %+v, want current=\"\" expected=api-sync-1 synced=false", resp)
 	}
 
 	// activated and reconciled to the api registration's current SyncID: the two match.
@@ -133,8 +133,8 @@ func TestSubscriptionResponseComputesExpectedSyncID(t *testing.T) {
 		t.Fatalf("ActivateSubscription: %v", err)
 	}
 	resp = get()
-	if resp.CurrentSyncID != "api-sync-1" || resp.ExpectedSyncID != "api-sync-1" {
-		t.Fatalf("post-activation = %+v, want both api-sync-1", resp)
+	if resp.CurrentSyncID != "api-sync-1" || resp.ExpectedSyncID != "api-sync-1" || !resp.Synced {
+		t.Fatalf("post-activation = %+v, want both api-sync-1 and synced=true", resp)
 	}
 
 	// the api registration's SyncID moves on: expected_sync_id follows immediately
@@ -146,8 +146,8 @@ func TestSubscriptionResponseComputesExpectedSyncID(t *testing.T) {
 		t.Fatalf("PutClusterApiRegistration (bump sync_id): %v", err)
 	}
 	resp = get()
-	if resp.CurrentSyncID != "api-sync-1" || resp.ExpectedSyncID != "api-sync-2" {
-		t.Fatalf("post-bump = %+v, want current=api-sync-1 expected=api-sync-2 (reconcile pending)", resp)
+	if resp.CurrentSyncID != "api-sync-1" || resp.ExpectedSyncID != "api-sync-2" || resp.Synced {
+		t.Fatalf("post-bump = %+v, want current=api-sync-1 expected=api-sync-2 synced=false (reconcile pending)", resp)
 	}
 }
 

@@ -211,16 +211,37 @@ func (r *Repository) ActivateSubscription(namespace, apiName, syncID string) err
 	return r.PutNamespaceSubscription(namespace, &sub)
 }
 
-// SetSubscriptionSyncID updates namespace's subscription to apiName's
-// CurrentSyncID to syncID, leaving Active/State untouched — once a
+// SetSubscriptionSyncID records a successful re-sync of an already
+// active subscription: CurrentSyncID moves to syncID and State back to
+// success (it may have been error), Active is never touched — once a
 // subscription is active, reconciling it again (see Reconciler) only
-// ever moves CurrentSyncID forward, never touches Active again.
+// ever moves CurrentSyncID forward.
 func (r *Repository) SetSubscriptionSyncID(namespace, apiName, syncID string) error {
 	sub, err := r.GetNamespaceSubscription(namespace, apiName)
 	if err != nil {
 		return err
 	}
 	sub.CurrentSyncID = syncID
+	sub.State = SubscriptionStateSuccess
+	return r.PutNamespaceSubscription(namespace, &sub)
+}
+
+// MarkSubscriptionError records a failed sync: State becomes error,
+// Active and CurrentSyncID stay as they were (an active subscription
+// keeps working; an inactive one stays blocked). It writes only when
+// State isn't already error: every write to a subscription re-triggers
+// the Reconciler, so writing unconditionally would turn a sync that
+// keeps failing into a hot loop. As it is, a failure gets exactly one
+// immediate retry, then waits for the next real change.
+func (r *Repository) MarkSubscriptionError(namespace, apiName string) error {
+	sub, err := r.GetNamespaceSubscription(namespace, apiName)
+	if err != nil {
+		return err
+	}
+	if sub.State == SubscriptionStateError {
+		return nil
+	}
+	sub.State = SubscriptionStateError
 	return r.PutNamespaceSubscription(namespace, &sub)
 }
 

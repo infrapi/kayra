@@ -481,6 +481,9 @@ func (r *Reconciler) ensureReconciled(ctx context.Context, reg ApiRegistration, 
 
 		if err := r.reconcile(reg, namespace, sub, lockID); err != nil {
 			log.Printf("catalog: reconciler: lock_id=%d sync_id=%q reconcile %s/%s: %v", lockID, reg.SyncID, namespace, reg.Name, err)
+			if merr := r.repo.MarkSubscriptionError(namespace, reg.Name); merr != nil {
+				log.Printf("catalog: reconciler: lock_id=%d sync_id=%q mark subscription %s/%s error: %v", lockID, reg.SyncID, namespace, reg.Name, merr)
+			}
 			return
 		}
 

@@ -1,6 +1,9 @@
 package rbac
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/infrapi/kayra/internal/store"
 )
 
@@ -172,25 +175,46 @@ func (r *Repository) clusterGroupsMatching(userID string, callerGroups []string)
 //
 // reason explains a false result; it is empty when allowed is true.
 func (r *Repository) Authorize(userID string, callerGroups []string, namespace, api, resource, verb string) (allowed bool, reason string, err error) {
-	memberGroups, err := r.namespaceGroupsMatching(namespace, userID, callerGroups)
+	memberGroups, reason, err := r.NamespaceMembership(namespace, userID, callerGroups)
+	if err != nil || reason != "" {
+		return false, reason, err
+	}
+	return r.AuthorizeMember(namespace, memberGroups, api, resource, verb)
+}
+
+// NamespaceMembership is step 2 of every /check decision (see
+// RegisterAuthorizeRoute): the names of namespace's own Groups that
+// count the caller as a member (see groupMatchesCaller). reason is set,
+// and memberGroups empty, when there are none.
+func (r *Repository) NamespaceMembership(namespace, userID string, callerGroups []string) (memberGroups []string, reason string, err error) {
+	memberGroups, err = r.namespaceGroupsMatching(namespace, userID, callerGroups)
 	if err != nil {
-		return false, "", err
+		return nil, "", err
 	}
 	if len(memberGroups) == 0 {
-		return false, "neither your user id nor any of your groups match any group's members in this namespace", nil
+		return nil, fmt.Sprintf("you are not a member of namespace %q: neither your user id nor any of your groups is listed in any of its groups", namespace), nil
 	}
+	return memberGroups, "", nil
+}
 
+// AuthorizeMember is steps 6–7 of every /check decision, for a caller
+// NamespaceMembership already resolved to memberGroups: a role bound to
+// one of them must grant api at all (6), then verb on resource (7).
+// Telling the two apart gives the caller the reason that actually
+// applies: "you have no access to this api" and "you have access to
+// this api, just not to this" call for different fixes.
+func (r *Repository) AuthorizeMember(namespace string, memberGroups []string, api, resource, verb string) (allowed bool, reason string, err error) {
 	bindings, err := r.ListNamespaceRoleBindings(namespace)
 	if err != nil {
 		return false, "", err
 	}
 
-	var matchedGroup bool
+	var matchedBinding, apiGranted bool
 	for _, rb := range bindings {
 		if !groupsIntersect(rb.Groups, memberGroups) {
 			continue
 		}
-		matchedGroup = true
+		matchedBinding = true
 
 		role, err := r.GetNamespaceRole(namespace, rb.Role)
 		if err != nil {
@@ -203,12 +227,30 @@ func (r *Repository) Authorize(userID string, callerGroups []string, namespace, 
 		if Allows(role.Rules, api, resource, verb) {
 			return true, "", nil
 		}
+		if grantsApi(role.Rules, api) {
+			apiGranted = true
+		}
 	}
 
-	if !matchedGroup {
-		return false, "none of this namespace's rolebindings match your groups", nil
+	switch {
+	case !matchedBinding:
+		return false, fmt.Sprintf("none of namespace %q's rolebindings bind your groups (%s), so no role grants you api %q", namespace, strings.Join(memberGroups, ", "), api), nil
+	case !apiGranted:
+		return false, fmt.Sprintf("no role bound to your groups in namespace %q grants api %q", namespace, api), nil
+	default:
+		return false, fmt.Sprintf("your roles in namespace %q grant api %q, but not %q on %q", namespace, api, verb, resource), nil
 	}
-	return false, "your role does not grant this action", nil
+}
+
+// grantsApi reports whether any rule covers api at all, whatever its
+// resources and verbs.
+func grantsApi(rules []Rule, api string) bool {
+	for _, r := range rules {
+		if MatchesAny(r.Apis, api) {
+			return true
+		}
+	}
+	return false
 }
 
 // namespaceGroupsMatching is clusterGroupsMatching's namespace-scoped

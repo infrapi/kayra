@@ -157,11 +157,15 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	// goroutine mixed into the API server — easier to debug and scale
 	// independently, and a crash in one never takes down the other.
 	catalogRepo := catalog.NewRepository(s, keys)
-	// Every check first requires the namespace to exist, the api to be
-	// registered here, the namespace to be subscribed to it, and that
-	// subscription to be active for anything but a read.
-	rbac.RegisterAuthorizeRoute(engine, rbacRepo, authenticator.Middleware(), func(namespace, api, verb string) *liberrors.Error {
-		return catalogRepo.CheckSubscribedApi(namespace, api, verb, appCfg.AppPlatform, appCfg.AppRegion)
+	// /check's catalog-owned steps (see rbac.RegisterAuthorizeRoute for
+	// the full order): the namespace exists, then — once the caller is
+	// known to be a member — the api is registered here, the namespace is
+	// subscribed to it, and that subscription is active.
+	rbac.RegisterAuthorizeRoute(engine, rbacRepo, authenticator.Middleware(), rbac.Prechecks{
+		Namespace: catalogRepo.CheckNamespace,
+		Api: func(namespace, api string) *liberrors.Error {
+			return catalogRepo.CheckApiSubscription(namespace, api, appCfg.AppPlatform, appCfg.AppRegion)
+		},
 	})
 	catalog.RegisterApiRegistrationRoutes(engine, catalogRepo, sysadminGate, appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, authenticator.Middleware(), appCfg.AppPlatform, appCfg.AppRegion)

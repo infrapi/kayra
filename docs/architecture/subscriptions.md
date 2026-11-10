@@ -7,8 +7,8 @@ code lives in `internal/catalog`, backed by [store](../packages/store.md).
 ```go
 type Subscription struct {
 	ApiName       string
-	Active        bool   // computed
-	State         string // init | success | error | undef — computed
+	Active        bool   // computed — set once, by the initial sync
+	State         string // init | success | error — computed, see State below
 	CurrentSyncID string // computed — the subscription's own last-reconciled-to value
 }
 ```
@@ -35,9 +35,38 @@ missing when there's nothing to report, so a caller never has to treat
   "active": true,
   "state": "success",
   "current_sync_id": "2026-01-01T00Z",
-  "expected_sync_id": "2026-02-01T00Z"
+  "expected_sync_id": "2026-02-01T00Z",
+  "synced": false
 }
 ```
+
+`synced` is `current_sync_id == expected_sync_id` on an active subscription,
+the same flag `GET .../apiregistrations/:name/status` reports per subscriber.
+
+## State
+
+`active` and `state` answer two different questions:
+
+- **`active`: can the namespace use the api?** It's `false` until the initial
+  sync succeeds, and while it's `false` every request to the api is refused
+  (see [rbac-and-auth](rbac-and-auth.md#authorizing-other-apps-requests),
+  step 5). It's set once and never cleared: a later sync, failed or not,
+  never makes the api unusable again, because a `v1` api stays backward
+  compatible.
+- **`state`: how did the last sync go?** Only the Reconciler sets it; the
+  API never accepts it from a client.
+
+| `state` | Meaning |
+|---|---|
+| `init` | subscribed, initial sync not done yet (`active: false`) |
+| `success` | the last sync succeeded |
+| `error` | the last sync failed. `active` is unchanged: an active subscription keeps working, an inactive one stays blocked |
+
+Being out of date isn't a state of its own: it's `synced: false`, where
+`current_sync_id` is behind `expected_sync_id` until the next successful sync.
+A failed sync is recorded once. The Reconciler retries it right away, and
+after that only on the next change to the subscription or its registration,
+so a sync that keeps failing never loops.
 
 ## Managing one
 

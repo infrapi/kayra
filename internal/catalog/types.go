@@ -123,10 +123,20 @@ type ApiRegistration struct {
 type Subscription struct {
 	ApiName string `json:"api" yaml:"api"`
 	Active  bool   `json:"active" yaml:"active"`
-	// State is one of SubscriptionStateInit/Success/Error/Undef. Stored
-	// as a string, unlike the legacy model's raw persisted int ordinal:
-	// JSON carries no ordinal-stability requirement, so there is no
-	// reason to keep one.
+	// Active is set once, by the initial sync (see
+	// Repository.ActivateSubscription), and never cleared: until then
+	// nothing is provisioned for the namespace, so every verb on the api
+	// is refused (see CheckApiSubscription). A later SyncID change on the
+	// registration never makes it inactive again — under a v1 contract
+	// the api stays backward compatible, so an out-of-date subscription
+	// (CurrentSyncID behind the registration's SyncID) keeps working.
+	//
+	// State is the outcome of the last sync: SubscriptionStateInit until
+	// the first one, then SubscriptionStateSuccess or
+	// SubscriptionStateError, set by the Reconciler only. Stored as a
+	// string, unlike the legacy model's raw persisted int ordinal: JSON
+	// carries no ordinal-stability requirement, so there is no reason to
+	// keep one.
 	State string `json:"state" yaml:"state"`
 	// CurrentSyncID tracks which of the registration's own SyncID
 	// values this subscription was last reconciled to: empty until
@@ -150,17 +160,21 @@ type Subscription struct {
 }
 
 const (
-	SubscriptionStateInit    = "init"
+	// SubscriptionStateInit: subscribed, initial sync not done yet
+	// (Active is false).
+	SubscriptionStateInit = "init"
+	// SubscriptionStateSuccess: the last sync succeeded.
 	SubscriptionStateSuccess = "success"
-	SubscriptionStateError   = "error"
-	SubscriptionStateUndef   = "undef"
+	// SubscriptionStateError: the last sync failed. Active is unchanged,
+	// so an already-active subscription keeps working.
+	SubscriptionStateError = "error"
 )
 
-// ValidSubscriptionState reports whether state is one of the four
+// ValidSubscriptionState reports whether state is one of the three
 // allowed values.
 func ValidSubscriptionState(state string) bool {
 	switch state {
-	case SubscriptionStateInit, SubscriptionStateSuccess, SubscriptionStateError, SubscriptionStateUndef:
+	case SubscriptionStateInit, SubscriptionStateSuccess, SubscriptionStateError:
 		return true
 	default:
 		return false

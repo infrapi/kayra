@@ -160,7 +160,7 @@ func TestUserinfoSupportsGetAndPost(t *testing.T) {
 // TestAuthorizeCheckRoute confirms the RBAC decision endpoint lives at
 // /apis/authorization.example.com/v1/check and that, before any RBAC
 // rule is consulted, it refuses a namespace that doesn't exist (see
-// catalog.Repository.CheckSubscribedApi, wired in Build).
+// catalog.Repository.CheckNamespace, wired in Build).
 func TestAuthorizeCheckRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

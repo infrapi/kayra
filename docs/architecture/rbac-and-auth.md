@@ -166,22 +166,31 @@ gated by `Authenticator` like every other namespace-scoped route:
 {"allowed": true}
 ```
 
-Before any RBAC rule is evaluated, every check validates its target
-(`catalog.Repository.CheckSubscribedApi`), in
-this order, and returns an error instead of a decision on the first
-failure:
+Every check runs these steps in this order, and the first one that fails
+is the answer, so the reason a caller gets is the one that actually blocks
+them. Membership comes before anything about the api, so a non-member
+learns nothing about what a namespace is subscribed to. Steps 1 and 3–5
+(`catalog.Repository.CheckNamespace` / `CheckApiSubscription`) return a
+problem-detail error; steps 2, 6 and 7 (`rbac.Repository.NamespaceMembership`
+/ `AuthorizeMember`) return `200` with `allowed: false` and the reason.
 
-| Condition | Status | Detail |
-|---|---|---|
-| the namespace doesn't exist | `404` | `namespace "core" not found` |
-| no `ApiRegistration` whose long name (its id) is `api` exists in this deployment's platform/region — a short name never matches | `404` | `api "compute.example.com" not found in sandbox/eu-west-1` |
-| the namespace has no subscription to that registration | `403` | `namespace "core" is not subscribed to api "compute.example.com"` |
-| the subscription is not active yet (never reconciled) and `verb` is anything but `get`/`list` | `403` | `subscription of namespace "core" to api "compute.example.com" is not active (state "init"): only read verbs (get, list) are allowed until it is reconciled` |
+| # | Condition that fails | Answer | Detail |
+|---|---|---|---|
+| 1 | the namespace doesn't exist | `404` | `namespace "core" not found` |
+| 2 | neither the caller's user id nor any of their groups is listed in any of the namespace's own `Group`s | `allowed: false` | `you are not a member of namespace "core": neither your user id nor any of your groups is listed in any of its groups` |
+| 3 | no `ApiRegistration` whose long name (its id) is `api` exists in this deployment's platform/region; a short name never matches, and the solution names the long one | `404` | `api "telemetry.giservices.io" is not registered in sandbox/eu-west-1` |
+| 4 | the namespace has no subscription to that registration | `403` | `namespace "core" is not subscribed to api "telemetry.giservices.io"` (solution: subscribe first) |
+| 5 | the subscription is not active: its initial sync hasn't completed, so **every verb is refused**, reads included | `403` | `subscription of namespace "core" to api "telemetry.giservices.io" is not active yet (state "init"): its initial sync has not completed, so the api is not ready` |
+| 6 | no role bound to the caller's groups grants `api` at all | `allowed: false` | `no role bound to your groups in namespace "core" grants api "telemetry.giservices.io"` |
+| 7 | a role grants `api`, but not `verb` on `resource` | `allowed: false` | `your roles in namespace "core" grant api "telemetry.giservices.io", but not "list" on "dashboards"` |
 
-A subscription becomes active only once the Reconciler has provisioned
-it; until then the namespace is read-only on that api — every other
-verb (`create`, `update`, `patch`, `delete`, or any unknown one) is
-refused.
+A subscription becomes active once, when its initial sync succeeds, and
+never becomes inactive again. When the registration later gets a new
+`sync_id`, an active subscription keeps working for every verb even while
+its `current_sync_id` is behind (`synced: false`): a `v1` api stays
+backward compatible, so the pending re-sync is for the api owner to plan,
+not a reason to refuse callers. See
+[subscriptions](subscriptions.md#state).
 
 `Namespace`/`Api` come straight from the URL (`Api` is the calling
 app's own full API group URN, e.g. "compute.example.com", matching how

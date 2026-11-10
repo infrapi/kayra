@@ -452,6 +452,16 @@ func TestReconcilerReconcileFailureLeavesSubscriptionUnsynced(t *testing.T) {
 	if got.Active || got.CurrentSyncID != "" {
 		t.Fatalf("sub = %+v, want still inactive with empty CurrentSyncID (reconcile never succeeds)", got)
 	}
+	if got.State != SubscriptionStateError {
+		t.Fatalf("sub.State = %q, want %q after a failed sync", got.State, SubscriptionStateError)
+	}
+	// Marking the failure must not keep re-triggering the Reconciler:
+	// once State is error, a further failure writes nothing.
+	settled := got.UpdatedAt
+	time.Sleep(300 * time.Millisecond)
+	if again, err := repo.GetNamespaceSubscription("myns", "vault"); err != nil || !again.UpdatedAt.Equal(settled) {
+		t.Fatalf("subscription kept being rewritten after the failure (updated_at %v -> %v, err %v): reconcile/mark-error loop", settled, again.UpdatedAt, err)
+	}
 
 	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
@@ -468,8 +478,8 @@ func TestReconcilerReconcileFailureLeavesSubscriptionUnsynced(t *testing.T) {
 
 	waitFor(t, func() bool {
 		got, err := repo.GetNamespaceSubscription("myns", "vault")
-		return err == nil && got.Active && got.CurrentSyncID == "sync-1"
-	}, "subscription myns/vault to activate once the reg's mode is fixed")
+		return err == nil && got.Active && got.CurrentSyncID == "sync-1" && got.State == SubscriptionStateSuccess
+	}, "subscription myns/vault to activate (state success) once the reg's mode is fixed")
 }
 
 func TestNewReconcilerDefaultsMaxConcurrentReconciles(t *testing.T) {

@@ -37,6 +37,11 @@ type subscriptionResponse struct {
 	State          string `json:"state"`
 	CurrentSyncID  string `json:"current_sync_id"`
 	ExpectedSyncID string `json:"expected_sync_id"`
+	// Synced is CurrentSyncID == ExpectedSyncID for an active
+	// subscription — false means the api owner has a sync to run. It
+	// never affects access: an active subscription works either way.
+	// Same name and meaning as GET .../apiregistrations/:name/status.
+	Synced bool `json:"synced"`
 	store.Timestamps
 }
 
@@ -56,6 +61,7 @@ func buildSubscriptionResponse(repo *Repository, sub Subscription, deploymentPla
 	if reg, err := repo.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, sub.ApiName); err == nil {
 		resp.ExpectedSyncID = reg.SyncID
 	}
+	resp.Synced = sub.Active && resp.CurrentSyncID == resp.ExpectedSyncID
 	return resp
 }
 
@@ -69,7 +75,7 @@ func validateSubscription(repo *Repository, sub Subscription, deploymentPlatform
 		return liberrors.New(http.StatusBadRequest, "catalog.Subscription", "api is required")
 	}
 	if !ValidSubscriptionState(sub.State) {
-		return liberrors.New(http.StatusBadRequest, "catalog.Subscription", "state %q is not one of init, success, error, undef", sub.State)
+		return liberrors.New(http.StatusBadRequest, "catalog.Subscription", "state %q is not one of init, success, error", sub.State)
 	}
 	if !IsLongApiName(sub.ApiName) {
 		msg := "api %q must be the api's long name, e.g. \"compute.example.com\""

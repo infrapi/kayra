@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -20,30 +21,52 @@ func postCheck(engine *gin.Engine) *httptest.ResponseRecorder {
 	return w
 }
 
-// TestAuthorizeRoutePrecheck confirms a precheck failure is returned
-// as-is, before any RBAC rule is evaluated, and that a passing precheck
-// falls through to the ordinary allowed/reason decision.
-func TestAuthorizeRoutePrecheck(t *testing.T) {
+// TestAuthorizeRouteOrder confirms the handler's own sequencing: the
+// namespace precheck runs first, membership before any api precheck (a
+// non-member never reaches it, so learns nothing about subscriptions),
+// and an api precheck failure is returned as-is before any role is
+// consulted.
+func TestAuthorizeRouteOrder(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	var gotNamespace, gotApi, gotVerb string
-	failing := gin.New()
-	RegisterAuthorizeRoute(failing, newTestRepo(t), fakeAuthGate("alice"), func(namespace, api, verb string) *liberrors.Error {
-		gotNamespace, gotApi, gotVerb = namespace, api, verb
-		return liberrors.New(http.StatusForbidden, "test", "namespace %q is not subscribed to api %q", namespace, api)
-	})
-	w := postCheck(failing)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("failing precheck: status %d, want 403, body %s", w.Code, w.Body.String())
+	var calls []string
+	prechecks := func(nsErr, apiErr *liberrors.Error) Prechecks {
+		return Prechecks{
+			Namespace: func(string) *liberrors.Error { calls = append(calls, "namespace"); return nsErr },
+			Api:       func(string, string) *liberrors.Error { calls = append(calls, "api"); return apiErr },
+		}
 	}
-	if gotNamespace != "core" || gotApi != "compute.example.com" || gotVerb != "list" {
-		t.Fatalf("precheck got (%q, %q, %q), want (core, compute.example.com, list)", gotNamespace, gotApi, gotVerb)
-	}
+	forbidden := liberrors.New(http.StatusForbidden, "test", "namespace \"core\" is not subscribed to api \"compute.example.com\"")
+	missing := liberrors.New(http.StatusNotFound, "test", "namespace \"core\" not found")
 
-	passing := gin.New()
-	RegisterAuthorizeRoute(passing, newTestRepo(t), fakeAuthGate("alice"), func(string, string, string) *liberrors.Error { return nil })
-	w = postCheck(passing)
-	if w.Code != http.StatusOK || !bytes.Contains(w.Body.Bytes(), []byte(`"allowed":false`)) {
-		t.Fatalf("passing precheck: status %d body %s, want 200 allowed:false", w.Code, w.Body.String())
+	cases := []struct {
+		desc      string
+		member    bool
+		nsErr     *liberrors.Error
+		apiErr    *liberrors.Error
+		wantCode  int
+		wantBody  string
+		wantCalls string
+	}{
+		{"namespace precheck fails first", true, missing, forbidden, http.StatusNotFound, "not found", "namespace"},
+		{"non-member stops before the api precheck", false, nil, forbidden, http.StatusOK, "not a member", "namespace"},
+		{"member reaches the api precheck", true, nil, forbidden, http.StatusForbidden, "not subscribed", "namespace,api"},
+		{"member, prechecks pass, role decides", true, nil, nil, http.StatusOK, `"allowed":true`, "namespace,api"},
+	}
+	for _, tc := range cases {
+		calls = nil
+		repo := newTestRepo(t)
+		if tc.member {
+			seedNamespaceRBAC(t, repo, "alice-group", "core", "compute.example.com", "vm", "list")
+		}
+		engine := gin.New()
+		RegisterAuthorizeRoute(engine, repo, fakeAuthGate("alice", "alice-group"), prechecks(tc.nsErr, tc.apiErr))
+		w := postCheck(engine)
+		if w.Code != tc.wantCode || !bytes.Contains(w.Body.Bytes(), []byte(tc.wantBody)) {
+			t.Errorf("%s: status %d body %s, want %d containing %s", tc.desc, w.Code, w.Body.String(), tc.wantCode, tc.wantBody)
+		}
+		if got := strings.Join(calls, ","); got != tc.wantCalls {
+			t.Errorf("%s: prechecks ran %q, want %q", tc.desc, got, tc.wantCalls)
+		}
 	}
 }

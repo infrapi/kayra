@@ -210,3 +210,44 @@ func TestNamespaceSubscriptionRoundTripListDelete(t *testing.T) {
 		t.Fatalf("GetNamespaceSubscription after delete = %v, want ErrNotFound", err)
 	}
 }
+
+// TestSubscriptionSyncStateTransitions covers the State values the
+// Reconciler records on an already-active subscription: a failed
+// re-sync marks error (once — a repeat failure writes nothing, see
+// MarkSubscriptionError) without touching Active or CurrentSyncID, and
+// the next successful re-sync moves State back to success.
+func TestSubscriptionSyncStateTransitions(t *testing.T) {
+	repo := newTestRepo(t)
+	if err := repo.PutNamespaceSubscription("myns", &Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.ActivateSubscription("myns", "vault", "v1"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.MarkSubscriptionError("myns", "vault"); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := repo.GetNamespaceSubscription("myns", "vault")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.State != SubscriptionStateError || !failed.Active || failed.CurrentSyncID != "v1" {
+		t.Fatalf("after failure: %+v, want state error, still active, current_sync_id v1", failed)
+	}
+
+	if err := repo.MarkSubscriptionError("myns", "vault"); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := repo.GetNamespaceSubscription("myns", "vault"); !again.UpdatedAt.Equal(failed.UpdatedAt) {
+		t.Fatalf("a repeat failure rewrote the subscription (updated_at %v -> %v)", failed.UpdatedAt, again.UpdatedAt)
+	}
+
+	if err := repo.SetSubscriptionSyncID("myns", "vault", "v2"); err != nil {
+		t.Fatal(err)
+	}
+	synced, _ := repo.GetNamespaceSubscription("myns", "vault")
+	if synced.State != SubscriptionStateSuccess || synced.CurrentSyncID != "v2" {
+		t.Fatalf("after re-sync: %+v, want state success, current_sync_id v2", synced)
+	}
+}

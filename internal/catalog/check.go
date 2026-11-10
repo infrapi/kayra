@@ -41,49 +41,62 @@ func (r *Repository) findByShortName(platform, region, shortName string) (ApiReg
 	return ApiRegistration{}, false, nil
 }
 
-// CheckSubscribedApi is the precondition every RBAC check against an
-// app's API must satisfy before its rules are even consulted, checked
-// in this order, each failure returned as its own error:
-//
-//  1. namespace exists (404),
-//  2. api (its long name, e.g. "compute.example.com") is an
-//     ApiRegistration in this deployment's own
-//     deploymentPlatform/deploymentRegion (404),
-//  3. namespace is subscribed to it (403),
-//  4. for any verb other than a read (see IsReadVerb), that subscription
-//     is active (403): until Reconciler has activated it (see
-//     Repository.ActivateSubscription) nothing has been provisioned for
-//     namespace yet, so it may only read, never create or change.
-//
-// Any store failure other than store.ErrNotFound is a 500.
-func (r *Repository) CheckSubscribedApi(namespace, api, verb, deploymentPlatform, deploymentRegion string) *liberrors.Error {
-	const origin = "catalog.CheckSubscribedApi"
-
+// CheckNamespace is step 1 of every /check decision (see
+// rbac.RegisterAuthorizeRoute for the full order): namespace exists
+// (404). Any store failure other than store.ErrNotFound is a 500.
+func (r *Repository) CheckNamespace(namespace string) *liberrors.Error {
+	const origin = "catalog.CheckNamespace"
 	if _, err := r.GetNamespace(namespace); err != nil {
 		return notFoundOrInternal(err, origin, "namespace %q not found", namespace)
 	}
+	return nil
+}
+
+// CheckApiSubscription is steps 3–5 of every /check decision, run only
+// once the caller is known to be a member of namespace (step 2), so a
+// non-member never learns what a namespace is subscribed to:
+//
+//  3. api (its long name, e.g. "compute.example.com") is an
+//     ApiRegistration in this deployment's own
+//     deploymentPlatform/deploymentRegion (404),
+//  4. namespace is subscribed to it (403),
+//  5. that subscription is active (403), whatever the verb: until the
+//     initial sync has run (see Repository.ActivateSubscription) nothing
+//     is provisioned for namespace, so the api is not ready to use at
+//     all. An active subscription stays usable for every verb even when
+//     it is behind its registration's SyncID — a v1 api stays backward
+//     compatible, so a pending re-sync is the api owner's to plan, never
+//     a reason to refuse callers.
+//
+// Any store failure other than store.ErrNotFound is a 500.
+func (r *Repository) CheckApiSubscription(namespace, api, deploymentPlatform, deploymentRegion string) *liberrors.Error {
+	const origin = "catalog.CheckApiSubscription"
 
 	if _, err := r.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, api); err != nil {
-		return notFoundOrInternal(err, origin, "api %q not found in %s/%s", api, deploymentPlatform, deploymentRegion)
+		lerr := notFoundOrInternal(err, origin, "api %q is not registered in %s/%s", api, deploymentPlatform, deploymentRegion)
+		if lerr.Code == http.StatusNotFound {
+			if reg, found, ferr := r.findByShortName(deploymentPlatform, deploymentRegion, api); ferr == nil && found {
+				lerr = lerr.WithSolution("%q is a short name: use the api's long name %q", api, reg.Name)
+			}
+		}
+		return lerr
 	}
 
 	sub, err := r.GetNamespaceSubscription(namespace, api)
 	if err != nil {
 		if err == store.ErrNotFound {
-			return liberrors.New(http.StatusForbidden, origin, "namespace %q is not subscribed to api %q", namespace, api)
+			return liberrors.New(http.StatusForbidden, origin, "namespace %q is not subscribed to api %q", namespace, api).
+				WithSolution("subscribe first: POST /apis/%s/v1/namespaces/%s/subscriptions with {\"api\": %q}", CatalogAPI, namespace, api)
 		}
 		return liberrors.Wrap(err, http.StatusInternalServerError, origin, "read subscription of namespace %q to api %q", namespace, api)
 	}
 
-	if !sub.Active && !IsReadVerb(verb) {
-		return liberrors.New(http.StatusForbidden, origin, "subscription of namespace %q to api %q is not active (state %q): only read verbs (get, list) are allowed until it is reconciled", namespace, api, sub.State)
+	if !sub.Active {
+		lerr := liberrors.New(http.StatusForbidden, origin, "subscription of namespace %q to api %q is not active yet (state %q): its initial sync has not completed, so the api is not ready", namespace, api, sub.State)
+		if sub.State == SubscriptionStateError {
+			return lerr.WithSolution("the initial sync failed: ask the owner of api %q to check it, then trigger a re-sync with PUT /apis/%s/v1/namespaces/%s/subscriptions/%s/sync", api, CatalogAPI, namespace, api)
+		}
+		return lerr.WithRetryable(true).WithSolution("wait for the initial sync to finish, then retry")
 	}
 	return nil
-}
-
-// IsReadVerb reports whether verb only reads ("get", "list" — what
-// infrapi/lib's pkg/auth derives from GET). Every other verb, including
-// any unknown one, counts as a write.
-func IsReadVerb(verb string) bool {
-	return verb == "get" || verb == "list"
 }
