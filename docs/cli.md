@@ -327,6 +327,36 @@ kayra-cli auth whoami
 |------|---------|---------|
 | `--context` | current context | saved context to use instead |
 
+### apis
+
+Like `oc api-resources`: every api group the server knows and the resources
+each one serves, from the server's `GET /apis` discovery. That covers
+Kayra's own groups and every registered app, whose resources come from the
+OpenAPI spec the reconciler fetched for it (see
+[API registrations](architecture/api-registrations.md#openapi-spec)).
+
+```bash
+kayra-cli apis
+# NAME                SHORTNAME  APIGROUP                   NAMESPACED  VERBS
+# namespaces          -          system.example.com         false       create,delete,get,list,update
+# apiregistrations    -          catalog.example.com        false       create,delete,get,list,update
+# subscriptions       -          catalog.example.com        true        create,delete,get,list,update
+# dashboards          telemetry  telemetry.giservices.io    true        create,delete,get,list
+# -                   -          vault.example.com          -           -
+kayra-cli apis --api-group telemetry --namespaced=true
+kayra-cli apis -o yaml
+```
+
+A registered api whose spec hasn't been fetched yet (no sync so far) is
+listed with `-`.
+
+| Flag | Meaning |
+|------|---------|
+| `--api-group` | only this api group: its long name, short name, or first label (`telemetry`, `catalog`) |
+| `--namespaced` | only namespaced (`true`) or cluster-scoped (`false`) resources |
+| `-o`, `--output` | `table` (default), `json` or `yaml` |
+| `--context` | saved context to use (defaults to the current one) |
+
 ## kayra-cli (get, create, update, patch, delete)
 
 kubectl-style top-level verbs — a thin, generic REST client against

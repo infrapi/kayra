@@ -199,6 +199,45 @@ spec field: only this endpoint ever sets or clears it, so an unrelated
 `PUT .../apiregistrations/:name` mid-rollout (changing `owner`, say)
 can't silently finish or restart one.
 
+## OpenAPI spec
+
+Kayra knows nothing about the app behind a registration, so it learns what
+the app serves from the app itself. Every `infrapi/lib` app serves its route
+table as an OpenAPI document at `/-/openapi.json`. Whenever a registration's
+`sync_id` changes, `kayra reconciler` fetches it through the gateway
+(`<reconciler.gateway_url>/apis/<api>/-/openapi.json`, see
+[config](../packages/config.md#reconciler)) and stores it in etcd with the
+`sync_id` it was fetched for and the resources derived from its paths. Only
+one fetch runs per registration and `sync_id`, however many subscriptions
+the sync fans out to.
+
+**The spec is mandatory.** A sync can't complete without it: if the fetch
+fails (gateway unset or unreachable, a non-200 response, a document that
+isn't OpenAPI, or one over 1 MiB), no subscription moves to the new
+`sync_id`. Each one is marked `state: error` and keeps its previous
+`current_sync_id`, so an active subscription keeps working. The fetch is
+retried on the next change to the registration or the subscription.
+
+Resources come from the `/apis/<api>/v1/[namespaces/{namespace}/]<resource>[/{name}[/<action>]]`
+paths. A path under `namespaces/{namespace}/` is a namespaced resource, an
+action is part of the resource name (`dashboards/refresh`), and verbs follow
+the HTTP method: `GET` is `list` on a collection and `get` on an item, and
+`POST`, `PUT`, `PATCH` and `DELETE` are `create`, `update`, `patch` and
+`delete`.
+
+Any authenticated caller can read the stored spec, exactly as the app served
+it:
+
+```bash
+curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/telemetry.giservices.io/openapi.json \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+`GET /apis` lists every api group with its resources: Kayra's own, derived
+from its live route table, then each registration's, from its stored spec.
+A registration with no spec yet is listed with no resources. This is what
+[`kayra-cli apis`](../cli.md#apis) shows.
+
 ## Checking sync status
 
 `GET /apis/catalog.example.com/v1/apiregistrations/:name/status` reports

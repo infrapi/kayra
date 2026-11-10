@@ -118,6 +118,21 @@ func (k Keys) ClusterApiRegistrationPrefix() string {
 	return fmt.Sprintf("%s/cluster/apiregistrations/", k.Prefix)
 }
 
+// ApiSpec is the OpenAPI spec last fetched for a cluster-level API
+// registration (see catalog.ApiSpec). Kept outside the registrations
+// tree on purpose: the Reconciler watches that tree, and a spec it
+// writes itself must never re-trigger it.
+func (k Keys) ApiSpec(platform, region, name string) string {
+	return fmt.Sprintf("%s/openapi/apiregistrations/%s/%s/%s", k.Prefix, platform, region, name)
+}
+
+// ReconcilerApiSpecLock is the JobLocker key guarding one registration's
+// spec fetch, so a sync fanning out to many subscriptions fetches the
+// spec once, not once per subscription.
+func (k Keys) ReconcilerApiSpecLock(platform, region, name string) string {
+	return fmt.Sprintf("%s/locks/reconciler/apiregistrations/%s/%s/%s/openapi", k.Prefix, platform, region, name)
+}
+
 // NamespaceConfig is a namespace's own record — its active flag (the
 // legacy model's "Tenant": a namespace IS a tenant, not a separate thing
 // alongside one).

@@ -43,6 +43,7 @@ func main() {
 			loginCommand(),
 			contextCommand(),
 			authCommand(),
+			apisCommand(),
 		}, verbCommands()...),
 		CommandNotFound: func(ctx context.Context, cmd *cli.Command, name string) {
 			fmt.Fprintf(os.Stderr, "kayra-cli: unknown command %q\n\n", name)

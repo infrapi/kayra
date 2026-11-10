@@ -33,7 +33,7 @@ func TestReconcilerActivatesNewNamespace(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
-		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx)
+		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx)
 	}()
 
 	waitFor(t, func() bool {
@@ -58,7 +58,7 @@ func TestReconcilerActivatesNewSubscription(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
-		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx)
+		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx)
 	}()
 
 	waitFor(t, func() bool {
@@ -91,7 +91,7 @@ func TestReconcilerIgnoresAlreadyActiveRecords(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
-		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx)
+		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx)
 	}()
 
 	// give the reconciler a few poll cycles to (not) do anything, then
@@ -130,7 +130,7 @@ func TestReconcilerReconcilesActiveSubscriptionOnApiRegistrationSyncIDChange(t *
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
-		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx)
+		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx)
 	}()
 
 	// let the initial reconcile pass run (sub is already active/success,
@@ -180,7 +180,7 @@ func TestReconcilerApiRegistrationUpdateSkipsInactiveSubscriptions(t *testing.T)
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: ""})
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 0, DefaultMode: ""})
 	reg.SyncID = "sync-2"
 	var wg sync.WaitGroup
 	w.handleApiRegistrationPut(context.Background(), &wg, mustMarshal(t, reg))
@@ -215,7 +215,7 @@ func TestReconcilerSkipsSubscriptionWhenApiRegistrationSyncIDEmpty(t *testing.T)
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: ""})
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 0, DefaultMode: ""})
 	w.handleNewSubscription(context.Background(), "myns", "vault", mustMarshal(t, sub), 0)
 
 	got, err := repo.GetNamespaceSubscription("myns", "vault")
@@ -271,7 +271,7 @@ func TestReconcilerHandleApiRegistrationPutRespectsCanaryNamespaces(t *testing.T
 		}
 	}
 
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{})
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL})
 
 	// bump SyncID with a canary restriction: only canary-ns should
 	// reconcile. Persisted first, same as a real admin PUT would (the
@@ -328,7 +328,7 @@ func TestReconcilerHandleApiRegistrationPutRespectsCanaryNamespaces(t *testing.T
 // none of them have steps configured.
 func TestReconcileErrorsOnlyWhenModeIsEmpty(t *testing.T) {
 	repo := newTestRepo(t)
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{})
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL})
 
 	if err := w.reconcile(ApiRegistration{Name: "vault", Mode: ""}, "myns", Subscription{}, 0); err == nil {
 		t.Fatal("reconcile with empty mode and no default_mode: want error, got nil")
@@ -359,7 +359,7 @@ func TestReconcileFallsBackToDefaultMode(t *testing.T) {
 	defer apiSrv.Close()
 
 	repo := newTestRepo(t)
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL,
 		DefaultMode: "trigger",
 		Mode: map[string][]config.ReconcileStep{
 			"trigger": {{Method: "get", Endpoint: triggerSrv.URL, Timeout: "5s"}},
@@ -406,7 +406,7 @@ func TestReconcilerDefaultModeActivatesModeLessApiRegistration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
-		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: "api"}).Run(ctx)
+		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 0, DefaultMode: "api"}).Run(ctx)
 	}()
 
 	waitFor(t, func() bool {
@@ -439,7 +439,7 @@ func TestReconcilerReconcileFailureLeavesSubscriptionUnsynced(t *testing.T) {
 
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	go func() {
-		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx1)
+		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx1)
 	}()
 
 	time.Sleep(300 * time.Millisecond)
@@ -473,7 +473,7 @@ func TestReconcilerReconcileFailureLeavesSubscriptionUnsynced(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 	go func() {
-		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx2)
+		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 0, DefaultMode: ""}).Run(ctx2)
 	}()
 
 	waitFor(t, func() bool {
@@ -486,13 +486,13 @@ func TestNewReconcilerDefaultsMaxConcurrentReconciles(t *testing.T) {
 	repo := newTestRepo(t)
 
 	for _, n := range []int{0, -1, -100} {
-		w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: n, DefaultMode: ""})
+		w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: n, DefaultMode: ""})
 		if cap(w.sem) != DefaultMaxConcurrentReconciles {
 			t.Fatalf("NewReconciler(..., %d): pool size = %d, want default %d", n, cap(w.sem), DefaultMaxConcurrentReconciles)
 		}
 	}
 
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: 5, DefaultMode: ""})
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: 5, DefaultMode: ""})
 	if cap(w.sem) != 5 {
 		t.Fatalf("NewReconciler(..., 5): pool size = %d, want 5", cap(w.sem))
 	}
@@ -505,7 +505,7 @@ func TestNewReconcilerDefaultsMaxConcurrentReconciles(t *testing.T) {
 func TestReconcilerDispatchBoundsConcurrency(t *testing.T) {
 	repo := newTestRepo(t)
 	const poolSize = 3
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: poolSize, DefaultMode: ""})
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: poolSize, DefaultMode: ""})
 
 	const jobs = 10
 	var (
@@ -555,8 +555,8 @@ func TestReconcilerDispatchBoundsConcurrency(t *testing.T) {
 // split between them.
 func TestReconcilerDispatchPoolIsPerProcess(t *testing.T) {
 	const poolSize = 3
-	wA := NewReconciler(newTestRepo(t), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: poolSize})
-	wB := NewReconciler(newTestRepo(t), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{MaxConcurrentReconciles: poolSize})
+	wA := NewReconciler(newTestRepo(t), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: poolSize})
+	wB := NewReconciler(newTestRepo(t), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL, MaxConcurrentReconciles: poolSize})
 
 	const jobsPerReconciler = 10
 	var (
@@ -660,8 +660,8 @@ func TestReconcilerWithJobLockSerializesAcrossReconcilers(t *testing.T) {
 	t.Cleanup(func() { _ = local.Close() })
 	shared := newFakeJobLockerStore(local)
 
-	wA := NewReconciler(NewRepository(shared, store.NewKeys("")), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{})
-	wB := NewReconciler(NewRepository(shared, store.NewKeys("")), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{})
+	wA := NewReconciler(NewRepository(shared, store.NewKeys("")), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL})
+	wB := NewReconciler(NewRepository(shared, store.NewKeys("")), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL})
 
 	const key = "namespaces/myns/subscriptions/vault"
 	var (
@@ -714,7 +714,7 @@ func TestReconcilerWithJobLockSerializesAcrossReconcilers(t *testing.T) {
 // would otherwise have, since store.JobLocker only ever exists for
 // EtcdStore.
 func TestReconcilerWithJobLockSerializesWithinOneProcess(t *testing.T) {
-	w := NewReconciler(newTestRepo(t), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{})
+	w := NewReconciler(newTestRepo(t), testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL})
 
 	const key = "namespaces/myns/subscriptions/vault"
 	var (
@@ -788,7 +788,7 @@ func TestEnsureReconciledCoalescesRacingCallsForSameSubscription(t *testing.T) {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL,
 		Mode: map[string][]config.ReconcileStep{
 			"trigger": {{Method: "post", Endpoint: srv.URL, Timeout: "5s"}},
 		},

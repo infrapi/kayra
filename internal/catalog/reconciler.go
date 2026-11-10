@@ -3,8 +3,10 @@ package catalog
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -123,7 +125,15 @@ type Reconciler struct {
 	// run for a given (post-DefaultMode-fallback) mode name. A mode with
 	// no entry here keeps reconcile's placeholder log-only behavior.
 	modeSteps map[string][]config.ReconcileStep
+	// gatewayURL is config.ReconcilerConfig.GatewayURL: where every
+	// registered api's OpenAPI spec is fetched from (see ensureSpec).
+	gatewayURL string
+	// httpClient fetches those specs. Tests may replace it.
+	httpClient *http.Client
 }
+
+// specFetchTimeout bounds one OpenAPI spec download.
+const specFetchTimeout = 30 * time.Second
 
 // NewReconciler returns a Reconciler over repo's store. deploymentPlatform/
 // deploymentRegion are this instance's own INFRAPI_APP_PLATFORM/_REGION —
@@ -150,6 +160,8 @@ func NewReconciler(repo *Repository, deploymentPlatform, deploymentRegion string
 		jobLocks:           newKeyedLock(),
 		defaultMode:        cfg.DefaultMode,
 		modeSteps:          cfg.Mode,
+		gatewayURL:         cfg.GatewayURL,
+		httpClient:         &http.Client{Timeout: specFetchTimeout},
 	}
 }
 
@@ -285,7 +297,7 @@ func (r *Reconciler) Run(ctx context.Context) error {
 				apiEvents = nil
 				continue
 			}
-			if ev.Type == store.EventTypePut {
+			if ev.Type == store.EventTypePut && strings.HasSuffix(ev.Key, store.ConfigSuffix) {
 				r.handleApiRegistrationPut(ctx, &wg, ev.Value)
 			}
 		case <-ctx.Done():
@@ -309,6 +321,20 @@ func (r *Reconciler) reconcileExisting(ctx context.Context) error {
 	var wg sync.WaitGroup
 	for key, value := range entries {
 		r.handleNamespacesPut(ctx, &wg, key, value)
+	}
+
+	// A registration whose sync_id moved while no reconciler was running
+	// (or with no subscriber to trigger it) still gets its spec.
+	regs, err := r.repo.ListClusterApiRegistrations()
+	if err != nil {
+		wg.Wait()
+		return fmt.Errorf("catalog: list api registrations: %w", err)
+	}
+	for _, reg := range regs {
+		if reg.Platform != r.deploymentPlatform || reg.Region != r.deploymentRegion || reg.SyncID == "" {
+			continue
+		}
+		r.dispatch(&wg, func(lockID int) { r.logSpecError(r.ensureSpec(ctx, reg, lockID), reg, lockID) })
 	}
 	wg.Wait()
 	return nil
@@ -408,6 +434,12 @@ func (r *Reconciler) handleApiRegistrationPut(ctx context.Context, wg *sync.Wait
 		return
 	}
 
+	// The spec is refreshed on every sync_id change, subscribers or not,
+	// so discovery shows a registered api before anyone subscribes.
+	if reg.SyncID != "" {
+		r.dispatch(wg, func(lockID int) { r.logSpecError(r.ensureSpec(ctx, reg, lockID), reg, lockID) })
+	}
+
 	subs, err := r.repo.ListSubscriptionsToApi(reg.Name)
 	if err != nil {
 		log.Printf("catalog: reconciler: list subscriptions to api %q: %v", reg.Name, err)
@@ -479,6 +511,17 @@ func (r *Reconciler) ensureReconciled(ctx context.Context, reg ApiRegistration, 
 			return
 		}
 
+		// The spec is mandatory: no subscription syncs to a sync_id whose
+		// spec couldn't be fetched. Like any reconcile failure, it's
+		// retried on the next change to the subscription or registration.
+		if err := r.ensureSpec(ctx, reg, lockID); err != nil {
+			r.logSpecError(err, reg, lockID)
+			if merr := r.repo.MarkSubscriptionError(namespace, reg.Name); merr != nil {
+				log.Printf("catalog: reconciler: lock_id=%d sync_id=%q mark subscription %s/%s error: %v", lockID, reg.SyncID, namespace, reg.Name, merr)
+			}
+			return
+		}
+
 		if err := r.reconcile(reg, namespace, sub, lockID); err != nil {
 			log.Printf("catalog: reconciler: lock_id=%d sync_id=%q reconcile %s/%s: %v", lockID, reg.SyncID, namespace, reg.Name, err)
 			if merr := r.repo.MarkSubscriptionError(namespace, reg.Name); merr != nil {
@@ -547,4 +590,47 @@ func (r *Reconciler) reconcile(reg ApiRegistration, namespace string, sub Subscr
 		ExpectedSyncID: reg.SyncID,
 	}}
 	return runSteps(steps, data, lockID)
+}
+
+// ensureSpec makes sure reg's OpenAPI spec is stored for reg's current
+// sync_id, fetching it through the gateway when it isn't (see
+// FetchSpec). The fetch runs under a per-registration job lock and is
+// re-checked once the lock is held, so a sync fanning out to many
+// subscriptions — or several reconciler processes — fetches it once.
+func (r *Reconciler) ensureSpec(ctx context.Context, reg ApiRegistration, lockID int) error {
+	if reg.SyncID == "" {
+		return nil
+	}
+	upToDate := func() bool {
+		spec, err := r.repo.GetApiSpec(reg.Platform, reg.Region, reg.Name)
+		return err == nil && spec.SyncID == reg.SyncID
+	}
+	if upToDate() {
+		return nil
+	}
+
+	err := errors.New("could not take the spec fetch lock")
+	r.withJobLock(ctx, r.repo.keys.ReconcilerApiSpecLock(reg.Platform, reg.Region, reg.Name), lockID, func() {
+		if upToDate() {
+			err = nil
+			return
+		}
+		var spec ApiSpec
+		spec, err = FetchSpec(ctx, r.httpClient, r.gatewayURL, reg.Name)
+		if err != nil {
+			return
+		}
+		spec.SyncID = reg.SyncID
+		if err = r.repo.PutApiSpec(reg.Platform, reg.Region, &spec); err != nil {
+			return
+		}
+		log.Printf("catalog: reconciler: lock_id=%d sync_id=%q stored openapi spec of %q (%d resources)", lockID, reg.SyncID, reg.Name, len(spec.Resources))
+	})
+	return err
+}
+
+func (r *Reconciler) logSpecError(err error, reg ApiRegistration, lockID int) {
+	if err != nil {
+		log.Printf("catalog: reconciler: lock_id=%d sync_id=%q openapi spec of %q: %v", lockID, reg.SyncID, reg.Name, err)
+	}
 }

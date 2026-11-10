@@ -150,13 +150,15 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 
 	rbacRepo := rbac.NewRepository(s, keys)
 	rbac.RegisterClusterRoutes(engine, rbacRepo, sysadminGate)
-	rbac.RegisterNamespaceRoutes(engine, rbacRepo, authenticator.Middleware())
+	catalogRepo := catalog.NewRepository(s, keys)
+	rbac.RegisterNamespaceRoutes(engine, rbacRepo, authenticator.Middleware(), func(rules []rbac.Rule) *liberrors.Error {
+		return catalogRepo.ValidateRoleRules(rules, appCfg.AppPlatform, appCfg.AppRegion)
+	})
 	// catalog.Reconciler (the namespace/subscription/api registration
 	// reconcile controller) deliberately does not run here: it's its own
 	// "kayra reconciler" CLI command/process (see cmd/kayra), not a
 	// goroutine mixed into the API server — easier to debug and scale
 	// independently, and a crash in one never takes down the other.
-	catalogRepo := catalog.NewRepository(s, keys)
 	// /check's catalog-owned steps (see rbac.RegisterAuthorizeRoute for
 	// the full order): the namespace exists, then — once the caller is
 	// known to be a member — the api is registered here, the namespace is
@@ -166,10 +168,24 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		Api: func(namespace, api string) *liberrors.Error {
 			return catalogRepo.CheckApiSubscription(namespace, api, appCfg.AppPlatform, appCfg.AppRegion)
 		},
+		Resource: func(api, resource, verb string) *liberrors.Error {
+			return catalogRepo.CheckApiResource(api, resource, verb, appCfg.AppPlatform, appCfg.AppRegion)
+		},
 	})
 	catalog.RegisterApiRegistrationRoutes(engine, catalogRepo, sysadminGate, appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, authenticator.Middleware(), appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceCollectionRoutes(engine, catalogRepo, sysadminGate)
+	// Discovery (GET /apis) and each registration's stored openapi spec:
+	// any authenticated caller. Kayra's own groups are read from the
+	// live route table, so they always match what this server serves.
+	catalog.RegisterDiscoveryRoutes(engine, catalogRepo, authenticator.Middleware(), func() []catalog.Route {
+		infos := engine.Routes()
+		routes := make([]catalog.Route, len(infos))
+		for i, ri := range infos {
+			routes[i] = catalog.Route{Method: ri.Method, Path: ri.Path}
+		}
+		return routes
+	}, appCfg.AppPlatform, appCfg.AppRegion)
 
 	tokenapi.RegisterRoutes(engine, authenticator.Middleware(), s, keys, &patKey.PublicKey, cfg)
 

@@ -506,7 +506,7 @@ func TestReconcileRunsConfiguredStepsForMode(t *testing.T) {
 	defer srv.Close()
 
 	repo := newTestRepo(t)
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL,
 		Mode: map[string][]config.ReconcileStep{
 			"api": {{
 				Method: "post", Endpoint: srv.URL, Timeout: "5s",
@@ -526,7 +526,7 @@ func TestReconcileRunsConfiguredStepsForMode(t *testing.T) {
 
 func TestReconcileFallsBackToPlaceholderWithNoStepsConfigured(t *testing.T) {
 	repo := newTestRepo(t)
-	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{})
+	w := NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: testGatewayURL})
 
 	if err := w.reconcile(ApiRegistration{Name: "compute", Mode: "trigger"}, "core", Subscription{}, 0); err != nil {
 		t.Fatalf("reconcile: want nil (placeholder success), got %v", err)

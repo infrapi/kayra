@@ -133,3 +133,56 @@ func TestPrintYAML(t *testing.T) {
 		t.Fatalf("non-JSON body = %q, want it verbatim", out.String())
 	}
 }
+
+func TestApisFilterAndRender(t *testing.T) {
+	groups := []discoveryGroup{
+		{Api: "catalog.example.com", Builtin: true, Resources: []discoveryResource{
+			{Name: "apiregistrations", Verbs: []string{"get", "list"}},
+			{Name: "subscriptions", Namespaced: true, Verbs: []string{"create", "list"}},
+		}},
+		{Api: "telemetry.giservices.io", ShortName: "telemetry", Resources: []discoveryResource{
+			{Name: "dashboards", Namespaced: true, Verbs: []string{"list"}},
+		}},
+		{Api: "vault.example.com", Resources: []discoveryResource{}}, // spec not fetched yet
+	}
+
+	var out, errOut bytes.Buffer
+	if err := renderApis(&out, &errOut, groups); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	want := [][]string{
+		{"NAME", "SHORTNAME", "APIGROUP", "NAMESPACED", "VERBS"},
+		{"apiregistrations", "-", "catalog.example.com", "false", "get,list"},
+		{"subscriptions", "-", "catalog.example.com", "true", "create,list"},
+		{"dashboards", "telemetry", "telemetry.giservices.io", "true", "list"},
+		{"-", "-", "vault.example.com", "-", "-"},
+	}
+	if len(lines) != len(want) {
+		t.Fatalf("got %d lines, want %d:\n%s", len(lines), len(want), out.String())
+	}
+	for i, w := range want {
+		if got := strings.Fields(lines[i]); strings.Join(got, " ") != strings.Join(w, " ") {
+			t.Errorf("line %d = %q, want %q", i, lines[i], w)
+		}
+	}
+
+	yes := true
+	if got := filterGroups(groups, "", &yes); len(got) != 2 || got[0].Resources[0].Name != "subscriptions" {
+		t.Fatalf("--namespaced=true = %+v", got)
+	}
+	for _, sel := range []string{"telemetry.giservices.io", "telemetry"} {
+		if got := filterGroups(groups, sel, nil); len(got) != 1 || got[0].Api != "telemetry.giservices.io" {
+			t.Fatalf("--api-group %s = %+v", sel, got)
+		}
+	}
+	if got := filterGroups(groups, "catalog", nil); len(got) != 1 || got[0].Api != "catalog.example.com" {
+		t.Fatalf("--api-group catalog (first label) = %+v", got)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if err := renderApis(&out, &errOut, nil); err != nil || out.Len() != 0 || !strings.Contains(errOut.String(), "No resources found.") {
+		t.Fatalf("empty: stdout %q stderr %q", out.String(), errOut.String())
+	}
+}

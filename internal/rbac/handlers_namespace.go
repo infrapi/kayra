@@ -99,7 +99,13 @@ func RequireClusterRBAC(repo *Repository, api, resource, verb string) gin.Handle
 // (ApiRegistration/Subscription) are registered separately, by
 // internal/catalog's own RegisterClusterRoutes/RegisterNamespaceRoutes/
 // RegisterNamespaceCollectionRoutes.
-func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc) {
+//
+// validateRules, when non-nil, vets a namespace Role's rules before it's
+// created or updated (in practice catalog.Repository.ValidateRoleRules:
+// every api registered, every resource and verb one its OpenAPI spec
+// serves); its error is returned as-is. Injected as a function since the
+// dependency runs catalog -> rbac, never the other way.
+func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, validateRules func([]Rule) *liberrors.Error) {
 	group := r.Group("/apis/"+AuthorizationAPI+"/v1/namespaces/:namespace", gate)
 
 	// --- groups ---
@@ -203,6 +209,12 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 			httpapi.Fail(c, err)
 			return
 		}
+		if validateRules != nil {
+			if err := validateRules(role.Rules); err != nil {
+				httpapi.Fail(c, err)
+				return
+			}
+		}
 
 		if err := repo.PutNamespaceRole(namespace, &role); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateNamespaceRole", ""))
@@ -246,6 +258,12 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 		if err := resolveNamespace(&role.Metadata, namespace); err != nil {
 			httpapi.Fail(c, err)
 			return
+		}
+		if validateRules != nil {
+			if err := validateRules(role.Rules); err != nil {
+				httpapi.Fail(c, err)
+				return
+			}
 		}
 
 		if err := repo.PutNamespaceRole(namespace, &role); err != nil {

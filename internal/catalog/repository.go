@@ -54,7 +54,7 @@ func (r *Repository) DeleteClusterApiRegistration(platform, region, name string)
 	if err := r.store.Delete(r.keys.ClusterApiRegistrationConfig(platform, region, name)); err != nil {
 		return fmt.Errorf("catalog: delete cluster api registration %s/%s/%s: %w", platform, region, name, err)
 	}
-	return nil
+	return r.DeleteApiSpec(platform, region, name)
 }
 
 // apiRegistrationIsReferenced reports whether any other ApiRegistration's

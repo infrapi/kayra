@@ -287,6 +287,7 @@ type ReconcilerConfig struct {
 	MaxConcurrentReconciles int                        // <= 0 (the typical case): catalog.DefaultMaxConcurrentReconciles
 	DefaultMode             string                     // free-form mode name — "" keeps a mode-less api registration failing reconcile
 	Mode                    map[string][]ReconcileStep // the HTTP step pipeline reconcile runs for a given mode name
+	GatewayURL              string                     // where every registered api is reachable, as <gateway_url>/apis/<api>/...
 }
 ```
 
@@ -294,7 +295,13 @@ type ReconcilerConfig struct {
 reconciler:
   max_concurrent_reconciles: 30
   default_mode: trigger
+  gateway_url: https://api.example.com
 ```
+
+`gateway_url` is where the reconciler fetches each registered api's OpenAPI
+spec, from `<gateway_url>/apis/<api>/-/openapi.json`. The spec is
+mandatory: with `gateway_url` unset, no sync can complete. See
+[API registrations](../architecture/api-registrations.md#openapi-spec).
 
 Caps `kayra reconciler`'s goroutine pool, and gives `reconcile` a mode to
 fall back to for an api registration with none of its own — see

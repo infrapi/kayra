@@ -169,10 +169,13 @@ gated by `Authenticator` like every other namespace-scoped route:
 Every check runs these steps in this order, and the first one that fails
 is the answer, so the reason a caller gets is the one that actually blocks
 them. Membership comes before anything about the api, so a non-member
-learns nothing about what a namespace is subscribed to. Steps 1 and 3–5
-(`catalog.Repository.CheckNamespace` / `CheckApiSubscription`) return a
-problem-detail error; steps 2, 6 and 7 (`rbac.Repository.NamespaceMembership`
-/ `AuthorizeMember`) return `200` with `allowed: false` and the reason.
+learns nothing about what a namespace is subscribed to. The api's OpenAPI
+spec comes before roles, so a resource the app doesn't serve is reported as
+that, not as an RBAC denial. Steps 1 and 3–7
+(`catalog.Repository.CheckNamespace` / `CheckApiSubscription` /
+`CheckApiResource`) return a problem-detail error; steps 2, 8 and 9
+(`rbac.Repository.NamespaceMembership` / `AuthorizeMember`) return `200`
+with `allowed: false` and the reason.
 
 | # | Condition that fails | Answer | Detail |
 |---|---|---|---|
@@ -181,8 +184,27 @@ problem-detail error; steps 2, 6 and 7 (`rbac.Repository.NamespaceMembership`
 | 3 | no `ApiRegistration` whose long name (its id) is `api` exists in this deployment's platform/region; a short name never matches, and the solution names the long one | `404` | `api "telemetry.giservices.io" is not registered in sandbox/eu-west-1` |
 | 4 | the namespace has no subscription to that registration | `403` | `namespace "core" is not subscribed to api "telemetry.giservices.io"` (solution: subscribe first) |
 | 5 | the subscription is not active: its initial sync hasn't completed, so **every verb is refused**, reads included | `403` | `subscription of namespace "core" to api "telemetry.giservices.io" is not active yet (state "init"): its initial sync has not completed, so the api is not ready` |
-| 6 | no role bound to the caller's groups grants `api` at all | `allowed: false` | `no role bound to your groups in namespace "core" grants api "telemetry.giservices.io"` |
-| 7 | a role grants `api`, but not `verb` on `resource` | `allowed: false` | `your roles in namespace "core" grant api "telemetry.giservices.io", but not "list" on "dashboards"` |
+| 6 | the api's [OpenAPI spec](api-registrations.md#openapi-spec) has no namespaced `resource`; a singular/plural slip gets a "did you mean" | `404` | `api "telemetry.giservices.io" has no resource "dashboard"` (solution: did you mean "dashboards"?) |
+| 7 | the spec has `resource`, but not `verb` on it | `405` | `resource "dashboards" of api "telemetry.giservices.io" doesn't support "delete" (supported: get, list)` |
+| 8 | no role bound to the caller's groups grants `api` at all | `allowed: false` | `no role bound to your groups in namespace "core" grants api "telemetry.giservices.io"` |
+| 9 | a role grants `api`, but not `verb` on `resource` | `allowed: false` | `your roles in namespace "core" grant api "telemetry.giservices.io", but not "list" on "dashboards"` |
+
+An active subscription always has a stored spec, since the sync that
+activated it needed one. If one is missing anyway, step 6 answers `503`
+rather than letting the request through.
+
+Namespace `Role`s are checked against the same specs when they're created
+or updated (`catalog.Repository.ValidateRoleRules`), and a bad rule is
+refused with `400`:
+
+- every api must be registered here (by its long name), be one of Kayra's
+  own, or be `*`;
+- every resource must be a namespaced resource of the api's spec, or `*`;
+- every verb must be supported by at least one of the rule's resources, or
+  be `*`.
+
+A registered api that has never synced has no spec yet, so its resources
+and verbs are accepted as written.
 
 A subscription becomes active once, when its initial sync succeeds, and
 never becomes inactive again. When the registration later gets a new

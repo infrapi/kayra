@@ -5,16 +5,19 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/infrapi/kayra/internal/catalog"
 	gconfig "github.com/infrapi/kayra/internal/config"
 	gcrypto "github.com/infrapi/kayra/internal/crypto"
 	"github.com/infrapi/kayra/internal/middleware"
@@ -207,5 +210,70 @@ func TestUnknownRouteIsProblemDetail(t *testing.T) {
 	}
 	if !bytes.Contains(w.Body.Bytes(), []byte(`"origin":"apiserver.NoRoute"`)) {
 		t.Fatalf("body %s, want origin apiserver.NoRoute", w.Body.String())
+	}
+}
+
+// TestDiscoveryListsBuiltinGroups confirms GET /apis derives Kayra's own
+// groups from its live route table, scoped (namespaced or not) and with
+// verbs exactly as the routes define them.
+func TestDiscoveryListsBuiltinGroups(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := testKayraConfig(t)
+	engine, err := Build(testAppConfig(), cfg)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/apis", nil)
+	req.Header.Set("Authorization", "Bearer "+mintSysadminToken(t, cfg))
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET /apis: status %d, body %s", w.Code, w.Body.String())
+	}
+
+	var groups []catalog.DiscoveryGroup
+	if err := json.Unmarshal(w.Body.Bytes(), &groups); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	find := func(api, name string, namespaced bool) *catalog.ApiResource {
+		for _, g := range groups {
+			if g.Api != api || !g.Builtin {
+				continue
+			}
+			for i, r := range g.Resources {
+				if r.Name == name && r.Namespaced == namespaced {
+					return &g.Resources[i]
+				}
+			}
+		}
+		return nil
+	}
+	for _, tc := range []struct {
+		api, name  string
+		namespaced bool
+		verbs      string
+	}{
+		{"system.example.com", "namespaces", false, "create,delete,get,list,update"},
+		{"catalog.example.com", "apiregistrations", false, "create,delete,get,list,update"},
+		{"catalog.example.com", "subscriptions", true, "create,delete,get,list,update"},
+		{"authorization.example.com", "clusterroles", false, "create,delete,get,list,update"},
+		{"authorization.example.com", "roles", true, "create,delete,get,list,update"},
+	} {
+		r := find(tc.api, tc.name, tc.namespaced)
+		if r == nil {
+			t.Errorf("GET /apis: no %s %q (namespaced=%v) in %s", tc.api, tc.name, tc.namespaced, w.Body.String())
+			continue
+		}
+		if got := strings.Join(r.Verbs, ","); got != tc.verbs {
+			t.Errorf("%s %s verbs = %s, want %s", tc.api, tc.name, got, tc.verbs)
+		}
+	}
+
+	// Unauthenticated: refused like every other gated route.
+	w = httptest.NewRecorder()
+	engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/apis", nil))
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /apis without a token: status %d, want 401", w.Code)
 	}
 }

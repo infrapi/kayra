@@ -151,8 +151,11 @@ func runReconciler(ctx context.Context, cmd *cli.Command) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	fmt.Printf("kayra: reconciler running for %s/%s (max_concurrent_reconciles=%d, default_mode=%q)\n",
-		appCfg.AppPlatform, appCfg.AppRegion, cmp.Or(cfg.Reconciler.MaxConcurrentReconciles, catalog.DefaultMaxConcurrentReconciles), cfg.Reconciler.DefaultMode)
+	fmt.Printf("kayra: reconciler running for %s/%s (max_concurrent_reconciles=%d, default_mode=%q, gateway_url=%q)\n",
+		appCfg.AppPlatform, appCfg.AppRegion, cmp.Or(cfg.Reconciler.MaxConcurrentReconciles, catalog.DefaultMaxConcurrentReconciles), cfg.Reconciler.DefaultMode, cfg.Reconciler.GatewayURL)
+	if cfg.Reconciler.GatewayURL == "" {
+		fmt.Fprintln(os.Stderr, "kayra: WARNING: reconciler.gateway_url is not set: every api's openapi spec is mandatory, so no sync can complete until it is")
+	}
 	if err := r.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("reconciler: %w", err)
 	}

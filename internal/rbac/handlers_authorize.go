@@ -46,6 +46,9 @@ type Prechecks struct {
 	// is registered, the namespace is subscribed to it, and that
 	// subscription is active.
 	Api func(namespace, api string) *liberrors.Error
+	// Resource is steps 6–7: the api's OpenAPI spec serves resource
+	// (404), and verb on it (405).
+	Resource func(api, resource, verb string) *liberrors.Error
 }
 
 // RegisterAuthorizeRoute mounts the one route other apps built on
@@ -71,14 +74,19 @@ type Prechecks struct {
 //  3. the api is registered (prechecks.Api: 404),
 //  4. the namespace is subscribed to it (prechecks.Api: 403),
 //  5. that subscription is active (prechecks.Api: 403),
-//  6. a role bound to the caller's groups grants the api
+//  6. the api serves resource, per its OpenAPI spec
+//     (prechecks.Resource: 404),
+//  7. and supports verb on it (prechecks.Resource: 405),
+//  8. a role bound to the caller's groups grants the api
 //     (AuthorizeMember: denied),
-//  7. that role grants verb on resource (AuthorizeMember: denied).
+//  9. that role grants verb on resource (AuthorizeMember: denied).
 //
 // Membership comes before anything about the api, so a non-member
-// learns nothing about what a namespace is subscribed to. A precheck
-// failure is an error response; an RBAC denial (2, 6, 7) is a 200 with
-// allowed:false and the reason.
+// learns nothing about what a namespace is subscribed to, and the spec
+// comes before roles, so a resource the app doesn't have is reported
+// as that, not as an RBAC denial. A precheck failure is an error
+// response; an RBAC denial (2, 8, 9) is a 200 with allowed:false and
+// the reason.
 func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, prechecks Prechecks) {
 	r.POST("/apis/"+AuthorizationAPI+"/v1/check", gate, func(c *gin.Context) {
 		const origin = "rbac.Authorize"
@@ -113,6 +121,12 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 
 		if prechecks.Api != nil {
 			if perr := prechecks.Api(req.Namespace, req.Api); perr != nil {
+				httpapi.Fail(c, perr)
+				return
+			}
+		}
+		if prechecks.Resource != nil {
+			if perr := prechecks.Resource(req.Api, req.Resource, req.Verb); perr != nil {
 				httpapi.Fail(c, perr)
 				return
 			}

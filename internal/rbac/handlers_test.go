@@ -12,6 +12,7 @@ import (
 
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/store"
+	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
 func noopGate(c *gin.Context) {}
@@ -89,7 +90,7 @@ func newTestEngine(t *testing.T) (*gin.Engine, *Repository) {
 
 	engine := gin.New()
 	RegisterClusterRoutes(engine, repo, noopGate)
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate(testAdmin, testAdminGroup))
+	RegisterNamespaceRoutes(engine, repo, fakeAuthGate(testAdmin, testAdminGroup), nil)
 	return engine, repo
 }
 
@@ -318,7 +319,7 @@ func TestNamespaceWriteDeniedWithoutClusterRBAC(t *testing.T) {
 
 	engine := gin.New()
 	RegisterClusterRoutes(engine, repo, noopGate)
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("nobody"))
+	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("nobody"), nil)
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/myns/groups", Group{Name: "g1"})
 	if w.Code != http.StatusForbidden {
@@ -350,7 +351,7 @@ func TestNamespaceWriteGrantedEndToEndViaHTTPBootstrap(t *testing.T) {
 	RegisterClusterRoutes(engine, repo, noopGate)
 	// jdoe's resolved groups (what /oauth2/userinfo would have returned
 	// from their real memberOf, post member_regex) — no sync step needed.
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("jdoe", "sandbox-thetenant-sysadmin"))
+	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("jdoe", "sandbox-thetenant-sysadmin"), nil)
 
 	meta := Metadata{Namespace: "thetenant"}
 
@@ -407,7 +408,7 @@ func TestNamespaceWriteGrantedEndToEndViaDirectUserBootstrap(t *testing.T) {
 	RegisterClusterRoutes(engine, repo, noopGate)
 	// jdoe authenticates with no groups at all — this grant has to come
 	// from the direct user source, not from any LDAP group.
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("jdoe"))
+	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("jdoe"), nil)
 
 	meta := Metadata{Namespace: "thetenant"}
 
@@ -489,5 +490,44 @@ func TestClusterGroupTimestamps(t *testing.T) {
 	}
 	if !got.UpdatedAt.Equal(t2) {
 		t.Fatalf("after update: updated_at = %v, want %v", got.UpdatedAt, t2)
+	}
+}
+
+// TestNamespaceRoleRulesValidated confirms a namespace Role's rules go
+// through the injected validator on create and update, and that its
+// error is returned as-is, with nothing saved.
+func TestNamespaceRoleRulesValidated(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := newTestRepo(t)
+	seedClusterRBAC(t, repo, testAdminGroup, testNamespace)
+
+	var calls int
+	engine := gin.New()
+	RegisterNamespaceRoutes(engine, repo, fakeAuthGate(testAdmin, testAdminGroup), func(rules []Rule) *liberrors.Error {
+		calls++
+		if len(rules) > 0 && len(rules[0].Resources) > 0 && rules[0].Resources[0] == "bad" {
+			return liberrors.New(http.StatusBadRequest, "test", "api %q has no namespaced resource %q", rules[0].Apis[0], "bad")
+		}
+		return nil
+	})
+	base := "/apis/" + AuthorizationAPI + "/v1/namespaces/" + testNamespace + "/roles"
+	role := func(resource string) Role {
+		return Role{Name: "r", Rules: []Rule{{Apis: []string{"telemetry.giservices.io"}, Resources: []string{resource}, Verbs: []string{"get"}}}}
+	}
+
+	if w := doJSON(t, engine, http.MethodPost, base, role("bad")); w.Code != http.StatusBadRequest || !bytes.Contains(w.Body.Bytes(), []byte("no namespaced resource")) {
+		t.Fatalf("create with a bad rule: status %d body %s, want 400 from the validator", w.Code, w.Body.String())
+	}
+	if _, err := repo.GetNamespaceRole(testNamespace, "r"); err == nil {
+		t.Fatalf("a role refused by the validator was saved")
+	}
+	if w := doJSON(t, engine, http.MethodPost, base, role("dashboards")); w.Code != http.StatusCreated {
+		t.Fatalf("create with a good rule: status %d body %s", w.Code, w.Body.String())
+	}
+	if w := doJSON(t, engine, http.MethodPut, base+"/r", role("bad")); w.Code != http.StatusBadRequest {
+		t.Fatalf("update with a bad rule: status %d body %s, want 400", w.Code, w.Body.String())
+	}
+	if calls != 3 {
+		t.Fatalf("validator ran %d times, want 3 (create, create, update)", calls)
 	}
 }

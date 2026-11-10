@@ -74,8 +74,8 @@ groups/id are checked against this same `Group` regardless. A
 
 ```go
 rbac.RegisterClusterRoutes(engine, repo, sysadminGate)
-rbac.RegisterNamespaceRoutes(engine, repo, authenticator.Middleware())
-rbac.RegisterAuthorizeRoute(engine, repo, authenticator.Middleware())
+rbac.RegisterNamespaceRoutes(engine, repo, authenticator.Middleware(), validateRules) // validateRules may be nil
+rbac.RegisterAuthorizeRoute(engine, repo, authenticator.Middleware(), rbac.Prechecks{Namespace: ..., Api: ..., Resource: ...})
 ```
 
 - **Cluster** — full CRUD at
@@ -93,7 +93,11 @@ rbac.RegisterAuthorizeRoute(engine, repo, authenticator.Middleware())
   touching its namespace-scoped defaults. `RequireClusterRBAC` is
   exported so `internal/catalog` gates its own namespace-scoped
   [Subscription](../architecture/subscriptions.md) routes through the
-  identical check, against `catalog.CatalogAPI` instead.
+  identical check, against `catalog.CatalogAPI` instead. A namespace
+  `Role`'s rules go through `validateRules` on create and update when one
+  is given; `apiserver.Build` passes `catalog.Repository.ValidateRoleRules`,
+  which checks them against each api's OpenAPI spec (see
+  [RBAC & auth](../architecture/rbac-and-auth.md#authorizing-other-apps-requests)).
 - **Authorize** — `POST /apis/authorization.example.com/v1/check`,
   gated only by `authenticator.Middleware()` (any configured provider),
   never by `Allows` against that same api group — the general-purpose
