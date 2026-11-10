@@ -256,7 +256,7 @@ management-plane routes are decided by it:
 | `catalog.<domain>`'s `subscriptions` | cluster RBAC (`CanManageNamespaceRBAC`), same as above |
 | `authorization.<domain>`'s `clustergroups`/`clusterroles`/`clusterrolebindings` | the sysadmin group alone (`SysadminGate`) — no `Rule` consulted at all |
 | `catalog.<domain>`'s `apiregistrations` | `SysadminGate` alone |
-| `apps.<domain>`'s `namespaces` | `SysadminGate` alone |
+| `system.<domain>`'s `namespaces` | `SysadminGate` alone |
 
 Asking about one of these still gets a real, truthful answer — "does
 a stored `Rule` grant this" — just not necessarily the answer to "will

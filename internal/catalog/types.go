@@ -13,7 +13,7 @@
 // never the other way.
 package catalog
 
-// CatalogAPI and NamespaceAPI name this package's two API groups,
+// CatalogAPI and SystemAPI name this package's two API groups,
 // laid out exactly like rbac.AuthorizationAPI: CatalogAPI's
 // cluster-scoped resource (apiregistrations) is gated by
 // middleware.SysadminGate alone, never checked against a stored Rule
@@ -21,22 +21,23 @@ package catalog
 // (subscriptions) is checked against CatalogAPI via
 // rbac.RequireClusterRBAC (see RegisterNamespaceRoutes) — so a Rule
 // granting CatalogAPI "*" covers subscriptions only, just as one granting
-// AuthorizationAPI "*" never covers cluster roles. NamespaceAPI
-// (namespaces) is SysadminGate-only too (see
+// AuthorizationAPI "*" never covers cluster roles. SystemAPI
+// (namespaces, the base every other group is scoped by) is
+// SysadminGate-only too (see
 // RegisterNamespaceCollectionRoutes). "example.com" is a placeholder:
 // SetAPIDomain rebuilds both from a deployment's own domain
 // (config.AppConfig.APIDomain) — call it once, before any Register
 // function or any stored Rule is compared against these.
 var (
-	CatalogAPI   = "catalog.example.com"
-	NamespaceAPI = "apps.example.com"
+	CatalogAPI = "catalog.example.com"
+	SystemAPI  = "system.example.com"
 )
 
-// SetAPIDomain rebuilds CatalogAPI and NamespaceAPI as "catalog.<domain>"
-// and "apps.<domain>".
+// SetAPIDomain rebuilds CatalogAPI and SystemAPI as "catalog.<domain>"
+// and "system.<domain>".
 func SetAPIDomain(domain string) {
 	CatalogAPI = "catalog." + domain
-	NamespaceAPI = "apps." + domain
+	SystemAPI = "system." + domain
 }
 
 // ApiRegistrationRef identifies one ApiRegistration by its full

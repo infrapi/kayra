@@ -123,14 +123,14 @@ A namespace *is* a tenant — one call creates both:
 === "kayra-cli"
 
     ```bash
-    kayra-cli create apps namespaces -d '{"name": "thetenant"}'
+    kayra-cli create system namespaces -d '{"name": "thetenant"}'
     # {"active": false, "name": "thetenant"}
     ```
 
 === "curl"
 
     ```bash
-    curl -s -X POST http://localhost:8080/apis/apps.example.com/v1/namespaces \
+    curl -s -X POST http://localhost:8080/apis/system.example.com/v1/namespaces \
       -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
       -d '{"name": "thetenant"}'
     # {"active": false, "name": "thetenant"}

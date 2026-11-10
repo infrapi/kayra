@@ -37,7 +37,7 @@ func namespaceResponse(n Namespace) gin.H {
 // package's namespace-collection routes have no dependency on
 // internal/rbac at all.
 func RegisterNamespaceCollectionRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc) {
-	group := r.Group("/apis/"+NamespaceAPI+"/v1/namespaces", gate)
+	group := r.Group("/apis/"+SystemAPI+"/v1/namespaces", gate)
 
 	group.POST("", func(c *gin.Context) {
 		var req namespaceUpsertRequest

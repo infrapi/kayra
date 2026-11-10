@@ -11,7 +11,7 @@ import (
 func TestNamespaceCollectionCRUD(t *testing.T) {
 	engine, repo := newTestEngine(t)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/apps.example.com/v1/namespaces", namespaceUpsertRequest{Name: "core"})
+	w := doJSON(t, engine, http.MethodPost, "/apis/system.example.com/v1/namespaces", namespaceUpsertRequest{Name: "core"})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -25,19 +25,19 @@ func TestNamespaceCollectionCRUD(t *testing.T) {
 		t.Fatalf("create response = %v, want active=false", body)
 	}
 
-	w = doJSON(t, engine, http.MethodGet, "/apis/apps.example.com/v1/namespaces/core", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/system.example.com/v1/namespaces/core", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("get: status %d, body %s", w.Code, w.Body.String())
 	}
 
-	w = doJSON(t, engine, http.MethodGet, "/apis/apps.example.com/v1/namespaces/does-not-exist", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/system.example.com/v1/namespaces/does-not-exist", nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("get missing: status %d, want 404", w.Code)
 	}
 
 	// PUT is a no-op confirmation: active stays computed, and there is
 	// nothing else left in the body to change.
-	w = doJSON(t, engine, http.MethodPut, "/apis/apps.example.com/v1/namespaces/core", namespaceUpsertRequest{})
+	w = doJSON(t, engine, http.MethodPut, "/apis/system.example.com/v1/namespaces/core", namespaceUpsertRequest{})
 	if w.Code != http.StatusOK {
 		t.Fatalf("update: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -52,7 +52,7 @@ func TestNamespaceCollectionCRUD(t *testing.T) {
 	if err := repo.ActivateNamespace("core"); err != nil {
 		t.Fatalf("ActivateNamespace: %v", err)
 	}
-	w = doJSON(t, engine, http.MethodGet, "/apis/apps.example.com/v1/namespaces/core", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/system.example.com/v1/namespaces/core", nil)
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
@@ -60,16 +60,16 @@ func TestNamespaceCollectionCRUD(t *testing.T) {
 		t.Fatalf("get after ActivateNamespace = %v, want active=true", body)
 	}
 
-	w = doJSON(t, engine, http.MethodPut, "/apis/apps.example.com/v1/namespaces/missing", namespaceUpsertRequest{})
+	w = doJSON(t, engine, http.MethodPut, "/apis/system.example.com/v1/namespaces/missing", namespaceUpsertRequest{})
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("update missing: status %d, want 404", w.Code)
 	}
 
-	w = doJSON(t, engine, http.MethodDelete, "/apis/apps.example.com/v1/namespaces/core", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/system.example.com/v1/namespaces/core", nil)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete: status %d, body %s", w.Code, w.Body.String())
 	}
-	w = doJSON(t, engine, http.MethodGet, "/apis/apps.example.com/v1/namespaces/core", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/system.example.com/v1/namespaces/core", nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("get after delete: status %d, want 404", w.Code)
 	}
@@ -78,7 +78,7 @@ func TestNamespaceCollectionCRUD(t *testing.T) {
 func TestNamespaceCreateRequiresName(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/apps.example.com/v1/namespaces", namespaceUpsertRequest{})
+	w := doJSON(t, engine, http.MethodPost, "/apis/system.example.com/v1/namespaces", namespaceUpsertRequest{})
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("missing name: status %d, want 400, body %s", w.Code, w.Body.String())
 	}
@@ -93,7 +93,7 @@ func TestNamespaceCollectionRequiresSysadminGate(t *testing.T) {
 	rejectGate := func(c *gin.Context) { c.AbortWithStatus(http.StatusForbidden) }
 	RegisterNamespaceCollectionRoutes(engine, repo, rejectGate)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/apps.example.com/v1/namespaces", namespaceUpsertRequest{Name: "core"})
+	w := doJSON(t, engine, http.MethodPost, "/apis/system.example.com/v1/namespaces", namespaceUpsertRequest{Name: "core"})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body %s", w.Code, w.Body.String())
 	}
@@ -102,9 +102,9 @@ func TestNamespaceCollectionRequiresSysadminGate(t *testing.T) {
 func TestListNamespacesHTTP(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	doJSON(t, engine, http.MethodPost, "/apis/apps.example.com/v1/namespaces", namespaceUpsertRequest{Name: "core"})
+	doJSON(t, engine, http.MethodPost, "/apis/system.example.com/v1/namespaces", namespaceUpsertRequest{Name: "core"})
 
-	w := doJSON(t, engine, http.MethodGet, "/apis/apps.example.com/v1/namespaces", nil)
+	w := doJSON(t, engine, http.MethodGet, "/apis/system.example.com/v1/namespaces", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("list: status %d, body %s", w.Code, w.Body.String())
 	}

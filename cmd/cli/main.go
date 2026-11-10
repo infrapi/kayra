@@ -552,7 +552,7 @@ func resolveAPIDomain(explicit, api, contextDomain string) string {
 //     set from the namespace-scoped one Authorize itself checks.
 //   - authorization.<domain>'s clustergroups/clusterroles/
 //     clusterrolebindings, catalog.<domain>'s api registrations, and
-//     apps.<domain>'s namespaces are gated by middleware.SysadminGate
+//     system.<domain>'s namespaces are gated by middleware.SysadminGate
 //     alone — whether the caller's groups intersect sysadmin.groups,
 //     no Rule of any kind consulted.
 //
@@ -584,7 +584,7 @@ func kayraOwnManagementWarning(apiDomain, api, resource string) string {
 		case "apiregistration":
 			return "api registrations are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
 		}
-	case "apps." + apiDomain:
+	case "system." + apiDomain:
 		return "namespaces are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
 	}
 	return ""

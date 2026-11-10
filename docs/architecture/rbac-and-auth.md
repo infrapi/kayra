@@ -16,7 +16,7 @@ both:
 | Gate | Accepts | Used by |
 |------|---------|---------|
 | `Authenticator` | any configured `authentifications.<name>` provider, or a PAT | namespace-scoped routes (rbac, subscriptions), `/oauth2/userinfo`, `POST /apis/authorization.example.com/v1/check`, `POST /api/v1/tokens` |
-| `SysadminGate` | **only** local signing keys, requiring the `<platform>-core-sysadmin` group claim | `/apis/authorization.example.com/v1/cluster*`, the namespace collection (`/apis/apps.example.com/v1/namespaces`) |
+| `SysadminGate` | **only** local signing keys, requiring the `<platform>-core-sysadmin` group claim | `/apis/authorization.example.com/v1/cluster*`, the namespace collection (`/apis/system.example.com/v1/namespaces`) |
 
 ## Verifying a bearer token
 
