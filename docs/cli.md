@@ -349,6 +349,15 @@ per-namespace groups/roles/rolebindings) and cluster-scoped
 (`catalog`'s `apiregistrations`, `authorization`'s
 `clustergroups`/`clusterroles`/`clusterrolebindings`):
 
+Responses print as a table like `context list`'s: `NAMESPACE` (only with
+`-n`), `NAME` (the resource's `name`, or `api` for a subscription),
+`CREATED AT` and `UPDATED AT`, in local time. `-o json` or `-o yaml` prints
+the full response instead (YAML keeps the server's field order). A response that isn't a named resource (a status
+document, say) always prints as JSON, so nothing is hidden. An empty list
+prints `No resources found.` on stderr and no rows on stdout. Errors print
+on stderr as `Error: <title> (<status>): <detail>`, followed by
+`Solution: …` when the server gives one, and the command exits `1`.
+
 Each example's `curl` tab is the exact request the verb sends, against
 `http://localhost:8080` with `app.api_domain` left at `example.com` —
 take the token from the current context with
@@ -359,12 +368,15 @@ take the token from the current context with
     ```bash
     # namespace-scoped: -n selects .../namespaces/<ns>/<resource>
     kayra-cli get catalog -n thetenant subscriptions
-    # []
+    # No resources found.
     kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.example.com"}'
+    # NAMESPACE  NAME               CREATED AT                 UPDATED AT
+    # thetenant  vault.example.com  2026-11-10T14:30:00+01:00  2026-11-10T14:30:00+01:00
+    kayra-cli get catalog -n thetenant subscriptions vault.example.com -o json
     # {"api": "vault.example.com", "active": false, "state": "init", ...}
-    kayra-cli get catalog -n thetenant subscriptions vault.example.com
     kayra-cli update catalog -n thetenant subscriptions vault.example.com/sync -d '{}'
     kayra-cli delete catalog -n thetenant subscriptions vault.example.com
+    # subscriptions "vault.example.com" deleted
 
     # cluster-scoped: no -n, addresses .../<resource> directly
     kayra-cli create catalog apiregistrations -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'

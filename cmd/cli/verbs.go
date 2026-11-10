@@ -20,7 +20,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -79,6 +78,7 @@ func verbCommand(verb, method string, spec verbSpec) *cli.Command {
 		&cli.StringFlag{Name: "namespace", Aliases: []string{"n"}, Usage: "the namespace to address — omit for a cluster-scoped resource (e.g. catalog's apiregistrations, authorization's clustergroups/clusterroles/clusterrolebindings)"},
 		&cli.StringFlag{Name: "api-domain", Usage: "this api's own domain — defaults to everything in <api> past its first label, or \"example.com\" if <api> has no dot"},
 		&cli.StringFlag{Name: "context", Usage: "saved context to use (defaults to the current context)"},
+		&cli.StringFlag{Name: "output", Aliases: []string{"o"}, Value: outputTable, Usage: "output format: table (namespace, name, created/updated at), or json / yaml (the full response)"},
 	}
 	if spec.requireBody {
 		flags = append(flags,
@@ -123,6 +123,13 @@ func runVerb(ctx context.Context, cmd *cli.Command, verb, method string, spec ve
 		name = args.Get(2)
 	}
 
+	output := cmd.String("output")
+	switch output {
+	case outputTable, outputJSON, outputYAML:
+	default:
+		return fmt.Errorf("%s: --output must be %q, %q or %q, got %q", verb, outputTable, outputJSON, outputYAML, output)
+	}
+
 	c, err := resolveContext(cmd)
 	if err != nil {
 		return fmt.Errorf("%s: %w", verb, err)
@@ -153,8 +160,9 @@ func runVerb(ctx context.Context, cmd *cli.Command, verb, method string, spec ve
 	// the same api group, never both for the same resource name, so
 	// there is nothing to disambiguate beyond what the caller already
 	// knows about the resource they're naming.
+	namespace := cmd.String("namespace")
 	var path string
-	if namespace := cmd.String("namespace"); namespace != "" {
+	if namespace != "" {
 		path = fmt.Sprintf("/apis/%s/v1/namespaces/%s/%s", fullAPI, namespace, resource)
 	} else {
 		path = fmt.Sprintf("/apis/%s/v1/%s", fullAPI, resource)
@@ -168,10 +176,45 @@ func runVerb(ctx context.Context, cmd *cli.Command, verb, method string, spec ve
 		return fmt.Errorf("%s: %w", verb, err)
 	}
 
-	printVerbResponse(respBody)
 	if status < 200 || status >= 300 {
+		switch output {
+		case outputJSON:
+			printJSON(os.Stdout, respBody)
+		case outputYAML:
+			printYAML(os.Stdout, respBody)
+		default:
+			renderProblem(os.Stderr, status, respBody)
+		}
 		os.Exit(1)
 	}
+	return printVerbResponse(os.Stdout, os.Stderr, output, verb, resource, name, namespace, respBody)
+}
+
+// printVerbResponse prints a successful response: the full body for -o
+// json / yaml; otherwise the table (see renderTable), a one-line confirmation
+// for a delete's empty body, and the pretty JSON for anything that
+// isn't a named resource (so nothing is ever hidden).
+func printVerbResponse(stdout, stderr io.Writer, output, verb, resource, name, namespace string, body []byte) error {
+	switch output {
+	case outputJSON:
+		printJSON(stdout, body)
+		return nil
+	case outputYAML:
+		printYAML(stdout, body)
+		return nil
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		if verb == "delete" {
+			_, err := fmt.Fprintf(stdout, "%s %q deleted\n", resource, name)
+			return err
+		}
+		return nil
+	}
+	ok, err := renderTable(stdout, stderr, body, namespace)
+	if err != nil || ok {
+		return err
+	}
+	printJSON(stdout, body)
 	return nil
 }
 
@@ -226,19 +269,4 @@ func doVerbRequest(ctx context.Context, c clicontext.Context, method, path strin
 		return 0, nil, fmt.Errorf("read response: %w", err)
 	}
 	return resp.StatusCode, respBody, nil
-}
-
-// printVerbResponse pretty-prints body as JSON when it parses as such
-// (every real Kayra-shaped response does), falling back to the raw
-// bytes verbatim otherwise (an empty 204 body, say).
-func printVerbResponse(body []byte) {
-	if len(body) == 0 {
-		return
-	}
-	var pretty bytes.Buffer
-	if err := json.Indent(&pretty, body, "", "  "); err == nil {
-		fmt.Println(pretty.String())
-		return
-	}
-	fmt.Println(string(body))
 }
