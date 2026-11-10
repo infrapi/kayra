@@ -356,3 +356,146 @@ func TestConfirmPageEscapesQueryValues(t *testing.T) {
 		t.Fatalf("confirmation page reflected an unescaped <script> tag from the query string: %s", body)
 	}
 }
+
+var (
+	authURLRe   = regexp.MustCompile(`(http://\S+/oauth2/v1/authorize\?\S+)`)
+	loginCodeRe = regexp.MustCompile(`<textarea[^>]*>([^<]+)</textarea>`)
+)
+
+// urlSniffer is the --no-browser flow's stderr: it hands the first
+// authorize URL LoginToServerManual prints to urls, as a user reading
+// their terminal would.
+type urlSniffer struct {
+	buf  bytes.Buffer
+	urls chan string
+	sent bool
+}
+
+func (s *urlSniffer) Write(p []byte) (int, error) {
+	s.buf.Write(p)
+	if m := authURLRe.FindString(s.buf.String()); m != "" && !s.sent {
+		s.sent = true
+		s.urls <- m
+	}
+	return len(p), nil
+}
+
+// browseToLoginCode plays the user on another machine: follow the
+// authorize URL's links through the confirmation page and the provider,
+// then read the login code off the broker's final page.
+func browseToLoginCode(t *testing.T, brokerBaseURL, authURL string) (code string, resp *http.Response) {
+	t.Helper()
+	next := authURL
+	for i := 0; i < 5; i++ {
+		r, err := http.Get(next)
+		if err != nil {
+			t.Fatalf("browser: GET %s: %v", next, err)
+		}
+		body, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		if m := loginCodeRe.FindSubmatch(body); m != nil {
+			return html.UnescapeString(string(m[1])), r
+		}
+		m := hrefRe.FindSubmatch(body)
+		if m == nil {
+			t.Fatalf("browser: page has neither a login code nor a link: %s", body)
+		}
+		href := html.UnescapeString(string(m[1]))
+		if href[0] == '/' {
+			href = brokerBaseURL + href
+		}
+		next = href
+	}
+	t.Fatalf("browser: no login code after following links")
+	return "", nil
+}
+
+func oktaConfig(idp *httptest.Server) *config.Config {
+	return &config.Config{
+		Authentifications: map[string]config.AuthProvider{
+			"okta": {
+				Remote: &config.RemoteAuthConfig{
+					URL:    idp.URL + "/.well-known/openid-configuration",
+					OAuth2: &config.OAuth2LoginConfig{ClientID: "test-client"},
+				},
+			},
+		},
+	}
+}
+
+// TestLoginToServerManualRunsFullFlowThroughBroker drives
+// `kayra-cli login --no-browser` end to end: the CLI prints a URL, a
+// "browser" elsewhere logs in and is shown a login code instead of a
+// loopback redirect, and pasting that code into the CLI's stdin
+// finishes the same PKCE exchange a loopback login does.
+func TestLoginToServerManualRunsFullFlowThroughBroker(t *testing.T) {
+	idp := fakeIDP(t)
+	broker := testBroker(t, oktaConfig(idp))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stdinR, stdinW := io.Pipe()
+	stderr := &urlSniffer{urls: make(chan string, 1)}
+	go func() {
+		authURL := <-stderr.urls
+		code, resp := browseToLoginCode(t, broker.URL, authURL)
+		if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+			t.Errorf("login code page Cache-Control = %q, want no-store", got)
+		}
+		_, _ = io.WriteString(stdinW, code+"\n")
+	}()
+
+	result, err := oauth2login.LoginToServerManual(ctx, broker.URL, stdinR, stderr)
+	if err != nil {
+		t.Fatalf("LoginToServerManual: %v", err)
+	}
+	if result.AccessToken != "real-access-token" {
+		t.Fatalf("AccessToken = %q, want real-access-token", result.AccessToken)
+	}
+	if result.ApiDomain != testApiDomain {
+		t.Fatalf("ApiDomain = %q, want %q", result.ApiDomain, testApiDomain)
+	}
+}
+
+// TestLoginToServerManualRejectsCodeFromAnotherLogin confirms a login
+// code is bound to the CLI process that started that login: one minted
+// for a different attempt (here: a different state) is refused before
+// any token exchange is tried.
+func TestLoginToServerManualRejectsCodeFromAnotherLogin(t *testing.T) {
+	idp := fakeIDP(t)
+	broker := testBroker(t, oktaConfig(idp))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	other, err := oauth2login.EncodeLoginCode(oauth2login.LoginCode{
+		Code: "fake-auth-code", State: "someone-elses-state",
+		TokenEndpoint: idp.URL + "/token", ClientID: "test-client",
+	})
+	if err != nil {
+		t.Fatalf("EncodeLoginCode: %v", err)
+	}
+	_, err = oauth2login.LoginToServerManual(ctx, broker.URL, bytes.NewBufferString(other+"\n"), io.Discard)
+	if err == nil {
+		t.Fatalf("LoginToServerManual: want error for a login code with another attempt's state")
+	}
+}
+
+// TestAuthorizeStillRejectsNonLoopbackRedirect guards the open-redirect
+// check now that it accepts one non-loopback value: only the exact OOB
+// URN gets through, nothing that merely resembles it.
+func TestAuthorizeStillRejectsNonLoopbackRedirect(t *testing.T) {
+	for _, redirect := range []string{
+		"https://evil.example/callback",
+		"urn:ietf:wg:oauth:2.0:oob:auto",
+		"urn:ietf:wg:oauth:2.0:oob/../evil",
+	} {
+		if err := requireCLIRedirect(redirect); err == nil {
+			t.Errorf("requireCLIRedirect(%q): want error", redirect)
+		}
+	}
+	if err := requireCLIRedirect(oauth2login.OOBRedirectURI); err != nil {
+		t.Errorf("requireCLIRedirect(OOB): %v", err)
+	}
+}

@@ -92,7 +92,8 @@ func loginCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "server", Required: true, Usage: "Kayra server base URL, e.g. https://kayra.example.com"},
 			&cli.StringFlag{Name: "context-name", Usage: "name to save this login under (defaults to the sanitized --server host)"},
-			&cli.DurationFlag{Name: "timeout", Value: 2 * time.Minute, Usage: "how long to wait for the browser round trip before giving up"},
+			&cli.DurationFlag{Name: "timeout", Value: 2 * time.Minute, Usage: "how long to wait for the browser round trip before giving up (default 10m with --no-browser)"},
+			&cli.BoolFlag{Name: "no-browser", Usage: "for a terminal with no usable browser (SSH, container, air-gapped host): print the login URL to open on any other machine, then paste back the code it shows"},
 		},
 		Action: runLogin,
 	}
@@ -101,10 +102,24 @@ func loginCommand() *cli.Command {
 func runLogin(ctx context.Context, cmd *cli.Command) error {
 	server := cmd.String("server")
 
-	loginCtx, cancel := context.WithTimeout(ctx, cmd.Duration("timeout"))
+	noBrowser := cmd.Bool("no-browser")
+	timeout := cmd.Duration("timeout")
+	if noBrowser && !cmd.IsSet("timeout") {
+		// Logging in on another machine and copying a code back takes
+		// longer than a local browser round trip; 10m matches how long
+		// the server keeps the login attempt (oauth2broker.stateTTL).
+		timeout = 10 * time.Minute
+	}
+	loginCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	result, err := oauth2login.LoginToServer(loginCtx, server, os.Stderr)
+	var result *oauth2login.Result
+	var err error
+	if noBrowser {
+		result, err = oauth2login.LoginToServerManual(loginCtx, server, os.Stdin, os.Stderr)
+	} else {
+		result, err = oauth2login.LoginToServer(loginCtx, server, os.Stderr)
+	}
 	if err != nil {
 		return fmt.Errorf("login: %w", err)
 	}

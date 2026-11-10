@@ -141,7 +141,7 @@ func parseAuthorizeParams(c *gin.Context) (authorizeParams, error) {
 	if p.CodeChallengeMethod != "S256" {
 		return p, fmt.Errorf("oauth2broker: code_challenge_method must be S256")
 	}
-	if err := requireLoopbackRedirect(p.RedirectURI); err != nil {
+	if err := requireCLIRedirect(p.RedirectURI); err != nil {
 		return p, err
 	}
 	return p, nil
@@ -160,7 +160,7 @@ func configuredOAuth2Providers(cfg *config.Config) []string {
 	return names
 }
 
-// requireLoopbackRedirect enforces RFC 8252 §7.3: a native/public
+// requireCLIRedirect enforces RFC 8252 §7.3: a native/public
 // client's redirect_uri must be a loopback IP literal (127.0.0.1 or
 // [::1]), never a hostname (DNS can be hijacked) and never an arbitrary
 // external URL. This is the one thing standing between this broker and
@@ -168,8 +168,13 @@ func configuredOAuth2Providers(cfg *config.Config) []string {
 // a crafted /oauth2/v1/authorize?...&redirect_uri=https://evil.example
 // link would walk a victim through a genuine Okta login and then hand
 // the resulting authorization code to evil.example instead of the real
-// CLI.
-func requireLoopbackRedirect(raw string) error {
+// CLI. The one other value accepted is oauth2login.OOBRedirectURI
+// (`kayra-cli login --no-browser`), which redirects nowhere at all —
+// handleCallback shows the code to the user instead.
+func requireCLIRedirect(raw string) error {
+	if raw == oauth2login.OOBRedirectURI {
+		return nil
+	}
 	u, err := url.Parse(raw)
 	if err != nil {
 		return fmt.Errorf("oauth2broker: redirect_uri: %w", err)
@@ -360,8 +365,12 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 	// Defense in depth: re-check even though handleContinue already
 	// enforced this before ever storing pend — nothing on this path
 	// should ever redirect anywhere but back to a loopback address.
-	if err := requireLoopbackRedirect(pend.RedirectURI); err != nil {
+	if err := requireCLIRedirect(pend.RedirectURI); err != nil {
 		c.String(http.StatusInternalServerError, "oauth2broker: %s", err)
+		return
+	}
+	if pend.RedirectURI == oauth2login.OOBRedirectURI {
+		renderLoginCode(c, pend)
 		return
 	}
 
@@ -394,6 +403,48 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 	target.RawQuery = q.Encode()
 
 	c.Redirect(http.StatusFound, target.String())
+}
+
+// renderLoginCode ends a `kayra-cli login --no-browser` attempt: no
+// local listener exists to redirect to, so the browser is shown the
+// oauth2login.LoginCode the loopback redirect would otherwise have
+// carried, for the user to paste into the terminal that is waiting for
+// it (see oauth2login.LoginToServerManual). Never cached or leaked via
+// Referer: the code is single-use and only redeemable with that
+// terminal's own PKCE verifier, but there is still no reason for it to
+// outlive this page.
+func renderLoginCode(c *gin.Context, pend pending) {
+	c.Header("Cache-Control", "no-store")
+	c.Header("Referrer-Policy", "no-referrer")
+	c.Header("Content-Type", "text/html; charset=utf-8")
+
+	if errParam := c.Query("error"); errParam != "" {
+		msg := errParam
+		if desc := c.Query("error_description"); desc != "" {
+			msg += ": " + desc
+		}
+		c.String(http.StatusBadRequest, loginFailedPageHTML, html.EscapeString(msg))
+		return
+	}
+	code := c.Query("code")
+	if code == "" {
+		c.String(http.StatusBadRequest, loginFailedPageHTML, "the provider callback carried no code")
+		return
+	}
+
+	loginCode, err := oauth2login.EncodeLoginCode(oauth2login.LoginCode{
+		Code:          code,
+		State:         pend.State,
+		TokenEndpoint: pend.TokenEndpoint,
+		ClientID:      pend.ClientID,
+		ApiDomain:     pend.ApiDomain,
+	})
+	if err != nil {
+		c.String(http.StatusInternalServerError, loginFailedPageHTML, html.EscapeString(err.Error()))
+		return
+	}
+	// base64url only — nothing to escape, but escape anyway.
+	c.String(http.StatusOK, loginCodePageHTML, html.EscapeString(loginCode))
 }
 
 // callbackURL is Kayra's own redirect_uri — must byte-for-byte match
@@ -457,6 +508,56 @@ a.btn:hover{background:#2563eb}
   <div class="card">
     <h1>kayra-cli login</h1>
     <div class="buttons">%s</div>
+  </div>
+</body>
+</html>
+`
+
+// loginCodePageHTML is renderLoginCode's success page — %s is the
+// already-escaped login code.
+const loginCodePageHTML = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Kayra login code</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#0b0d12;color:#e6e6e6;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1rem;box-sizing:border-box}
+.card{background:#151821;border:1px solid #2a2f3a;border-radius:12px;padding:2rem;text-align:center;max-width:560px;width:100%%}
+h1{font-size:1.1rem;font-weight:600;margin:0 0 1rem}
+textarea{width:100%%;box-sizing:border-box;height:7rem;background:#0b0d12;color:#e6e6e6;border:1px solid #2a2f3a;border-radius:8px;padding:.6rem;font-family:ui-monospace,monospace;font-size:.8rem;resize:none;word-break:break-all}
+button{margin-top:1rem;background:#3b82f6;color:#fff;border:0;padding:.7rem 1.6rem;border-radius:8px;font-weight:600;cursor:pointer}
+button:hover{background:#2563eb}
+p{color:#8a8f98;font-size:.85rem;margin-top:1.2rem}
+p.warn{color:#f0b429}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Paste this code into your terminal</h1>
+    <textarea id="code" readonly onclick="this.select()">%s</textarea>
+    <button type="button" onclick="var t=document.getElementById('code');t.select();navigator.clipboard&&navigator.clipboard.writeText(t.value);this.textContent='Copied'">Copy</button>
+    <p>Paste it at the <code>kayra-cli login --no-browser</code> prompt. It works once, only in that terminal, for the next few minutes.</p>
+    <p class="warn">Only paste it into a terminal where you started this login yourself. Never send it to anyone.</p>
+  </div>
+</body>
+</html>
+`
+
+// loginFailedPageHTML is renderLoginCode's failure page — %s is the
+// already-escaped reason.
+const loginFailedPageHTML = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Kayra login failed</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#0b0d12;color:#e6e6e6;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1rem;box-sizing:border-box}
+.card{background:#151821;border:1px solid #2a2f3a;border-radius:12px;padding:2rem;text-align:center;max-width:480px}
+h1{font-size:1.1rem;font-weight:600;margin:0 0 1rem}
+p{color:#8a8f98;font-size:.9rem}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Login failed</h1>
+    <p>%s</p>
+    <p>Run <code>kayra-cli login --no-browser</code> again.</p>
   </div>
 </body>
 </html>

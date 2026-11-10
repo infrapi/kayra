@@ -178,7 +178,37 @@ created by hand) simply has none, same fallback as before.
 |------|---------|---------|
 | `--server` | — | required; the Kayra server's base URL |
 | `--context-name` | sanitized `--server` host | name to save this login under (see [context](#context)) |
-| `--timeout` | `2m` | how long to wait for the browser round trip |
+| `--timeout` | `2m` (`10m` with `--no-browser`) | how long to wait for the browser round trip |
+| `--no-browser` | off | log in from a terminal with no usable browser — see below |
+
+#### Without a browser (SSH, container, air-gapped host)
+
+`--no-browser` starts no local listener and opens nothing. It prints the
+login URL; open it in a browser on **any** machine, log in as usual, and
+the server shows a login code instead of redirecting back to
+`127.0.0.1`. Paste that code at the prompt:
+
+```bash
+kayra-cli login --server https://kayra.example.com --no-browser
+# oauth2login: open this URL in a browser on any machine to log in:
+#
+#   https://kayra.example.com/oauth2/v1/authorize?...redirect_uri=urn%3Aietf%3Awg%3Aoauth%3A2.0%3Aoob...
+#
+# Paste the login code shown in the browser: eyJjb2RlIjoi...
+# kayra-cli: logged in — saved context "kayra.example.com" to ~/.config/kayra/config (now current)
+```
+
+The code is safe to carry across by hand: it is only redeemable together
+with the PKCE verifier held by the terminal that printed the URL, and only
+once, within the server's 10-minute login window. A code from any other
+login attempt is refused. Paste it only into a terminal where you started
+the login yourself.
+
+The final code→token exchange still runs from this terminal straight to
+the provider's token endpoint, so the terminal must be able to reach the
+provider (Okta, say) — just not with a browser. Nothing changes in the
+provider's app registration: it still only ever sees Kayra's own
+`/oauth2/v1/callback`.
 
 See [oauth2login](packages/oauth2login.md) for how the flow itself works.
 

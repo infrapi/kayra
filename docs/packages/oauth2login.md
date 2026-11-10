@@ -71,6 +71,27 @@ here to embed anything from: the provider's own token/userinfo already
 carries whatever a claims-backed `authorizations.<name>` entry needs
 (see [config](config.md#claims-no-directory-at-all)).
 
+## LoginToServerManual
+
+```go
+result, err := oauth2login.LoginToServerManual(ctx, serverBaseURL, os.Stdin, os.Stderr)
+```
+
+`kayra-cli login --no-browser`, for a terminal with no usable browser.
+Same `Result`, same PKCE pair, same final exchange as `LoginToServer`,
+but no loopback listener: it sends `redirect_uri=OOBRedirectURI`, prints
+the authorize URL to stderr for the user to open on any machine, then
+reads one line from stdin, the `LoginCode` the broker shows at the end
+(`DecodeLoginCode`; surrounding whitespace ignored). A code whose
+`state` isn't this attempt's own is refused before any exchange. The
+exchange itself still goes from this process straight to the provider,
+so the host must reach the provider's token endpoint. `ctx` bounds the
+whole wait, prompt included.
+
+`LoginCode`/`EncodeLoginCode`/`DecodeLoginCode` are the one shared
+definition of that pasted string (base64url JSON, no padding). The broker
+encodes it and this package decodes it.
+
 ## How the flow is driven
 
 1. A local `127.0.0.1:0` listener claims an ephemeral port; its

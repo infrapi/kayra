@@ -122,6 +122,21 @@ fails before ever reaching the provider) and re-checked at `/callback`
 before the final redirect (defense in depth — nothing on that path
 should ever be able to redirect anywhere else).
 
+The one other accepted value is the exact string
+`urn:ietf:wg:oauth:2.0:oob` (`oauth2login.OOBRedirectURI`, sent by
+`kayra-cli login --no-browser`). It redirects nowhere, so it can't be
+abused as an open redirect: at `/callback` the broker instead renders the
+`oauth2login.LoginCode` the loopback redirect would have carried (code,
+the CLI's own state, token endpoint, client ID, `api_domain`), as one
+base64url string for the user to paste into their terminal. The page is
+sent `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. The
+code is only redeemable with the verifier the originating CLI holds
+(PKCE), and that CLI refuses any code whose state isn't its own. The page
+still warns users to paste it only into a terminal where they started the
+login themselves, since a phished user who hands their code to whoever
+sent them the link is the one remaining risk, as with any device or
+out-of-band flow.
+
 ## Confirmation and chooser pages
 
 Every value reflected into either page's HTML — the provider name(s),

@@ -24,9 +24,11 @@
 package oauth2login
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -103,27 +105,17 @@ func LoginToServer(ctx context.Context, serverBaseURL string, stderr io.Writer) 
 	}
 	localRedirectURL := fmt.Sprintf("http://%s%s", listener.Addr().String(), callbackPath)
 
-	state, err := randomString(32)
+	state, verifier, authURL, err := startLogin(serverBaseURL, localRedirectURL)
 	if err != nil {
 		_ = listener.Close()
 		return nil, err
 	}
-	verifier := oauth2.GenerateVerifier()
-	challenge := oauth2.S256ChallengeFromVerifier(verifier)
 
 	resultCh := make(chan callbackResult, 1)
 	errCh := make(chan error, 1)
 	srv := &http.Server{Handler: callbackHandler(state, resultCh, errCh), ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = srv.Serve(listener) }()
 	defer func() { _ = srv.Close() }()
-
-	base := strings.TrimRight(serverBaseURL, "/")
-	authURL := base + "/oauth2/v1/authorize?" + url.Values{
-		"redirect_uri":          {localRedirectURL},
-		"state":                 {state},
-		"code_challenge":        {challenge},
-		"code_challenge_method": {"S256"},
-	}.Encode()
 
 	_, _ = fmt.Fprintf(stderr, "oauth2login: opening browser to log in:\n\n  %s\n\n", authURL)
 	if err := OpenBrowser(authURL); err != nil {
@@ -138,6 +130,141 @@ func LoginToServer(ctx context.Context, serverBaseURL string, stderr io.Writer) 
 	case <-ctx.Done():
 		return nil, fmt.Errorf("oauth2login: timed out waiting for the browser login: %w", ctx.Err())
 	}
+	return exchange(ctx, serverBaseURL, result, verifier)
+}
+
+// OOBRedirectURI is the redirect_uri LoginToServerManual sends instead
+// of a loopback address — the standard OAuth2 "out-of-band" value. It
+// never reaches the provider (which always sees Kayra's own callback,
+// exactly as for a loopback login): it only tells the broker to show
+// the user a LoginCode to copy (see oauth2broker.handleCallback)
+// instead of redirecting their browser to a local listener that, on
+// another machine, wouldn't exist.
+const OOBRedirectURI = "urn:ietf:wg:oauth:2.0:oob"
+
+// LoginCode is everything a loopback callback would have carried,
+// bundled into the one string the broker shows a no-browser login's
+// user to paste back into their terminal (see EncodeLoginCode /
+// DecodeLoginCode). Safe to display: Code is only redeemable together
+// with the code_verifier, which never leaves the CLI process that
+// started the login (PKCE), and State ties it to that one login.
+type LoginCode struct {
+	Code          string `json:"code"`
+	State         string `json:"state"`
+	TokenEndpoint string `json:"token_endpoint"`
+	ClientID      string `json:"client_id"`
+	ApiDomain     string `json:"api_domain"`
+}
+
+// EncodeLoginCode renders c as a single copy-pasteable token
+// (base64url JSON, no padding — no characters a terminal or a
+// copy/paste could mangle).
+func EncodeLoginCode(c LoginCode) (string, error) {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return "", fmt.Errorf("oauth2login: encode login code: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+// DecodeLoginCode is EncodeLoginCode's inverse; surrounding whitespace
+// (a trailing newline, a stray space from copying) is ignored.
+func DecodeLoginCode(s string) (LoginCode, error) {
+	var c LoginCode
+	data, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(s))
+	if err != nil {
+		return c, fmt.Errorf("oauth2login: login code is not valid — paste it exactly as shown in the browser: %w", err)
+	}
+	if err := json.Unmarshal(data, &c); err != nil {
+		return c, fmt.Errorf("oauth2login: login code is not valid — paste it exactly as shown in the browser: %w", err)
+	}
+	return c, nil
+}
+
+// LoginToServerManual is LoginToServer for a terminal with no usable
+// browser (SSH, a container, an air-gapped host): it starts no local
+// listener and opens nothing. It prints the login URL to stderr for
+// the user to open on any machine that has a browser; once they've
+// logged in, the broker shows them a LoginCode, which they paste back
+// at the prompt this reads from stdin. The final code→token exchange
+// is identical to LoginToServer's — still directly against the
+// provider, still with this process's own PKCE verifier — so this host
+// must be able to reach the provider's token endpoint. ctx bounds the
+// whole wait, including the prompt.
+func LoginToServerManual(ctx context.Context, serverBaseURL string, stdin io.Reader, stderr io.Writer) (*Result, error) {
+	if serverBaseURL == "" {
+		return nil, fmt.Errorf("oauth2login: server is required")
+	}
+
+	state, verifier, authURL, err := startLogin(serverBaseURL, OOBRedirectURI)
+	if err != nil {
+		return nil, err
+	}
+
+	_, _ = fmt.Fprintf(stderr, "oauth2login: open this URL in a browser on any machine to log in:\n\n  %s\n\n", authURL)
+	_, _ = fmt.Fprint(stderr, "Paste the login code shown in the browser: ")
+
+	lineCh := make(chan string, 1)
+	readErrCh := make(chan error, 1)
+	go func() {
+		line, err := bufio.NewReader(stdin).ReadString('\n')
+		if err != nil && strings.TrimSpace(line) == "" {
+			readErrCh <- fmt.Errorf("oauth2login: read login code: %w", err)
+			return
+		}
+		lineCh <- line
+	}()
+
+	var line string
+	select {
+	case line = <-lineCh:
+	case err := <-readErrCh:
+		return nil, err
+	case <-ctx.Done():
+		return nil, fmt.Errorf("oauth2login: timed out waiting for the login code: %w", ctx.Err())
+	}
+
+	code, err := DecodeLoginCode(line)
+	if err != nil {
+		return nil, err
+	}
+	if code.State != state {
+		return nil, fmt.Errorf("oauth2login: login code belongs to a different login attempt — paste the code from the URL this command printed")
+	}
+	if code.Code == "" {
+		return nil, fmt.Errorf("oauth2login: login code carries no authorization code")
+	}
+	return exchange(ctx, serverBaseURL, callbackResult{
+		Code:          code.Code,
+		TokenEndpoint: code.TokenEndpoint,
+		ClientID:      code.ClientID,
+		ApiDomain:     code.ApiDomain,
+	}, verifier)
+}
+
+// startLogin generates one login attempt's state and PKCE pair and
+// builds the broker's /oauth2/v1/authorize URL for redirectURI (a
+// loopback callback, or OOBRedirectURI).
+func startLogin(serverBaseURL, redirectURI string) (state, verifier, authURL string, err error) {
+	state, err = randomString(32)
+	if err != nil {
+		return "", "", "", err
+	}
+	verifier = oauth2.GenerateVerifier()
+	authURL = strings.TrimRight(serverBaseURL, "/") + "/oauth2/v1/authorize?" + url.Values{
+		"redirect_uri":          {redirectURI},
+		"state":                 {state},
+		"code_challenge":        {oauth2.S256ChallengeFromVerifier(verifier)},
+		"code_challenge_method": {"S256"},
+	}.Encode()
+	return state, verifier, authURL, nil
+}
+
+// exchange finishes either login flavor: redeems result.Code at the
+// provider's token endpoint the broker relayed, with this process's
+// own PKCE verifier.
+func exchange(ctx context.Context, serverBaseURL string, result callbackResult, verifier string) (*Result, error) {
+	base := strings.TrimRight(serverBaseURL, "/")
 	if result.TokenEndpoint == "" || result.ClientID == "" {
 		return nil, fmt.Errorf("oauth2login: server did not relay a token endpoint/client id at the callback — is %s running a kayra build new enough for `kayra login`?", base)
 	}
