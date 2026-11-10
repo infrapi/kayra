@@ -7,6 +7,7 @@ import (
 
 	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/rbac"
+	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
@@ -36,6 +37,7 @@ type subscriptionResponse struct {
 	State          string `json:"state"`
 	CurrentSyncID  string `json:"current_sync_id"`
 	ExpectedSyncID string `json:"expected_sync_id"`
+	store.Timestamps
 }
 
 // buildSubscriptionResponse reads sub's api registration for its
@@ -49,6 +51,7 @@ func buildSubscriptionResponse(repo *Repository, sub Subscription, deploymentPla
 		Active:        sub.Active,
 		State:         sub.State,
 		CurrentSyncID: sub.CurrentSyncID,
+		Timestamps:    sub.Timestamps,
 	}
 	if reg, err := repo.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, sub.ApiName); err == nil {
 		resp.ExpectedSyncID = reg.SyncID
@@ -124,7 +127,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, rbacRepo *rbac.Rep
 			return
 		}
 
-		if err := repo.PutNamespaceSubscription(namespace, sub); err != nil {
+		if err := repo.PutNamespaceSubscription(namespace, &sub); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.CreateSubscription", ""))
 			return
 		}

@@ -53,19 +53,19 @@ func seedNamespaceRBAC(t *testing.T, repo *Repository, callerGroup, namespace, a
 	bindingName := namespace + "-binding-user"
 	meta := Metadata{Namespace: namespace}
 
-	if err := repo.PutNamespaceGroup(namespace, Group{
+	if err := repo.PutNamespaceGroup(namespace, &Group{
 		Name: groupName, Metadata: meta,
 		Groups: []string{callerGroup},
 	}); err != nil {
 		t.Fatalf("seedNamespaceRBAC PutNamespaceGroup: %v", err)
 	}
-	if err := repo.PutNamespaceRole(namespace, Role{
+	if err := repo.PutNamespaceRole(namespace, &Role{
 		Name: roleName, Metadata: meta,
 		Rules: []Rule{{Apis: []string{api}, Resources: []string{resource}, Verbs: []string{verb}}},
 	}); err != nil {
 		t.Fatalf("seedNamespaceRBAC PutNamespaceRole: %v", err)
 	}
-	if err := repo.PutNamespaceRoleBinding(namespace, RoleBinding{
+	if err := repo.PutNamespaceRoleBinding(namespace, &RoleBinding{
 		Name: bindingName, Metadata: meta, Role: roleName, Groups: []string{groupName},
 	}); err != nil {
 		t.Fatalf("seedNamespaceRBAC PutNamespaceRoleBinding: %v", err)
@@ -178,20 +178,20 @@ func TestCanManageNamespaceRBACRequiresMatchingGroupRoleAndNamespace(t *testing.
 func TestCanManageNamespaceRBACAllowsDirectUserSource(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterGroup(Group{
+	if err := repo.PutClusterGroup(&Group{
 		Name:     "thetenant-group-oneoff",
 		Metadata: Metadata{Namespace: "thetenant"},
 		Users:    []string{"jdoe"},
 	}); err != nil {
 		t.Fatalf("PutClusterGroup: %v", err)
 	}
-	if err := repo.PutClusterRole(Role{
+	if err := repo.PutClusterRole(&Role{
 		Name: "thetenant-role-oneoff", Metadata: Metadata{Namespace: "thetenant"},
 		Rules: []Rule{{Apis: []string{AuthorizationAPI}, Resources: []string{"groups"}, Verbs: []string{"create"}}},
 	}); err != nil {
 		t.Fatalf("PutClusterRole: %v", err)
 	}
-	if err := repo.PutClusterRoleBinding(RoleBinding{
+	if err := repo.PutClusterRoleBinding(&RoleBinding{
 		Name: "thetenant-binding-oneoff", Metadata: Metadata{Namespace: "thetenant"},
 		Role: "thetenant-role-oneoff", Groups: []string{"thetenant-group-oneoff"},
 	}); err != nil {
@@ -227,20 +227,20 @@ func TestCanManageNamespaceRBACAllowsDirectUserSource(t *testing.T) {
 func TestAuthorizeAllowsDirectUserSource(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutNamespaceGroup("core", Group{
+	if err := repo.PutNamespaceGroup("core", &Group{
 		Name:     "core-group-oneoff",
 		Metadata: Metadata{Namespace: "core"},
 		Users:    []string{"jdoe"},
 	}); err != nil {
 		t.Fatalf("PutNamespaceGroup: %v", err)
 	}
-	if err := repo.PutNamespaceRole("core", Role{
+	if err := repo.PutNamespaceRole("core", &Role{
 		Name: "core-role-oneoff", Metadata: Metadata{Namespace: "core"},
 		Rules: []Rule{{Apis: []string{"compute.example.com"}, Resources: []string{"vm"}, Verbs: []string{"list"}}},
 	}); err != nil {
 		t.Fatalf("PutNamespaceRole: %v", err)
 	}
-	if err := repo.PutNamespaceRoleBinding("core", RoleBinding{
+	if err := repo.PutNamespaceRoleBinding("core", &RoleBinding{
 		Name: "core-binding-oneoff", Metadata: Metadata{Namespace: "core"},
 		Role: "core-role-oneoff", Groups: []string{"core-group-oneoff"},
 	}); err != nil {
@@ -276,7 +276,7 @@ func TestAuthorizeAllowsDirectUserSource(t *testing.T) {
 func TestCanManageNamespaceRBACHandlesNestedLDAPGroups(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterGroup(Group{
+	if err := repo.PutClusterGroup(&Group{
 		Name:     "core-group-sysadmin",
 		Metadata: Metadata{Namespace: "core"},
 		Groups:   []string{"sandbox-core-sysadmin"},
@@ -287,13 +287,13 @@ func TestCanManageNamespaceRBACHandlesNestedLDAPGroups(t *testing.T) {
 	// never the calling user directly — exactly what was reported. There is
 	// no synced member list to even consult any more: authorization checks
 	// the caller's own resolved groups below instead.
-	if err := repo.PutClusterRole(Role{
+	if err := repo.PutClusterRole(&Role{
 		Name: "core-role-sysadmin", Metadata: Metadata{Namespace: "core"},
 		Rules: []Rule{{Apis: []string{AuthorizationAPI}, Resources: []string{"*"}, Verbs: []string{"*"}}},
 	}); err != nil {
 		t.Fatalf("PutClusterRole: %v", err)
 	}
-	if err := repo.PutClusterRoleBinding(RoleBinding{
+	if err := repo.PutClusterRoleBinding(&RoleBinding{
 		Name: "core-binding-sysadmin", Metadata: Metadata{Namespace: "core"},
 		Role: "core-role-sysadmin", Groups: []string{"core-group-sysadmin"},
 	}); err != nil {

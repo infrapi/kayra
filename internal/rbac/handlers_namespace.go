@@ -121,7 +121,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 			return
 		}
 
-		if err := repo.PutNamespaceGroup(namespace, g); err != nil {
+		if err := repo.PutNamespaceGroup(namespace, &g); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateNamespaceGroup", ""))
 			return
 		}
@@ -165,7 +165,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 			return
 		}
 
-		if err := repo.PutNamespaceGroup(namespace, g); err != nil {
+		if err := repo.PutNamespaceGroup(namespace, &g); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateNamespaceGroup", ""))
 			return
 		}
@@ -204,7 +204,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 			return
 		}
 
-		if err := repo.PutNamespaceRole(namespace, role); err != nil {
+		if err := repo.PutNamespaceRole(namespace, &role); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateNamespaceRole", ""))
 			return
 		}
@@ -248,7 +248,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 			return
 		}
 
-		if err := repo.PutNamespaceRole(namespace, role); err != nil {
+		if err := repo.PutNamespaceRole(namespace, &role); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateNamespaceRole", ""))
 			return
 		}
@@ -291,7 +291,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 			return
 		}
 
-		if err := repo.PutNamespaceRoleBinding(namespace, rb); err != nil {
+		if err := repo.PutNamespaceRoleBinding(namespace, &rb); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateNamespaceRoleBinding", ""))
 			return
 		}
@@ -343,7 +343,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 			return
 		}
 
-		if err := repo.PutNamespaceRoleBinding(namespace, rb); err != nil {
+		if err := repo.PutNamespaceRoleBinding(namespace, &rb); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateNamespaceRoleBinding", ""))
 			return
 		}

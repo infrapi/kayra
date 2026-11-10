@@ -36,22 +36,22 @@ func TestApiNameForms(t *testing.T) {
 func TestCheckSubscribedApi(t *testing.T) {
 	repo := newTestRepo(t)
 	for _, ns := range []string{"core", "other", "pending"} {
-		if err := repo.PutNamespace(Namespace{Name: ns}); err != nil {
+		if err := repo.PutNamespace(&Namespace{Name: ns}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "compute.example.com", ShortName: "compute", Platform: testDeployPlatform, Region: testDeployRegion}); err != nil {
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "compute.example.com", ShortName: "compute", Platform: testDeployPlatform, Region: testDeployRegion}); err != nil {
 		t.Fatal(err)
 	}
 	// Registered elsewhere only: must not count as existing here.
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "dns.example.com", Platform: "prod", Region: testDeployRegion}); err != nil {
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "dns.example.com", Platform: "prod", Region: testDeployRegion}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.PutNamespaceSubscription("core", Subscription{ApiName: "compute.example.com", Active: true, State: SubscriptionStateSuccess}); err != nil {
+	if err := repo.PutNamespaceSubscription("core", &Subscription{ApiName: "compute.example.com", Active: true, State: SubscriptionStateSuccess}); err != nil {
 		t.Fatal(err)
 	}
 	// Subscribed but never reconciled: read-only.
-	if err := repo.PutNamespaceSubscription("pending", Subscription{ApiName: "compute.example.com", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("pending", &Subscription{ApiName: "compute.example.com", State: SubscriptionStateInit}); err != nil {
 		t.Fatal(err)
 	}
 

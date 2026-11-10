@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/infrapi/kayra/internal/middleware"
+	"github.com/infrapi/kayra/internal/store"
 )
 
 func noopGate(c *gin.Context) {}
@@ -60,19 +62,19 @@ func seedClusterRBAC(t *testing.T, repo *Repository, callerGroup, namespace stri
 	bindingName := namespace + "-binding-sysadmin"
 	meta := Metadata{Namespace: namespace}
 
-	if err := repo.PutClusterGroup(Group{
+	if err := repo.PutClusterGroup(&Group{
 		Name: groupName, Metadata: meta,
 		Groups: []string{callerGroup},
 	}); err != nil {
 		t.Fatalf("seedClusterRBAC PutClusterGroup: %v", err)
 	}
-	if err := repo.PutClusterRole(Role{
+	if err := repo.PutClusterRole(&Role{
 		Name: roleName, Metadata: meta,
 		Rules: []Rule{{Apis: []string{AuthorizationAPI}, Resources: []string{"*"}, Verbs: []string{"*"}}},
 	}); err != nil {
 		t.Fatalf("seedClusterRBAC PutClusterRole: %v", err)
 	}
-	if err := repo.PutClusterRoleBinding(RoleBinding{
+	if err := repo.PutClusterRoleBinding(&RoleBinding{
 		Name: bindingName, Metadata: meta, Role: roleName, Groups: []string{groupName},
 	}); err != nil {
 		t.Fatalf("seedClusterRBAC PutClusterRoleBinding: %v", err)
@@ -442,5 +444,50 @@ func TestNamespaceWriteGrantedEndToEndViaDirectUserBootstrap(t *testing.T) {
 	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/otherns/groups", Group{Name: "g1"})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("other namespace: status = %d, want 403, body %s", w.Code, w.Body.String())
+	}
+}
+
+// TestClusterGroupTimestamps confirms created_at/updated_at are stamped
+// server-side through a real create→update round trip: created_at is
+// kept across the update even though the PUT body doesn't carry it,
+// updated_at moves, and client-sent values for either are ignored.
+func TestClusterGroupTimestamps(t *testing.T) {
+	t1 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	t2 := t1.Add(time.Hour)
+	engine, _ := newTestEngine(t) // seeds its own records: set the clock after
+	orig := store.Now
+	clock := []time.Time{t1, t2}
+	store.Now = func() time.Time { now := clock[0]; clock = clock[1:]; return now }
+	t.Cleanup(func() { store.Now = orig })
+
+	forged := time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clustergroups",
+		Group{Name: "g1", Timestamps: store.Timestamps{CreatedAt: forged, UpdatedAt: forged}})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: status %d, body %s", w.Code, w.Body)
+	}
+	var created Group
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("unmarshal create: %v", err)
+	}
+	if !created.CreatedAt.Equal(t1) || !created.UpdatedAt.Equal(t1) {
+		t.Fatalf("create: created_at/updated_at = %v/%v, want both %v", created.CreatedAt, created.UpdatedAt, t1)
+	}
+
+	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.example.com/v1/clustergroups/g1", Group{Description: "v2"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("update: status %d, body %s", w.Code, w.Body)
+	}
+	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.example.com/v1/clustergroups/g1", nil)
+	var got Group
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal get: %v", err)
+	}
+	if !got.CreatedAt.Equal(t1) {
+		t.Fatalf("after update: created_at = %v, want preserved %v", got.CreatedAt, t1)
+	}
+	if !got.UpdatedAt.Equal(t2) {
+		t.Fatalf("after update: updated_at = %v, want %v", got.UpdatedAt, t2)
 	}
 }

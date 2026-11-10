@@ -58,19 +58,19 @@ func seedClusterRBAC(t *testing.T, repo *rbac.Repository, callerGroup, namespace
 	bindingName := namespace + "-binding-sysadmin"
 	meta := rbac.Metadata{Namespace: namespace}
 
-	if err := repo.PutClusterGroup(rbac.Group{
+	if err := repo.PutClusterGroup(&rbac.Group{
 		Name: groupName, Metadata: meta,
 		Groups: []string{callerGroup},
 	}); err != nil {
 		t.Fatalf("seedClusterRBAC PutClusterGroup: %v", err)
 	}
-	if err := repo.PutClusterRole(rbac.Role{
+	if err := repo.PutClusterRole(&rbac.Role{
 		Name: roleName, Metadata: meta,
 		Rules: []rbac.Rule{{Apis: []string{CatalogAPI}, Resources: []string{"*"}, Verbs: []string{"*"}}},
 	}); err != nil {
 		t.Fatalf("seedClusterRBAC PutClusterRole: %v", err)
 	}
-	if err := repo.PutClusterRoleBinding(rbac.RoleBinding{
+	if err := repo.PutClusterRoleBinding(&rbac.RoleBinding{
 		Name: bindingName, Metadata: meta, Role: roleName, Groups: []string{groupName},
 	}); err != nil {
 		t.Fatalf("seedClusterRBAC PutClusterRoleBinding: %v", err)

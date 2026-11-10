@@ -14,10 +14,10 @@ func TestClusterApiRegistrationRoundTripListDelete(t *testing.T) {
 		Name: "pki", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		DependsOn: []ApiRegistrationRef{{Platform: testDeployPlatform, Region: testDeployRegion, Name: "vault"}},
 	}
-	if err := repo.PutClusterApiRegistration(vault); err != nil {
+	if err := repo.PutClusterApiRegistration(&vault); err != nil {
 		t.Fatalf("PutClusterApiRegistration(vault): %v", err)
 	}
-	if err := repo.PutClusterApiRegistration(pki); err != nil {
+	if err := repo.PutClusterApiRegistration(&pki); err != nil {
 		t.Fatalf("PutClusterApiRegistration(pki): %v", err)
 	}
 
@@ -68,7 +68,7 @@ func TestApiRegistrationIsReferencedBySubscription(t *testing.T) {
 	repo := newTestRepo(t)
 
 	reg := ApiRegistration{Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}
-	if err := repo.PutClusterApiRegistration(reg); err != nil {
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
@@ -81,7 +81,7 @@ func TestApiRegistrationIsReferencedBySubscription(t *testing.T) {
 	}
 
 	sub := Subscription{ApiName: "vault", Active: true, State: SubscriptionStateInit}
-	if err := repo.PutNamespaceSubscription("myns", sub); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", &sub); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -103,11 +103,11 @@ func TestApiRegistrationIsReferencedIgnoresSubscriptionsOutsideDeploymentScope(t
 	repo := newTestRepo(t)
 
 	reg := ApiRegistration{Name: "vault", Platform: "other-platform", Region: "other-region", Active: true}
-	if err := repo.PutClusterApiRegistration(reg); err != nil {
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 	sub := Subscription{ApiName: "vault", Active: true, State: SubscriptionStateInit}
-	if err := repo.PutNamespaceSubscription("myns", sub); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", &sub); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -125,10 +125,10 @@ func TestNamespaceRoundTripAndListAll(t *testing.T) {
 
 	n1 := Namespace{Name: "myns", Active: true}
 	n2 := Namespace{Name: "otherns", Active: false}
-	if err := repo.PutNamespace(n1); err != nil {
+	if err := repo.PutNamespace(&n1); err != nil {
 		t.Fatalf("PutNamespace: %v", err)
 	}
-	if err := repo.PutNamespace(n2); err != nil {
+	if err := repo.PutNamespace(&n2); err != nil {
 		t.Fatalf("PutNamespace: %v", err)
 	}
 
@@ -162,10 +162,10 @@ func TestNamespaceRoundTripAndListAll(t *testing.T) {
 func TestListNamespacesDoesNotLeakSubscriptionResources(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutNamespace(Namespace{Name: "myns", Active: true}); err != nil {
+	if err := repo.PutNamespace(&Namespace{Name: "myns", Active: true}); err != nil {
 		t.Fatalf("PutNamespace: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault"}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", &Subscription{ApiName: "vault"}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -183,7 +183,7 @@ func TestNamespaceSubscriptionRoundTripListDelete(t *testing.T) {
 	ns := "myns"
 
 	sub := Subscription{ApiName: "vault", Active: true, State: SubscriptionStateSuccess}
-	if err := repo.PutNamespaceSubscription(ns, sub); err != nil {
+	if err := repo.PutNamespaceSubscription(ns, &sub); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 

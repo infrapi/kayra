@@ -63,7 +63,7 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateClusterGroup", "name is required"))
 			return
 		}
-		if err := repo.PutClusterGroup(g); err != nil {
+		if err := repo.PutClusterGroup(&g); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateClusterGroup", ""))
 			return
 		}
@@ -102,7 +102,7 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 		}
 		g.Name = name
 
-		if err := repo.PutClusterGroup(g); err != nil {
+		if err := repo.PutClusterGroup(&g); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateClusterGroup", ""))
 			return
 		}
@@ -134,7 +134,7 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateClusterRole", "name is required"))
 			return
 		}
-		if err := repo.PutClusterRole(role); err != nil {
+		if err := repo.PutClusterRole(&role); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateClusterRole", ""))
 			return
 		}
@@ -173,7 +173,7 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 		}
 		role.Name = name
 
-		if err := repo.PutClusterRole(role); err != nil {
+		if err := repo.PutClusterRole(&role); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateClusterRole", ""))
 			return
 		}
@@ -209,7 +209,7 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 			httpapi.Fail(c, err)
 			return
 		}
-		if err := repo.PutClusterRoleBinding(rb); err != nil {
+		if err := repo.PutClusterRoleBinding(&rb); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateClusterRoleBinding", ""))
 			return
 		}
@@ -256,7 +256,7 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 			return
 		}
 
-		if err := repo.PutClusterRoleBinding(rb); err != nil {
+		if err := repo.PutClusterRoleBinding(&rb); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateClusterRoleBinding", ""))
 			return
 		}

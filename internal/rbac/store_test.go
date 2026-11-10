@@ -26,7 +26,7 @@ func TestClusterGroupRoundTrip(t *testing.T) {
 		Groups:      []string{"sandbox-thetenant-sysadmin"},
 	}
 
-	if err := repo.PutClusterGroup(g); err != nil {
+	if err := repo.PutClusterGroup(&g); err != nil {
 		t.Fatalf("PutClusterGroup: %v", err)
 	}
 
@@ -48,7 +48,7 @@ func TestNamespaceRoleAndBindingRoundTrip(t *testing.T) {
 		Metadata: Metadata{Namespace: ns, Region: "eu-west-1", Platform: "sandbox"},
 		Rules:    []Rule{{Apis: []string{"*"}, Resources: []string{"*"}, Verbs: []string{"get", "list"}}},
 	}
-	if err := repo.PutNamespaceRole(ns, role); err != nil {
+	if err := repo.PutNamespaceRole(ns, &role); err != nil {
 		t.Fatalf("PutNamespaceRole: %v", err)
 	}
 
@@ -58,7 +58,7 @@ func TestNamespaceRoleAndBindingRoundTrip(t *testing.T) {
 		Role:     role.Name,
 		Groups:   []string{"myns-group-apps"},
 	}
-	if err := repo.PutNamespaceRoleBinding(ns, rb); err != nil {
+	if err := repo.PutNamespaceRoleBinding(ns, &rb); err != nil {
 		t.Fatalf("PutNamespaceRoleBinding: %v", err)
 	}
 
@@ -83,7 +83,7 @@ func TestClusterGroupListAndDelete(t *testing.T) {
 	repo := newTestRepo(t)
 
 	for _, name := range []string{"g-b", "g-a"} {
-		if err := repo.PutClusterGroup(Group{Name: name}); err != nil {
+		if err := repo.PutClusterGroup(&Group{Name: name}); err != nil {
 			t.Fatalf("PutClusterGroup(%s): %v", name, err)
 		}
 	}
@@ -115,10 +115,10 @@ func TestClusterGroupListAndDelete(t *testing.T) {
 func TestClusterRoleAndRoleBindingListAndDelete(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterRole(Role{Name: "r1"}); err != nil {
+	if err := repo.PutClusterRole(&Role{Name: "r1"}); err != nil {
 		t.Fatalf("PutClusterRole: %v", err)
 	}
-	if err := repo.PutClusterRoleBinding(RoleBinding{Name: "b1", Role: "r1"}); err != nil {
+	if err := repo.PutClusterRoleBinding(&RoleBinding{Name: "b1", Role: "r1"}); err != nil {
 		t.Fatalf("PutClusterRoleBinding: %v", err)
 	}
 
@@ -151,10 +151,10 @@ func TestNamespaceListAndDelete(t *testing.T) {
 	ns := "myns"
 	other := "otherns"
 
-	if err := repo.PutNamespaceGroup(ns, Group{Name: "g1"}); err != nil {
+	if err := repo.PutNamespaceGroup(ns, &Group{Name: "g1"}); err != nil {
 		t.Fatalf("PutNamespaceGroup: %v", err)
 	}
-	if err := repo.PutNamespaceGroup(other, Group{Name: "g1"}); err != nil {
+	if err := repo.PutNamespaceGroup(other, &Group{Name: "g1"}); err != nil {
 		t.Fatalf("PutNamespaceGroup(other): %v", err)
 	}
 

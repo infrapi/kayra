@@ -153,3 +153,39 @@ The one generic helper [`rbac`](rbac.md) and `internal/catalog` share for
 their `"/config"`-suffixed records, so both packages' keys coexist
 under the same namespace tree without colliding with each other's sibling
 data (a group's `/members`, say).
+
+## Timestamps
+
+Every resource Kayra persists — [`rbac`](rbac.md)'s `Group`/`Role`/
+`RoleBinding` and `internal/catalog`'s `ApiRegistration`/`Namespace`/
+`Subscription` — embeds `store.Timestamps` and is written through
+`PutObject`, never `PutJSON` directly:
+
+```go
+type Group struct {
+	Name string `json:"name"`
+	// ...
+	store.Timestamps `yaml:",inline"` // created_at, updated_at
+}
+
+store.PutObject(s, key, &group) // stamps group in place, then PutJSON
+```
+
+Both fields are server-owned, RFC 3339, UTC, and appear at the top level
+of the object's JSON (`"created_at"`, `"updated_at"`) in etcd and in every
+API response:
+
+- `updated_at` is set to now on **every** write — a create, an API
+  update, or an internal one (`ActivateNamespace`,
+  `ActivateSubscription`, `SetSubscriptionSyncID`, ...).
+- `created_at` is carried over from the record already stored at the
+  key, so a `PUT` body that omits it (or sends anything else) can never
+  change it. It is set to now when there is no record yet, or when the
+  stored one predates timestamps.
+
+The read of the existing record and the write are not one transaction:
+two concurrent creates of the same key each stamp their own
+`created_at`, and the last write wins, just as for every other field.
+Caches and secrets that aren't API resources (the authz decision cache,
+OIDC JWKS cache, OAuth2 broker state, the PAT keypair and PAT records,
+which carry their own `CreatedAt`) are not stamped.

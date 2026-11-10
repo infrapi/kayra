@@ -120,7 +120,7 @@ func RegisterApiRegistrationRoutes(r gin.IRouter, repo *Repository, gate gin.Han
 			httpapi.Fail(c, err)
 			return
 		}
-		if err := repo.PutClusterApiRegistration(reg); err != nil {
+		if err := repo.PutClusterApiRegistration(&reg); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.CreateApiRegistration", ""))
 			return
 		}
@@ -218,7 +218,7 @@ func RegisterApiRegistrationRoutes(r gin.IRouter, repo *Repository, gate gin.Han
 			return
 		}
 
-		if err := repo.PutClusterApiRegistration(reg); err != nil {
+		if err := repo.PutClusterApiRegistration(&reg); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.UpdateApiRegistration", ""))
 			return
 		}
@@ -288,7 +288,7 @@ func RegisterApiRegistrationRoutes(r gin.IRouter, repo *Repository, gate gin.Han
 			reg.SyncID = syncID
 		}
 
-		if err := repo.PutClusterApiRegistration(reg); err != nil {
+		if err := repo.PutClusterApiRegistration(&reg); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.SyncApiRegistration", ""))
 			return
 		}

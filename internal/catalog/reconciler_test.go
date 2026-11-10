@@ -26,7 +26,7 @@ func mustMarshal(t *testing.T, v any) []byte {
 func TestReconcilerActivatesNewNamespace(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutNamespace(Namespace{Name: "core"}); err != nil {
+	if err := repo.PutNamespace(&Namespace{Name: "core"}); err != nil {
 		t.Fatalf("PutNamespace: %v", err)
 	}
 
@@ -45,13 +45,13 @@ func TestReconcilerActivatesNewNamespace(t *testing.T) {
 func TestReconcilerActivatesNewSubscription(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterApiRegistration(ApiRegistration{
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "trigger",
 	}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", &Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -84,7 +84,7 @@ func TestReconcilerActivatesNewSubscription(t *testing.T) {
 func TestReconcilerIgnoresAlreadyActiveRecords(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutNamespace(Namespace{Name: "core", Active: true}); err != nil {
+	if err := repo.PutNamespace(&Namespace{Name: "core", Active: true}); err != nil {
 		t.Fatalf("PutNamespace: %v", err)
 	}
 
@@ -118,10 +118,10 @@ func TestReconcilerReconcilesActiveSubscriptionOnApiRegistrationSyncIDChange(t *
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "api",
 	}
-	if err := repo.PutClusterApiRegistration(reg); err != nil {
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{
+	if err := repo.PutNamespaceSubscription("myns", &Subscription{
 		ApiName: "vault", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "sync-1",
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
@@ -138,7 +138,7 @@ func TestReconcilerReconcilesActiveSubscriptionOnApiRegistrationSyncIDChange(t *
 	time.Sleep(300 * time.Millisecond)
 
 	reg.SyncID = "sync-2"
-	if err := repo.PutClusterApiRegistration(reg); err != nil {
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatalf("PutClusterApiRegistration (bump sync_id): %v", err)
 	}
 
@@ -168,13 +168,13 @@ func TestReconcilerApiRegistrationUpdateSkipsInactiveSubscriptions(t *testing.T)
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "trigger",
 	}
-	if err := repo.PutClusterApiRegistration(reg); err != nil {
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
 	// a subscription that exists but was never activated (simulating a
 	// reconciler that hasn't gotten to it yet).
-	if err := repo.PutNamespaceSubscription("myns", Subscription{
+	if err := repo.PutNamespaceSubscription("myns", &Subscription{
 		ApiName: "vault", State: SubscriptionStateInit,
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
@@ -204,14 +204,14 @@ func TestReconcilerApiRegistrationUpdateSkipsInactiveSubscriptions(t *testing.T)
 func TestReconcilerSkipsSubscriptionWhenApiRegistrationSyncIDEmpty(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterApiRegistration(ApiRegistration{
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		Mode: "trigger", // SyncID deliberately left empty.
 	}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 	sub := Subscription{ApiName: "vault", State: SubscriptionStateInit}
-	if err := repo.PutNamespaceSubscription("myns", sub); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", &sub); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -231,7 +231,7 @@ func TestReconcilerSkipsSubscriptionWhenApiRegistrationSyncIDEmpty(t *testing.T)
 		t.Fatalf("GetClusterApiRegistration: %v", err)
 	}
 	reg.SyncID = "sync-1"
-	if err := repo.PutClusterApiRegistration(reg); err != nil {
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 	w.handleNewSubscription(context.Background(), "myns", "vault", mustMarshal(t, sub), 0)
@@ -260,11 +260,11 @@ func TestReconcilerHandleApiRegistrationPutRespectsCanaryNamespaces(t *testing.T
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "trigger",
 	}
-	if err := repo.PutClusterApiRegistration(reg); err != nil {
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 	for _, ns := range []string{"canary-ns", "other-ns"} {
-		if err := repo.PutNamespaceSubscription(ns, Subscription{
+		if err := repo.PutNamespaceSubscription(ns, &Subscription{
 			ApiName: "vault", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "sync-1",
 		}); err != nil {
 			t.Fatalf("PutNamespaceSubscription(%s): %v", ns, err)
@@ -281,7 +281,7 @@ func TestReconcilerHandleApiRegistrationPutRespectsCanaryNamespaces(t *testing.T
 	// value handleApiRegistrationPut is handed below.
 	reg.SyncID = "sync-2"
 	reg.CanaryNamespaces = []string{"canary-ns"}
-	if err := repo.PutClusterApiRegistration(reg); err != nil {
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatalf("PutClusterApiRegistration (bump sync_id, canary): %v", err)
 	}
 	var wg sync.WaitGroup
@@ -306,7 +306,7 @@ func TestReconcilerHandleApiRegistrationPutRespectsCanaryNamespaces(t *testing.T
 
 	// release: same SyncID, no restriction — other-ns now reconciles too.
 	reg.CanaryNamespaces = nil
-	if err := repo.PutClusterApiRegistration(reg); err != nil {
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatalf("PutClusterApiRegistration (release): %v", err)
 	}
 	w.handleApiRegistrationPut(context.Background(), &wg, mustMarshal(t, reg))
@@ -393,13 +393,13 @@ func TestReconcileFallsBackToDefaultMode(t *testing.T) {
 func TestReconcilerDefaultModeActivatesModeLessApiRegistration(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterApiRegistration(ApiRegistration{
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", // Mode deliberately left unset.
 	}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", &Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -427,13 +427,13 @@ func TestReconcilerDefaultModeActivatesModeLessApiRegistration(t *testing.T) {
 func TestReconcilerReconcileFailureLeavesSubscriptionUnsynced(t *testing.T) {
 	repo := newTestRepo(t)
 
-	if err := repo.PutClusterApiRegistration(ApiRegistration{
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", // Mode deliberately left unset: reconcile can never succeed.
 	}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", &Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -453,7 +453,7 @@ func TestReconcilerReconcileFailureLeavesSubscriptionUnsynced(t *testing.T) {
 		t.Fatalf("sub = %+v, want still inactive with empty CurrentSyncID (reconcile never succeeds)", got)
 	}
 
-	if err := repo.PutClusterApiRegistration(ApiRegistration{
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion, Active: true,
 		SyncID: "sync-1", Mode: "trigger",
 	}); err != nil {
@@ -768,13 +768,13 @@ func TestEnsureReconciledCoalescesRacingCallsForSameSubscription(t *testing.T) {
 	defer srv.Close()
 
 	repo := newTestRepo(t)
-	if err := repo.PutClusterApiRegistration(ApiRegistration{
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault", Platform: testDeployPlatform, Region: testDeployRegion,
 		Active: true, SyncID: "sync-1", Mode: "trigger",
 	}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("myns", Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("myns", &Subscription{ApiName: "vault", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 

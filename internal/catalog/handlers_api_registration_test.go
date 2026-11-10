@@ -152,17 +152,17 @@ func TestApiRegistrationStatus(t *testing.T) {
 		t.Fatalf("GetClusterApiRegistration: %v", err)
 	}
 
-	if err := repo.PutNamespaceSubscription("synced-ns", Subscription{
+	if err := repo.PutNamespaceSubscription("synced-ns", &Subscription{
 		ApiName: "vault.example.com", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: reg.SyncID,
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("stale-ns", Subscription{
+	if err := repo.PutNamespaceSubscription("stale-ns", &Subscription{
 		ApiName: "vault.example.com", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "old-sync-id",
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription("pending-ns", Subscription{
+	if err := repo.PutNamespaceSubscription("pending-ns", &Subscription{
 		ApiName: "vault.example.com", State: SubscriptionStateInit,
 	}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
@@ -207,7 +207,7 @@ func TestApiRegistrationSyncCanaryRollout(t *testing.T) {
 	engine, repo := newTestEngine(t)
 
 	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault.example.com", Active: true})
-	if err := repo.PutNamespaceSubscription("canary-ns", Subscription{ApiName: "vault.example.com", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription("canary-ns", &Subscription{ApiName: "vault.example.com", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -307,7 +307,7 @@ func TestApiRegistrationRoutesAreScopedToDeployment(t *testing.T) {
 	// directly (bypassing HTTP, as a sibling deployment sharing the
 	// same store would), must not show up in this instance's list or
 	// be reachable by name.
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault.example.com", Platform: "other-platform", Region: "other-region"}); err != nil {
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "vault.example.com", Platform: "other-platform", Region: "other-region"}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 

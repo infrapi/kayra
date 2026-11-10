@@ -13,6 +13,8 @@
 // never the other way.
 package catalog
 
+import "github.com/infrapi/kayra/internal/store"
+
 // CatalogAPI and SystemAPI name this package's two API groups,
 // laid out exactly like rbac.AuthorizationAPI: CatalogAPI's
 // cluster-scoped resource (apiregistrations) is gated by
@@ -105,6 +107,10 @@ type ApiRegistration struct {
 	// back to reconciler.default_mode when empty; reconcile fails only
 	// when neither resolves to anything at all.
 	Mode string `json:"mode" yaml:"mode"`
+
+	// Timestamps (created_at/updated_at) are server-owned — set by
+	// store.PutObject on every write, never read from a request.
+	store.Timestamps `yaml:",inline"`
 }
 
 // Subscription links a namespace to one ApiRegistration by its long
@@ -137,6 +143,10 @@ type Subscription struct {
 	// handlers_subscription.go), so it can never go stale between
 	// Reconciler runs.
 	CurrentSyncID string `json:"current_sync_id" yaml:"current_sync_id"`
+
+	// Timestamps (created_at/updated_at) are server-owned — set by
+	// store.PutObject on every write, never read from a request.
+	store.Timestamps `yaml:",inline"`
 }
 
 const (
@@ -164,4 +174,8 @@ func ValidSubscriptionState(state string) bool {
 type Namespace struct {
 	Name   string `json:"name"`
 	Active bool   `json:"active"`
+
+	// Timestamps (created_at/updated_at) are server-owned — set by
+	// store.PutObject on every write, never read from a request.
+	store.Timestamps
 }

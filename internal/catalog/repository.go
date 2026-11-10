@@ -26,8 +26,8 @@ func NewRepository(s store.Store, keys store.Keys) *Repository {
 
 // --- Cluster-scoped API registrations ---
 
-func (r *Repository) PutClusterApiRegistration(reg ApiRegistration) error {
-	return store.PutJSON(r.store, r.keys.ClusterApiRegistrationConfig(reg.Platform, reg.Region, reg.Name), reg)
+func (r *Repository) PutClusterApiRegistration(reg *ApiRegistration) error {
+	return store.PutObject(r.store, r.keys.ClusterApiRegistrationConfig(reg.Platform, reg.Region, reg.Name), reg)
 }
 
 func (r *Repository) GetClusterApiRegistration(platform, region, name string) (ApiRegistration, error) {
@@ -102,8 +102,8 @@ func (r *Repository) apiRegistrationIsReferenced(platform, region, name, deploym
 
 // --- Namespaces (the legacy model's "Tenant": a namespace is a tenant) ---
 
-func (r *Repository) PutNamespace(n Namespace) error {
-	return store.PutJSON(r.store, r.keys.NamespaceConfig(n.Name), n)
+func (r *Repository) PutNamespace(n *Namespace) error {
+	return store.PutObject(r.store, r.keys.NamespaceConfig(n.Name), n)
 }
 
 func (r *Repository) GetNamespace(name string) (Namespace, error) {
@@ -125,7 +125,7 @@ func (r *Repository) ActivateNamespace(name string) error {
 		return nil
 	}
 	n.Active = true
-	return r.PutNamespace(n)
+	return r.PutNamespace(&n)
 }
 
 func (r *Repository) DeleteNamespace(name string) error {
@@ -165,8 +165,8 @@ func (r *Repository) ListNamespaces() ([]Namespace, error) {
 
 // --- Namespace-scoped subscriptions ---
 
-func (r *Repository) PutNamespaceSubscription(namespace string, sub Subscription) error {
-	return store.PutJSON(r.store, r.keys.NamespaceSubscriptionConfig(namespace, sub.ApiName), sub)
+func (r *Repository) PutNamespaceSubscription(namespace string, sub *Subscription) error {
+	return store.PutObject(r.store, r.keys.NamespaceSubscriptionConfig(namespace, sub.ApiName), sub)
 }
 
 func (r *Repository) GetNamespaceSubscription(namespace, apiName string) (Subscription, error) {
@@ -208,7 +208,7 @@ func (r *Repository) ActivateSubscription(namespace, apiName, syncID string) err
 	sub.Active = true
 	sub.State = SubscriptionStateSuccess
 	sub.CurrentSyncID = syncID
-	return r.PutNamespaceSubscription(namespace, sub)
+	return r.PutNamespaceSubscription(namespace, &sub)
 }
 
 // SetSubscriptionSyncID updates namespace's subscription to apiName's
@@ -221,7 +221,7 @@ func (r *Repository) SetSubscriptionSyncID(namespace, apiName, syncID string) er
 		return err
 	}
 	sub.CurrentSyncID = syncID
-	return r.PutNamespaceSubscription(namespace, sub)
+	return r.PutNamespaceSubscription(namespace, &sub)
 }
 
 // ListSubscriptionsToApi returns every namespace's subscription to

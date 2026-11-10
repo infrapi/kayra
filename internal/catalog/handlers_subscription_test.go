@@ -98,13 +98,13 @@ func TestSubscriptionResponseComputesExpectedSyncID(t *testing.T) {
 	engine, repo := newTestEngine(t)
 	ns := testNamespace
 
-	if err := repo.PutClusterApiRegistration(ApiRegistration{
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion,
 		Active: true, SyncID: "api-sync-1",
 	}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription(ns, Subscription{ApiName: "vault.example.com", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription(ns, &Subscription{ApiName: "vault.example.com", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 
@@ -139,7 +139,7 @@ func TestSubscriptionResponseComputesExpectedSyncID(t *testing.T) {
 
 	// the api registration's SyncID moves on: expected_sync_id follows immediately
 	// (computed fresh), current_sync_id does not (nothing reconciled it).
-	if err := repo.PutClusterApiRegistration(ApiRegistration{
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion,
 		Active: true, SyncID: "api-sync-2",
 	}); err != nil {
@@ -160,13 +160,13 @@ func TestSubscriptionForceSync(t *testing.T) {
 	engine, repo := newTestEngine(t)
 	ns := testNamespace
 
-	if err := repo.PutClusterApiRegistration(ApiRegistration{
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{
 		Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion,
 		Active: true, SyncID: "api-sync-1",
 	}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription(ns, Subscription{ApiName: "vault.example.com", State: SubscriptionStateInit}); err != nil {
+	if err := repo.PutNamespaceSubscription(ns, &Subscription{ApiName: "vault.example.com", State: SubscriptionStateInit}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 	if err := repo.ActivateSubscription(ns, "vault.example.com", "api-sync-1"); err != nil {
@@ -225,7 +225,7 @@ func TestSubscriptionResponseAlwaysIncludesSyncFields(t *testing.T) {
 	engine, repo := newTestEngine(t)
 	ns := testNamespace
 
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}); err != nil {
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions", subscriptionCreateRequest{ApiName: "vault.example.com"})
@@ -267,7 +267,7 @@ func TestSubscriptionCreateRejectsMissingApiRegistration(t *testing.T) {
 func TestSubscriptionOnlyMatchesApiRegistrationInDeploymentScope(t *testing.T) {
 	engine, repo := newTestEngine(t)
 
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault.example.com", Platform: "other-platform", Region: "other-region", Active: true}); err != nil {
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "vault.example.com", Platform: "other-platform", Region: "other-region", Active: true}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
@@ -314,7 +314,7 @@ func TestSubscriptionRequiresClusterRBAC(t *testing.T) {
 
 	repo := NewRepository(s, keys)
 	rbacRepo := rbac.NewRepository(s, keys)
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}); err != nil {
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
@@ -346,10 +346,10 @@ func TestSubscriptionSyncIsGatedOnItsOwnResource(t *testing.T) {
 
 	repo := NewRepository(s, keys)
 	rbacRepo := rbac.NewRepository(s, keys)
-	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion, Active: true, SyncID: "sync-1"}); err != nil {
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion, Active: true, SyncID: "sync-1"}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	if err := repo.PutNamespaceSubscription(testNamespace, Subscription{ApiName: "vault.example.com"}); err != nil {
+	if err := repo.PutNamespaceSubscription(testNamespace, &Subscription{ApiName: "vault.example.com"}); err != nil {
 		t.Fatalf("PutNamespaceSubscription: %v", err)
 	}
 	if err := repo.ActivateSubscription(testNamespace, "vault.example.com", "sync-1"); err != nil {
@@ -357,7 +357,7 @@ func TestSubscriptionSyncIsGatedOnItsOwnResource(t *testing.T) {
 	}
 
 	meta := rbac.Metadata{Namespace: testNamespace}
-	if err := rbacRepo.PutClusterGroup(rbac.Group{
+	if err := rbacRepo.PutClusterGroup(&rbac.Group{
 		Name: "g", Metadata: meta,
 		Groups: []string{testAdminGroup},
 	}); err != nil {
@@ -365,13 +365,13 @@ func TestSubscriptionSyncIsGatedOnItsOwnResource(t *testing.T) {
 	}
 	// Grants resource "subscriptions"/"update" only — not the sync
 	// action's own "subscriptions/sync" resource.
-	if err := rbacRepo.PutClusterRole(rbac.Role{
+	if err := rbacRepo.PutClusterRole(&rbac.Role{
 		Name: "r", Metadata: meta,
 		Rules: []rbac.Rule{{Apis: []string{CatalogAPI}, Resources: []string{"subscriptions"}, Verbs: []string{"update"}}},
 	}); err != nil {
 		t.Fatalf("PutClusterRole: %v", err)
 	}
-	if err := rbacRepo.PutClusterRoleBinding(rbac.RoleBinding{
+	if err := rbacRepo.PutClusterRoleBinding(&rbac.RoleBinding{
 		Name: "rb", Metadata: meta, Role: "r", Groups: []string{"g"},
 	}); err != nil {
 		t.Fatalf("PutClusterRoleBinding: %v", err)

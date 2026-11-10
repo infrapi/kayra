@@ -3,6 +3,8 @@
 // and "Create default rights on namespace side" sections describe.
 package rbac
 
+import "github.com/infrapi/kayra/internal/store"
+
 // Metadata is the region/platform/namespace scoping carried by every
 // group, role and role binding.
 type Metadata struct {
@@ -42,6 +44,10 @@ type Group struct {
 	Metadata    Metadata `json:"metadata" yaml:"metadata"`
 	Groups      []string `json:"groups" yaml:"groups"`
 	Users       []string `json:"users" yaml:"users"`
+
+	// Timestamps (created_at/updated_at) are server-owned — set by
+	// store.PutObject on every write, never read from a request.
+	store.Timestamps `yaml:",inline"`
 }
 
 // Rule is one RBAC rule: which apis, resources and verbs it grants.
@@ -64,6 +70,10 @@ type Role struct {
 	Description string   `json:"description" yaml:"description"`
 	Metadata    Metadata `json:"metadata" yaml:"metadata"`
 	Rules       []Rule   `json:"rules" yaml:"rules"`
+
+	// Timestamps (created_at/updated_at) are server-owned — set by
+	// store.PutObject on every write, never read from a request.
+	store.Timestamps `yaml:",inline"`
 }
 
 // RoleBinding grants a Role to a set of Groups, at the same
@@ -74,4 +84,8 @@ type RoleBinding struct {
 	Metadata    Metadata `json:"metadata" yaml:"metadata"`
 	Role        string   `json:"role" yaml:"role"`
 	Groups      []string `json:"groups" yaml:"groups"`
+
+	// Timestamps (created_at/updated_at) are server-owned — set by
+	// store.PutObject on every write, never read from a request.
+	store.Timestamps `yaml:",inline"`
 }

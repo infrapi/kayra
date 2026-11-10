@@ -19,13 +19,12 @@ func NewRepository(s store.Store, keys store.Keys) *Repository {
 	return &Repository{store: s, keys: keys}
 }
 
-// putJSON/getJSON/listConfigValues delegate to internal/store's generic
+// Put* methods stamp their argument's created_at/updated_at in place
+// (store.PutObject), so callers pass a pointer and can return it as-is.
+//
+// getJSON/listConfigValues delegate to internal/store's generic
 // JSON-record helpers — shared with internal/catalog, which persists
 // ApiRegistration/Namespace/Subscription under the same "/config" convention.
-func putJSON(s store.Store, key string, v any) error {
-	return store.PutJSON(s, key, v)
-}
-
 func getJSON(s store.Store, key string, v any) error {
 	return store.GetJSON(s, key, v)
 }
@@ -36,8 +35,8 @@ func listConfigValues(s store.Store, prefix string) ([][]byte, error) {
 
 // --- Cluster scope ---
 
-func (r *Repository) PutClusterGroup(g Group) error {
-	return putJSON(r.store, r.keys.ClusterGroupConfig(g.Name), g)
+func (r *Repository) PutClusterGroup(g *Group) error {
+	return store.PutObject(r.store, r.keys.ClusterGroupConfig(g.Name), g)
 }
 
 func (r *Repository) GetClusterGroup(name string) (Group, error) {
@@ -68,8 +67,8 @@ func (r *Repository) DeleteClusterGroup(name string) error {
 	return nil
 }
 
-func (r *Repository) PutClusterRole(role Role) error {
-	return putJSON(r.store, r.keys.ClusterRoleConfig(role.Name), role)
+func (r *Repository) PutClusterRole(role *Role) error {
+	return store.PutObject(r.store, r.keys.ClusterRoleConfig(role.Name), role)
 }
 
 func (r *Repository) GetClusterRole(name string) (Role, error) {
@@ -99,8 +98,8 @@ func (r *Repository) DeleteClusterRole(name string) error {
 	return nil
 }
 
-func (r *Repository) PutClusterRoleBinding(rb RoleBinding) error {
-	return putJSON(r.store, r.keys.ClusterRoleBindingConfig(rb.Name), rb)
+func (r *Repository) PutClusterRoleBinding(rb *RoleBinding) error {
+	return store.PutObject(r.store, r.keys.ClusterRoleBindingConfig(rb.Name), rb)
 }
 
 func (r *Repository) GetClusterRoleBinding(name string) (RoleBinding, error) {
@@ -132,8 +131,8 @@ func (r *Repository) DeleteClusterRoleBinding(name string) error {
 
 // --- Namespace scope ---
 
-func (r *Repository) PutNamespaceGroup(namespace string, g Group) error {
-	return putJSON(r.store, r.keys.NamespaceGroupConfig(namespace, g.Name), g)
+func (r *Repository) PutNamespaceGroup(namespace string, g *Group) error {
+	return store.PutObject(r.store, r.keys.NamespaceGroupConfig(namespace, g.Name), g)
 }
 
 func (r *Repository) GetNamespaceGroup(namespace, name string) (Group, error) {
@@ -164,8 +163,8 @@ func (r *Repository) DeleteNamespaceGroup(namespace, name string) error {
 	return nil
 }
 
-func (r *Repository) PutNamespaceRole(namespace string, role Role) error {
-	return putJSON(r.store, r.keys.NamespaceRoleConfig(namespace, role.Name), role)
+func (r *Repository) PutNamespaceRole(namespace string, role *Role) error {
+	return store.PutObject(r.store, r.keys.NamespaceRoleConfig(namespace, role.Name), role)
 }
 
 func (r *Repository) GetNamespaceRole(namespace, name string) (Role, error) {
@@ -195,8 +194,8 @@ func (r *Repository) DeleteNamespaceRole(namespace, name string) error {
 	return nil
 }
 
-func (r *Repository) PutNamespaceRoleBinding(namespace string, rb RoleBinding) error {
-	return putJSON(r.store, r.keys.NamespaceRoleBindingConfig(namespace, rb.Name), rb)
+func (r *Repository) PutNamespaceRoleBinding(namespace string, rb *RoleBinding) error {
+	return store.PutObject(r.store, r.keys.NamespaceRoleBindingConfig(namespace, rb.Name), rb)
 }
 
 func (r *Repository) GetNamespaceRoleBinding(namespace, name string) (RoleBinding, error) {

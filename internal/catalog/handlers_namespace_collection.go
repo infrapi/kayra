@@ -23,7 +23,7 @@ type namespaceUpsertRequest struct {
 
 // namespaceResponse is what every namespace handler returns.
 func namespaceResponse(n Namespace) gin.H {
-	return gin.H{"name": n.Name, "active": n.Active}
+	return gin.H{"name": n.Name, "active": n.Active, "created_at": n.CreatedAt, "updated_at": n.UpdatedAt}
 }
 
 // RegisterNamespaceCollectionRoutes mounts the namespace resource itself
@@ -51,7 +51,7 @@ func RegisterNamespaceCollectionRoutes(r gin.IRouter, repo *Repository, gate gin
 		}
 
 		n := Namespace{Name: req.Name, Active: false}
-		if err := repo.PutNamespace(n); err != nil {
+		if err := repo.PutNamespace(&n); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.CreateNamespace", ""))
 			return
 		}
