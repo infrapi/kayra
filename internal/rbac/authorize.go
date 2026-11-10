@@ -28,39 +28,25 @@ func Allows(rules []Rule, api, resource, verb string) bool {
 	return false
 }
 
-// AuthorizationAPI and SubscriptionAPI are the fixed Rule.Apis values
-// Kayra's own management-plane resources are checked against — one
-// per API group, named by that group's own URN exactly like any other
-// app's (e.g. "compute.example.com"), mirroring how each is mounted
-// (see RegisterNamespaceRoutes in this package and in internal/catalog):
-//
-//   - AuthorizationAPI gates "groups", "roles", "rolebindings"
-//     (CanManageNamespaceRBAC), mounted under
-//     /apis/authorization.example.com/v1/....
-//   - SubscriptionAPI gates "subscriptions", "subscriptions/sync"
-//     (RequireClusterRBAC, from internal/catalog), mounted under
-//     /apis/subscription.example.com/v1/....
-//
-// Each is just an ordinary API URN in the same vocabulary Authorize uses
-// for any other app's own API (e.g. "compute.example.com"), not a
-// separate concept — Kayra's own management plane is two apps like any
-// other here, not one. A role that needs both grants a rule per api.
+// AuthorizationAPI is the fixed Rule.Apis value Kayra's own RBAC
+// management resources are checked against — named by its API group's
+// own URN exactly like any other app's (e.g. "compute.example.com"):
+// it gates "groups", "roles", "rolebindings" (CanManageNamespaceRBAC),
+// mounted under /apis/authorization.example.com/v1/.... Its sibling for
+// subscriptions, catalog.CatalogAPI, lives with the routes it
+// gates in internal/catalog. A role that needs both grants a rule per
+// api.
 //
 // "example.com" is a placeholder, not a hardcoded domain: SetAPIDomain
-// rebuilds both from a deployment's own domain (config.AppConfig.APIDomain)
+// rebuilds it from a deployment's own domain (config.AppConfig.APIDomain)
 // — call it once, before any route is registered or any stored Rule is
-// compared against these, since every mount path and every authored
-// Role.Rules entry must agree on the same URNs.
-var (
-	AuthorizationAPI = "authorization.example.com"
-	SubscriptionAPI  = "subscription.example.com"
-)
+// compared against it, since every mount path and every authored
+// Role.Rules entry must agree on the same URN.
+var AuthorizationAPI = "authorization.example.com"
 
-// SetAPIDomain rebuilds AuthorizationAPI and SubscriptionAPI as
-// "authorization.<domain>" and "subscription.<domain>".
+// SetAPIDomain rebuilds AuthorizationAPI as "authorization.<domain>".
 func SetAPIDomain(domain string) {
 	AuthorizationAPI = "authorization." + domain
-	SubscriptionAPI = "subscription." + domain
 }
 
 // CanManageNamespaceRBAC reports whether a caller identified by userID

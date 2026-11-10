@@ -19,7 +19,7 @@ func TestNamespaceSubscriptionCRUD(t *testing.T) {
 
 	// active/state are computed: there is no request field that can make
 	// a subscription come back anything but disabled/init.
-	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions", subscriptionCreateRequest{
+	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions", subscriptionCreateRequest{
 		ApiName: "vault.example.com",
 	})
 	if w.Code != http.StatusCreated {
@@ -33,7 +33,7 @@ func TestNamespaceSubscriptionCRUD(t *testing.T) {
 		t.Fatalf("created = %+v, want disabled/init", created)
 	}
 
-	w = doJSON(t, engine, http.MethodGet, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("list: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -45,14 +45,14 @@ func TestNamespaceSubscriptionCRUD(t *testing.T) {
 		t.Fatalf("list = %v, want 1 entry", subs)
 	}
 
-	w = doJSON(t, engine, http.MethodGet, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("get: status %d, body %s", w.Code, w.Body.String())
 	}
 
 	// PUT can't activate it either: it's a no-op confirmation now that
 	// active/state are computed.
-	w = doJSON(t, engine, http.MethodPut, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", subscriptionCreateRequest{})
+	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", subscriptionCreateRequest{})
 	if w.Code != http.StatusOK {
 		t.Fatalf("update: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -68,7 +68,7 @@ func TestNamespaceSubscriptionCRUD(t *testing.T) {
 	if err := repo.ActivateSubscription(ns, "vault.example.com", "sync-1"); err != nil {
 		t.Fatalf("ActivateSubscription: %v", err)
 	}
-	w = doJSON(t, engine, http.MethodGet, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
 	var activated Subscription
 	if err := json.Unmarshal(w.Body.Bytes(), &activated); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -77,11 +77,11 @@ func TestNamespaceSubscriptionCRUD(t *testing.T) {
 		t.Fatalf("get after ActivateSubscription = %+v, want active/success/sync-1", activated)
 	}
 
-	w = doJSON(t, engine, http.MethodDelete, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete: status %d, body %s", w.Code, w.Body.String())
 	}
-	w = doJSON(t, engine, http.MethodGet, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("get after delete: status %d, want 404", w.Code)
 	}
@@ -110,7 +110,7 @@ func TestSubscriptionResponseComputesExpectedSyncID(t *testing.T) {
 
 	get := func() subscriptionResponse {
 		t.Helper()
-		w := doJSON(t, engine, http.MethodGet, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
+		w := doJSON(t, engine, http.MethodGet, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com", nil)
 		if w.Code != http.StatusOK {
 			t.Fatalf("get: status %d, body %s", w.Code, w.Body.String())
 		}
@@ -173,7 +173,7 @@ func TestSubscriptionForceSync(t *testing.T) {
 		t.Fatalf("ActivateSubscription: %v", err)
 	}
 
-	w := doJSON(t, engine, http.MethodPut, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com/sync", nil)
+	w := doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions/vault.example.com/sync", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("sync: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -206,7 +206,7 @@ func TestSubscriptionForceSync(t *testing.T) {
 func TestSubscriptionForceSyncRequiresExistingSubscription(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	w := doJSON(t, engine, http.MethodPut, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions/does-not-exist/sync", nil)
+	w := doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/namespaces/"+testNamespace+"/subscriptions/does-not-exist/sync", nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404, body %s", w.Code, w.Body.String())
 	}
@@ -228,7 +228,7 @@ func TestSubscriptionResponseAlwaysIncludesSyncFields(t *testing.T) {
 	if err := repo.PutClusterApiRegistration(ApiRegistration{Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion, Active: true}); err != nil {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
-	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+ns+"/subscriptions", subscriptionCreateRequest{ApiName: "vault.example.com"})
+	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/namespaces/"+ns+"/subscriptions", subscriptionCreateRequest{ApiName: "vault.example.com"})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -251,7 +251,7 @@ func TestSubscriptionResponseAlwaysIncludesSyncFields(t *testing.T) {
 func TestSubscriptionCreateRejectsMissingApiRegistration(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
+	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
 		ApiName: "does-not-exist.example.com",
 	})
 	if w.Code != http.StatusNotFound {
@@ -271,7 +271,7 @@ func TestSubscriptionOnlyMatchesApiRegistrationInDeploymentScope(t *testing.T) {
 		t.Fatalf("PutClusterApiRegistration: %v", err)
 	}
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
+	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
 		ApiName: "vault.example.com",
 	})
 	if w.Code != http.StatusNotFound {
@@ -288,7 +288,7 @@ func TestSubscriptionCreateIgnoresClientActiveAndState(t *testing.T) {
 
 	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion, Active: true})
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
+	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
 		ApiName: "vault.example.com", Active: true, State: "bogus",
 	})
 	if w.Code != http.StatusCreated {
@@ -321,7 +321,7 @@ func TestSubscriptionRequiresClusterRBAC(t *testing.T) {
 	engine := gin.New()
 	RegisterNamespaceRoutes(engine, repo, rbacRepo, fakeAuthGate("nobody"), testDeployPlatform, testDeployRegion)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/myns/subscriptions", Subscription{
+	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/namespaces/myns/subscriptions", Subscription{
 		ApiName: "vault.example.com",
 	})
 	if w.Code != http.StatusForbidden {
@@ -367,7 +367,7 @@ func TestSubscriptionSyncIsGatedOnItsOwnResource(t *testing.T) {
 	// action's own "subscriptions/sync" resource.
 	if err := rbacRepo.PutClusterRole(rbac.Role{
 		Name: "r", Metadata: meta,
-		Rules: []rbac.Rule{{Apis: []string{rbac.SubscriptionAPI}, Resources: []string{"subscriptions"}, Verbs: []string{"update"}}},
+		Rules: []rbac.Rule{{Apis: []string{CatalogAPI}, Resources: []string{"subscriptions"}, Verbs: []string{"update"}}},
 	}); err != nil {
 		t.Fatalf("PutClusterRole: %v", err)
 	}
@@ -380,12 +380,12 @@ func TestSubscriptionSyncIsGatedOnItsOwnResource(t *testing.T) {
 	engine := gin.New()
 	RegisterNamespaceRoutes(engine, repo, rbacRepo, fakeAuthGate(testAdmin, testAdminGroup), testDeployPlatform, testDeployRegion)
 
-	w := doJSON(t, engine, http.MethodPut, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions/vault.example.com", nil)
+	w := doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/namespaces/"+testNamespace+"/subscriptions/vault.example.com", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("PUT subscription: status = %d, want 200 (role grants \"subscriptions\"), body %s", w.Code, w.Body.String())
 	}
 
-	w = doJSON(t, engine, http.MethodPut, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions/vault.example.com/sync", nil)
+	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.example.com/v1/namespaces/"+testNamespace+"/subscriptions/vault.example.com/sync", nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf(`PUT sync: status = %d, want 403 (role grants "subscriptions" only, not "subscriptions/sync"), body %s`, w.Code, w.Body.String())
 	}

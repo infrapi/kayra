@@ -13,14 +13,20 @@
 // never the other way.
 package catalog
 
-// CatalogAPI and NamespaceAPI name this package's own two API groups —
-// mirroring internal/rbac.AuthorizationAPI/SubscriptionAPI, though
-// neither is checked against a stored Rule (both are gated by
-// middleware.SysadminGate alone, see RegisterApiRegistrationRoutes and
+// CatalogAPI and NamespaceAPI name this package's two API groups,
+// laid out exactly like rbac.AuthorizationAPI: CatalogAPI's
+// cluster-scoped resource (apiregistrations) is gated by
+// middleware.SysadminGate alone, never checked against a stored Rule
+// (see RegisterApiRegistrationRoutes), while its namespace-scoped one
+// (subscriptions) is checked against CatalogAPI via
+// rbac.RequireClusterRBAC (see RegisterNamespaceRoutes) — so a Rule
+// granting CatalogAPI "*" covers subscriptions only, just as one granting
+// AuthorizationAPI "*" never covers cluster roles. NamespaceAPI
+// (namespaces) is SysadminGate-only too (see
 // RegisterNamespaceCollectionRoutes). "example.com" is a placeholder:
 // SetAPIDomain rebuilds both from a deployment's own domain
-// (config.AppConfig.APIDomain) — call it once, before either Register
-// function.
+// (config.AppConfig.APIDomain) — call it once, before any Register
+// function or any stored Rule is compared against these.
 var (
 	CatalogAPI   = "catalog.example.com"
 	NamespaceAPI = "apps.example.com"

@@ -50,7 +50,7 @@ type Group struct {
 // name "compute" — mirroring how that app is actually reachable
 // (/apis/compute.example.com/v1/...). Kayra's own management-plane
 // resources are just two fixed API URNs in that same vocabulary —
-// AuthorizationAPI and SubscriptionAPI (see authorize.go) — not a
+// rbac.AuthorizationAPI and catalog.CatalogAPI — not a
 // separate concept.
 type Rule struct {
 	Apis      []string `json:"apis" yaml:"apis"`

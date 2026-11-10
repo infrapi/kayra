@@ -56,8 +56,8 @@ func validateNamespaceRoleBinding(repo *Repository, namespace string, rb RoleBin
 // closes the gap where any authenticated caller could manage RBAC
 // objects in any namespace regardless of their actual cluster-level
 // rights. api is AuthorizationAPI for this package's own groups/roles/
-// rolebindings routes, SubscriptionAPI for internal/catalog's
-// Subscription routes — see those constants in authorize.go.
+// rolebindings routes, catalog.CatalogAPI for internal/catalog's
+// Subscription routes.
 func RequireClusterRBAC(repo *Repository, api, resource, verb string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ac, ok := middleware.GetAuth(c)
@@ -94,7 +94,7 @@ func RequireClusterRBAC(repo *Repository, api, resource, verb string) gin.Handle
 // in this specific namespace — the spec's bootstrap flow — can act on
 // it. RequireClusterRBAC is exported so internal/catalog can gate its
 // own namespace-scoped Subscription routes through the exact same check,
-// against SubscriptionAPI instead. The namespace resource itself
+// against catalog.CatalogAPI instead. The namespace resource itself
 // (the legacy model's "Tenant") and the infra catalog
 // (ApiRegistration/Subscription) are registered separately, by
 // internal/catalog's own RegisterClusterRoutes/RegisterNamespaceRoutes/

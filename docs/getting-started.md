@@ -153,7 +153,7 @@ admins can later manage its day-to-day RBAC themselves:
 
     kayra-cli create authorization clusterroles -d '{"name": "thetenant-admin-role",
            "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-           "rules": [{"apis": ["subscription.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
+           "rules": [{"apis": ["catalog.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
 
     kayra-cli create authorization clusterrolebindings -d '{"name": "thetenant-admin-binding",
            "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
@@ -173,7 +173,7 @@ admins can later manage its day-to-day RBAC themselves:
       -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
       -d '{"name": "thetenant-admin-role",
            "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-           "rules": [{"apis": ["subscription.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
+           "rules": [{"apis": ["catalog.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
 
     curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterrolebindings \
       -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
@@ -199,7 +199,7 @@ one registration by name:
       -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
     # sync_id is minted automatically — note it down, or just GET it back below
 
-    kayra-cli create subscription -n thetenant subscriptions -d '{"api": "vault.example.com"}'
+    kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.example.com"}'
     # {"api": "vault.example.com", "active": false, "state": "init", ...}
     ```
 
@@ -211,13 +211,13 @@ one registration by name:
       -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
     # sync_id is minted automatically — note it down, or just GET it back below
 
-    curl -s -X POST http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions \
+    curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
       -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
       -d '{"api": "vault.example.com"}'
     # {"api": "vault.example.com", "active": false, "state": "init", ...}
     ```
 
-Any caller whose groups are bound to the `subscription.example.com` API
+Any caller whose groups are bound to the `catalog.example.com` API
 can do the subscribe step — it doesn't have to be the bootstrap token;
 `$TOKEN` works here only because step 6's rolebinding happens to grant
 `sandbox-core-sysadmin` (the bootstrap token's own group) that right

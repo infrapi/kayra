@@ -43,10 +43,10 @@ func newTestRepo(t *testing.T) *Repository {
 }
 
 // seedClusterRBAC writes the cluster group/role/rolebinding that grants
-// anyone resolved with callerGroup rbac.SubscriptionAPI:"*" rights in
+// anyone resolved with callerGroup CatalogAPI:"*" (i.e. subscriptions) rights in
 // namespace, bypassing HTTP — exactly what the spec's cluster bootstrap
 // flow produces (this package's own tests only ever exercise Subscription
-// routes, gated on SubscriptionAPI — see internal/rbac's own test
+// routes, gated on CatalogAPI — see internal/rbac's own test
 // helper of the same name for the AuthorizationAPI-gated groups/roles/
 // rolebindings equivalent). Duplicated here since it operates on exported
 // rbac types and _test.go files can't be imported across packages.
@@ -66,7 +66,7 @@ func seedClusterRBAC(t *testing.T, repo *rbac.Repository, callerGroup, namespace
 	}
 	if err := repo.PutClusterRole(rbac.Role{
 		Name: roleName, Metadata: meta,
-		Rules: []rbac.Rule{{Apis: []string{rbac.SubscriptionAPI}, Resources: []string{"*"}, Verbs: []string{"*"}}},
+		Rules: []rbac.Rule{{Apis: []string{CatalogAPI}, Resources: []string{"*"}, Verbs: []string{"*"}}},
 	}); err != nil {
 		t.Fatalf("seedClusterRBAC PutClusterRole: %v", err)
 	}

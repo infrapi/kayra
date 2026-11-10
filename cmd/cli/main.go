@@ -546,7 +546,7 @@ func resolveAPIDomain(explicit, api, contextDomain string) string {
 // all:
 //
 //   - authorization.<domain>'s groups/roles/rolebindings and
-//     subscription.<domain>'s subscriptions are gated by cluster RBAC
+//     catalog.<domain>'s subscriptions are gated by cluster RBAC
 //     (rbac.CanManageNamespaceRBAC, via RequireClusterRBAC) — a
 //     cluster-scoped Group/Role/RoleBinding check, a different data
 //     set from the namespace-scoped one Authorize itself checks.
@@ -577,10 +577,13 @@ func kayraOwnManagementWarning(apiDomain, api, resource string) string {
 		case "clustergroup", "clusterrole", "clusterrolebinding":
 			return "cluster groups/roles/rolebindings are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
 		}
-	case "subscription." + apiDomain:
-		return "subscriptions are gated by cluster RBAC (CanManageNamespaceRBAC), never by this check — it tests a different, namespace-scoped Group/Role/RoleBinding set"
 	case "catalog." + apiDomain:
-		return "api registrations are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
+		switch singularizeResource(resource) {
+		case "subscription", "subscriptions/sync":
+			return "subscriptions are gated by cluster RBAC (CanManageNamespaceRBAC), never by this check — it tests a different, namespace-scoped Group/Role/RoleBinding set"
+		case "apiregistration":
+			return "api registrations are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
+		}
 	case "apps." + apiDomain:
 		return "namespaces are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
 	}

@@ -85,20 +85,21 @@ func validateSubscription(repo *Repository, sub Subscription, deploymentPlatform
 
 // RegisterNamespaceRoutes mounts namespace-scoped Subscription CRUD —
 // the legacy model's tenant↔api registration link — at
-// /apis/subscription.example.com/v1/namespaces/:namespace/
-// subscriptions{,/:api{,/sync}}, its own API group exactly like
-// internal/rbac's own groups/roles/rolebindings routes are
-// authorization.example.com's, behind gate (normally
+// /apis/catalog.example.com/v1/namespaces/:namespace/
+// subscriptions{,/:api{,/sync}}, the namespace-scoped half of CatalogAPI
+// next to the cluster-scoped apiregistrations, exactly like
+// internal/rbac's namespace groups/roles/rolebindings sit next to its
+// cluster ones under authorization.example.com. Behind gate (normally
 // middleware.Authenticator) followed by
-// rbac.RequireClusterRBAC(rbacRepo, rbac.SubscriptionAPI,
+// rbac.RequireClusterRBAC(rbacRepo, CatalogAPI,
 // "subscriptions"|"subscriptions/sync", verb): a Subscription is gated by
 // the exact same cluster RBAC check as every RBAC object internal/rbac
 // manages, not a separate permission, so it reuses that check directly
-// rather than re-implementing it, just against SubscriptionAPI instead
-// of AuthorizationAPI. Note :api here (the subscribed-to
+// rather than re-implementing it, just against CatalogAPI instead of
+// AuthorizationAPI. Note :api here (the subscribed-to
 // ApiRegistration's name, e.g. "vault") is an entirely different thing
-// from SubscriptionAPI — the latter is Kayra's own fixed RBAC API URN
-// for this API group, the former is whichever registration a given
+// from CatalogAPI — the latter is Kayra's own fixed RBAC API URN for
+// this API group, the former is whichever registration a given
 // subscription targets. Ported from the legacy Postgres "subscriptions"
 // table. deploymentPlatform/deploymentRegion are this instance's own
 // INFRAPI_APP_PLATFORM/_REGION: unlike the legacy model (one Postgres DB
@@ -106,9 +107,9 @@ func validateSubscription(repo *Repository, sub Subscription, deploymentPlatform
 // so a subscription names a registration by name alone — there is no
 // second one it could mean.
 func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, rbacRepo *rbac.Repository, gate gin.HandlerFunc, deploymentPlatform, deploymentRegion string) {
-	group := r.Group("/apis/"+rbac.SubscriptionAPI+"/v1/namespaces/:namespace", gate)
+	group := r.Group("/apis/"+CatalogAPI+"/v1/namespaces/:namespace", gate)
 
-	group.POST("/subscriptions", rbac.RequireClusterRBAC(rbacRepo, rbac.SubscriptionAPI, "subscriptions", "create"), func(c *gin.Context) {
+	group.POST("/subscriptions", rbac.RequireClusterRBAC(rbacRepo, CatalogAPI, "subscriptions", "create"), func(c *gin.Context) {
 		namespace := c.Param("namespace")
 
 		var req subscriptionCreateRequest
@@ -130,7 +131,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, rbacRepo *rbac.Rep
 		c.JSON(http.StatusCreated, buildSubscriptionResponse(repo, sub, deploymentPlatform, deploymentRegion))
 	})
 
-	group.GET("/subscriptions", rbac.RequireClusterRBAC(rbacRepo, rbac.SubscriptionAPI, "subscriptions", "list"), func(c *gin.Context) {
+	group.GET("/subscriptions", rbac.RequireClusterRBAC(rbacRepo, CatalogAPI, "subscriptions", "list"), func(c *gin.Context) {
 		subs, err := repo.ListNamespaceSubscriptions(c.Param("namespace"))
 		if err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.ListSubscriptions", ""))
@@ -143,7 +144,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, rbacRepo *rbac.Rep
 		c.JSON(http.StatusOK, out)
 	})
 
-	group.GET("/subscriptions/:api", rbac.RequireClusterRBAC(rbacRepo, rbac.SubscriptionAPI, "subscriptions", "get"), func(c *gin.Context) {
+	group.GET("/subscriptions/:api", rbac.RequireClusterRBAC(rbacRepo, CatalogAPI, "subscriptions", "get"), func(c *gin.Context) {
 		namespace, api := c.Param("namespace"), c.Param("api")
 		sub, err := repo.GetNamespaceSubscription(namespace, api)
 		if err != nil {
@@ -158,7 +159,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, rbacRepo *rbac.Rep
 	// subscription, and Active/State are computed (see
 	// Repository.ActivateSubscription) — there is nothing left in the
 	// body a caller could legitimately change.
-	group.PUT("/subscriptions/:api", rbac.RequireClusterRBAC(rbacRepo, rbac.SubscriptionAPI, "subscriptions", "update"), func(c *gin.Context) {
+	group.PUT("/subscriptions/:api", rbac.RequireClusterRBAC(rbacRepo, CatalogAPI, "subscriptions", "update"), func(c *gin.Context) {
 		namespace, api := c.Param("namespace"), c.Param("api")
 		sub, err := repo.GetNamespaceSubscription(namespace, api)
 		if err != nil {
@@ -174,7 +175,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, rbacRepo *rbac.Rep
 	// subscription change: CurrentSyncID no longer matches the
 	// registration's own SyncID, so it reconciles again, without having
 	// to wait for the registration itself to move on.
-	group.PUT("/subscriptions/:api/sync", rbac.RequireClusterRBAC(rbacRepo, rbac.SubscriptionAPI, "subscriptions/sync", "patch"), func(c *gin.Context) {
+	group.PUT("/subscriptions/:api/sync", rbac.RequireClusterRBAC(rbacRepo, CatalogAPI, "subscriptions/sync", "patch"), func(c *gin.Context) {
 		namespace, api := c.Param("namespace"), c.Param("api")
 		sub, err := repo.GetNamespaceSubscription(namespace, api)
 		if err != nil {
@@ -191,7 +192,7 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, rbacRepo *rbac.Rep
 		c.JSON(http.StatusOK, buildSubscriptionResponse(repo, sub, deploymentPlatform, deploymentRegion))
 	})
 
-	group.DELETE("/subscriptions/:api", rbac.RequireClusterRBAC(rbacRepo, rbac.SubscriptionAPI, "subscriptions", "delete"), func(c *gin.Context) {
+	group.DELETE("/subscriptions/:api", rbac.RequireClusterRBAC(rbacRepo, CatalogAPI, "subscriptions", "delete"), func(c *gin.Context) {
 		namespace, api := c.Param("namespace"), c.Param("api")
 		if _, err := repo.GetNamespaceSubscription(namespace, api); err != nil {
 			httpapi.Fail(c, notFoundOrInternal(err, "catalog.DeleteSubscription", "subscription to %q not found", api))

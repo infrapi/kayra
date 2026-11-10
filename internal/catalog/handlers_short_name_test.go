@@ -39,7 +39,7 @@ func TestApiRegistrationShortName(t *testing.T) {
 		t.Fatalf("update keeping short_name: status %d, body %s", w.Code, w.Body.String())
 	}
 
-	subs := "/apis/subscription.example.com/v1/namespaces/" + testNamespace + "/subscriptions"
+	subs := "/apis/catalog.example.com/v1/namespaces/" + testNamespace + "/subscriptions"
 	w = doJSON(t, engine, http.MethodPost, subs, subscriptionCreateRequest{ApiName: "dev"})
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `dev.example.com`) {
 		t.Fatalf("subscribe by short name: status %d body %s, want 400 pointing at dev.example.com", w.Code, w.Body.String())

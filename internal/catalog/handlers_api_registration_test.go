@@ -362,7 +362,7 @@ func TestApiRegistrationDeleteBlockedWhileSubscribedTo(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
 	doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/apiregistrations", ApiRegistration{Name: "vault.example.com", Active: true})
-	w := doJSON(t, engine, http.MethodPost, "/apis/subscription.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
+	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.example.com/v1/namespaces/"+testNamespace+"/subscriptions", Subscription{
 		ApiName: "vault.example.com",
 	})
 	if w.Code != http.StatusCreated {

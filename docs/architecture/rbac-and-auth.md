@@ -116,13 +116,20 @@ listed in its `users` — and that `Group` must be bound by a cluster
 `RoleBinding` scoped to that exact
 namespace, to a cluster `Role` granting
 `apis: ["authorization.example.com"]` (groups/roles/rolebindings) or
-`apis: ["subscription.example.com"]` (subscriptions) for the relevant
+`apis: ["catalog.example.com"]` (subscriptions) for the relevant
 verb — evaluated in
 [`rbac.Repository.CanManageNamespaceRBAC`](../packages/rbac.md#canmanagenamespacerbac).
 This is exactly the spec's cluster bootstrap flow (group → role →
 rolebinding), now actually enforced rather than only ever written. A
 denial's `detail` names which step failed: no matching group, no
 rolebinding for this namespace, or a role that doesn't grant the verb.
+
+Both groups split the same way: their namespace-scoped resources are
+gated by these rules, their cluster-scoped ones (`clustergroups`/
+`clusterroles`/`clusterrolebindings`, `apiregistrations`) by
+`SysadminGate` alone. So `resources: ["*"]` on `catalog.example.com`
+grants subscriptions only, never apiregistrations — just as `"*"` on
+`authorization.example.com` never grants cluster roles.
 
 This check is **not** based on a synced group membership list — there is
 no `/refresh` action and no "members" record anywhere in Kayra.
@@ -191,4 +198,4 @@ server-side: it's the same group→role→rolebinding evaluation
 `CanManageNamespaceRBAC` does, just against the namespace's own RBAC
 objects instead of the cluster's, and against an arbitrary API URN
 instead of one of Kayra's own two fixed URNs
-(`AuthorizationAPI`/`SubscriptionAPI`).
+(`rbac.AuthorizationAPI`/`catalog.CatalogAPI`).

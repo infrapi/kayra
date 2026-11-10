@@ -253,7 +253,7 @@ management-plane routes are decided by it:
 | Asking about... | Actually gated by |
 |---|---|
 | `authorization.<domain>`'s `groups`/`roles`/`rolebindings` | cluster RBAC (`CanManageNamespaceRBAC`) — a different, cluster-scoped `Group`/`Role`/`RoleBinding` set |
-| `subscription.<domain>`'s `subscriptions` | cluster RBAC (`CanManageNamespaceRBAC`), same as above |
+| `catalog.<domain>`'s `subscriptions` | cluster RBAC (`CanManageNamespaceRBAC`), same as above |
 | `authorization.<domain>`'s `clustergroups`/`clusterroles`/`clusterrolebindings` | the sysadmin group alone (`SysadminGate`) — no `Rule` consulted at all |
 | `catalog.<domain>`'s `apiregistrations` | `SysadminGate` alone |
 | `apps.<domain>`'s `namespaces` | `SysadminGate` alone |
@@ -328,13 +328,13 @@ take the token from the current context with
 
     ```bash
     # namespace-scoped: -n selects .../namespaces/<ns>/<resource>
-    kayra-cli get subscription -n thetenant subscriptions
+    kayra-cli get catalog -n thetenant subscriptions
     # []
-    kayra-cli create subscription -n thetenant subscriptions -d '{"api": "vault.example.com"}'
+    kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.example.com"}'
     # {"api": "vault.example.com", "active": false, "state": "init", ...}
-    kayra-cli get subscription -n thetenant subscriptions vault.example.com
-    kayra-cli update subscription -n thetenant subscriptions vault.example.com/sync -d '{}'
-    kayra-cli delete subscription -n thetenant subscriptions vault.example.com
+    kayra-cli get catalog -n thetenant subscriptions vault.example.com
+    kayra-cli update catalog -n thetenant subscriptions vault.example.com/sync -d '{}'
+    kayra-cli delete catalog -n thetenant subscriptions vault.example.com
 
     # cluster-scoped: no -n, addresses .../<resource> directly
     kayra-cli create catalog apiregistrations -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
@@ -346,19 +346,19 @@ take the token from the current context with
 
     ```bash
     # namespace-scoped: -n selects .../namespaces/<ns>/<resource>
-    curl -s http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions \
+    curl -s http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
       -H "Authorization: Bearer $TOKEN"
     # []
-    curl -s -X POST http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions \
+    curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
       -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
       -d '{"api": "vault.example.com"}'
     # {"api": "vault.example.com", "active": false, "state": "init", ...}
-    curl -s http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
+    curl -s http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
       -H "Authorization: Bearer $TOKEN"
-    curl -s -X PUT http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com/sync \
+    curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com/sync \
       -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
       -d '{}'
-    curl -s -X DELETE http://localhost:8080/apis/subscription.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
+    curl -s -X DELETE http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
       -H "Authorization: Bearer $TOKEN"
 
     # cluster-scoped: no -n, addresses .../<resource> directly

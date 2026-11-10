@@ -93,7 +93,7 @@ rbac.RegisterAuthorizeRoute(engine, repo, authenticator.Middleware())
   touching its namespace-scoped defaults. `RequireClusterRBAC` is
   exported so `internal/catalog` gates its own namespace-scoped
   [Subscription](../architecture/subscriptions.md) routes through the
-  identical check, against `SubscriptionAPI` instead.
+  identical check, against `catalog.CatalogAPI` instead.
 - **Authorize** — `POST /apis/authorization.example.com/v1/check`,
   gated only by `authenticator.Middleware()` (any configured provider),
   never by `Allows` against that same api group — the general-purpose
@@ -121,7 +121,7 @@ cluster `Group`'s own `Groups`, or `userID` must be listed in its
 scoped to `namespace`, to a cluster `Role` granting `apis: [api]` for
 `verb` on `resource`. In practice `api` is always one of the two fixed
 constants `RequireClusterRBAC`'s callers pass: `AuthorizationAPI` for
-resource `"groups"`/`"roles"`/`"rolebindings"`, `SubscriptionAPI` for
+resource `"groups"`/`"roles"`/`"rolebindings"`, `catalog.CatalogAPI` for
 `"subscriptions"`/`"subscriptions/sync"`.
 A denial's `reason` names which step failed: no matching group, no
 rolebinding for this namespace, or a role that doesn't grant the verb.
@@ -161,7 +161,7 @@ See
 ## RequireClusterRBAC
 
 ```go
-gate := rbac.RequireClusterRBAC(repo, rbac.SubscriptionAPI, "subscriptions", "create")
+gate := rbac.RequireClusterRBAC(repo, catalog.CatalogAPI, "subscriptions", "create")
 group.POST("/subscriptions", gate, handler)
 ```
 
