@@ -185,3 +185,27 @@ func TestAuthorizeCheckRoute(t *testing.T) {
 		t.Fatalf("body = %s, want namespace not found", w.Body.String())
 	}
 }
+
+// TestUnknownRouteIsProblemDetail confirms an unknown path gets the
+// same infrapi/lib problem+json body as every other error, not gin's
+// plain-text "404 page not found".
+func TestUnknownRouteIsProblemDetail(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	engine, err := Build(testAppConfig(), testKayraConfig(t))
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/apis/nope.example.com/v1/things", nil))
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Fatalf("Content-Type = %q, want application/problem+json; body %s", ct, w.Body.String())
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"origin":"apiserver.NoRoute"`)) {
+		t.Fatalf("body %s, want origin apiserver.NoRoute", w.Body.String())
+	}
+}

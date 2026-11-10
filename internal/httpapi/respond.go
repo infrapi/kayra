@@ -3,6 +3,8 @@
 package httpapi
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	liberrors "github.com/infrapi/lib/pkg/errors"
@@ -13,6 +15,15 @@ import (
 func Fail(c *gin.Context, err *liberrors.Error) {
 	c.Data(err.Code, liberrors.MediaType, mustJSON(err))
 	c.Abort()
+}
+
+// Write is Fail for a plain net/http handler (no gin context) — e.g.
+// kayra-cli's own loopback login listener, whose error responses a user
+// sees in their browser just like any API error.
+func Write(w http.ResponseWriter, err *liberrors.Error) {
+	w.Header().Set("Content-Type", liberrors.MediaType)
+	w.WriteHeader(err.Code)
+	_, _ = w.Write(mustJSON(err))
 }
 
 func mustJSON(err *liberrors.Error) []byte {

@@ -14,6 +14,7 @@ import (
 	"github.com/infrapi/kayra/internal/catalog"
 	gconfig "github.com/infrapi/kayra/internal/config"
 	gcrypto "github.com/infrapi/kayra/internal/crypto"
+	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/oauth2broker"
 	"github.com/infrapi/kayra/internal/oidc"
@@ -106,13 +107,20 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	rbac.SetAPIDomain(apiDomain)
 	catalog.SetAPIDomain(apiDomain)
 
+	// Unknown paths get the same problem+json body as every other error
+	// instead of gin's plain-text "404 page not found".
+	engine.NoRoute(func(c *gin.Context) {
+		httpapi.Fail(c, liberrors.New(http.StatusNotFound, "apiserver.NoRoute", "no route for %s %s", c.Request.Method, c.Request.URL.Path))
+	})
+
 	oidc.RegisterRoutes(engine, manager, baseURL)
 	oauth2broker.RegisterRoutes(engine, cfg, s, keys, baseURL, apiDomain)
 
 	userinfoHandler := func(c *gin.Context) {
 		ac, ok := middleware.GetAuth(c)
 		if !ok {
-			c.Status(http.StatusUnauthorized)
+			httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, "apiserver.Userinfo", "no authenticated caller on this request").
+				WithSolution("send a bearer token: run `kayra-cli login`"))
 			return
 		}
 		body := gin.H{

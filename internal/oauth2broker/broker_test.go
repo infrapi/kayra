@@ -20,6 +20,7 @@ import (
 	"github.com/infrapi/kayra/internal/config"
 	"github.com/infrapi/kayra/internal/oauth2login"
 	"github.com/infrapi/kayra/internal/store"
+	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
 // testApiDomain is testBroker's own app.api_domain — deliberately not
@@ -311,6 +312,21 @@ func TestAuthorizeRejectsNonLoopbackRedirect(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400 for a non-loopback redirect_uri (open-redirect guard)", resp.StatusCode)
+	}
+	// User-visible errors are infrapi/lib problem details, never plain text.
+	if ct := resp.Header.Get("Content-Type"); ct != liberrors.MediaType {
+		t.Fatalf("Content-Type = %q, want %q", ct, liberrors.MediaType)
+	}
+	var problem struct {
+		Status int    `json:"status"`
+		Detail string `json:"detail"`
+		Origin string `json:"origin"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&problem); err != nil {
+		t.Fatalf("decode problem: %v", err)
+	}
+	if problem.Status != http.StatusBadRequest || problem.Origin != "oauth2broker.Authorize" || problem.Detail == "" {
+		t.Fatalf("problem = %+v, want status 400, origin oauth2broker.Authorize and a detail", problem)
 	}
 }
 

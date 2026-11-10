@@ -44,9 +44,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/infrapi/kayra/internal/config"
+	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/oauth2login"
 	"github.com/infrapi/kayra/internal/oidc"
 	"github.com/infrapi/kayra/internal/store"
+	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
 // stateTTL bounds how long an in-flight login can sit idle at the
@@ -127,7 +129,9 @@ func (p authorizeParams) query() string {
 	}.Encode()
 }
 
-func parseAuthorizeParams(c *gin.Context) (authorizeParams, error) {
+// parseAuthorizeParams returns a ready-to-send *liberrors.Error (origin
+// is the calling handler's) when the CLI-built query is unusable.
+func parseAuthorizeParams(c *gin.Context, origin string) (authorizeParams, *liberrors.Error) {
 	p := authorizeParams{
 		Provider:            c.Query("provider"),
 		RedirectURI:         c.Query("redirect_uri"),
@@ -136,13 +140,14 @@ func parseAuthorizeParams(c *gin.Context) (authorizeParams, error) {
 		CodeChallengeMethod: c.Query("code_challenge_method"),
 	}
 	if p.RedirectURI == "" || p.State == "" || p.CodeChallenge == "" {
-		return p, fmt.Errorf("oauth2broker: redirect_uri, state and code_challenge are all required")
+		return p, liberrors.New(http.StatusBadRequest, origin, "redirect_uri, state and code_challenge are all required").
+			WithSolution("start the login with `kayra-cli login` rather than opening this URL by hand")
 	}
 	if p.CodeChallengeMethod != "S256" {
-		return p, fmt.Errorf("oauth2broker: code_challenge_method must be S256")
+		return p, liberrors.New(http.StatusBadRequest, origin, "code_challenge_method must be S256")
 	}
 	if err := requireCLIRedirect(p.RedirectURI); err != nil {
-		return p, err
+		return p, liberrors.Wrap(err, http.StatusBadRequest, origin, "")
 	}
 	return p, nil
 }
@@ -177,14 +182,14 @@ func requireCLIRedirect(raw string) error {
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("oauth2broker: redirect_uri: %w", err)
+		return fmt.Errorf("redirect_uri: %w", err)
 	}
 	if u.Scheme != "http" {
-		return fmt.Errorf("oauth2broker: redirect_uri must use http")
+		return fmt.Errorf("redirect_uri must use http")
 	}
 	ip := net.ParseIP(u.Hostname())
 	if ip == nil || !ip.IsLoopback() {
-		return fmt.Errorf("oauth2broker: redirect_uri must be a loopback address (127.0.0.1 or [::1]), got %q", u.Hostname())
+		return fmt.Errorf("redirect_uri must be a loopback address (127.0.0.1 or [::1]), got %q", u.Hostname())
 	}
 	return nil
 }
@@ -192,7 +197,7 @@ func requireCLIRedirect(raw string) error {
 func providerOAuth2Config(cfg *config.Config, name string) (config.AuthProvider, error) {
 	provider, ok := cfg.Authentifications[name]
 	if !ok || provider.Remote == nil || provider.Remote.OAuth2 == nil {
-		return config.AuthProvider{}, fmt.Errorf("oauth2broker: provider %q is not configured for oauth2 login (authentifications.%[1]s.remote.oauth2)", name)
+		return config.AuthProvider{}, fmt.Errorf("provider %q is not configured for oauth2 login (authentifications.%[1]s.remote.oauth2)", name)
 	}
 	return provider, nil
 }
@@ -205,15 +210,17 @@ func providerOAuth2Config(cfg *config.Config, name string) (config.AuthProvider,
 // one is configured, or a chooser page first when there's more than
 // one to pick from.
 func handleAuthorize(c *gin.Context, cfg *config.Config) {
-	p, err := parseAuthorizeParams(c)
-	if err != nil {
-		c.String(http.StatusBadRequest, "%s", err)
+	const origin = "oauth2broker.Authorize"
+	p, lerr := parseAuthorizeParams(c, origin)
+	if lerr != nil {
+		httpapi.Fail(c, lerr)
 		return
 	}
 
 	switch names := configuredOAuth2Providers(cfg); len(names) {
 	case 0:
-		c.String(http.StatusBadGateway, "oauth2broker: no authentifications.<name>.remote.oauth2 provider is configured")
+		httpapi.Fail(c, liberrors.New(http.StatusBadGateway, origin, "no authentifications.<name>.remote.oauth2 provider is configured on this server").
+			WithSolution("ask the Kayra operator to configure an OAuth2 login provider"))
 		return
 	case 1:
 		p.Provider = names[0]
@@ -267,34 +274,36 @@ func renderProviderChooser(c *gin.Context, p authorizeParams, names []string) {
 // code_verifier (never seen by Kayra) still verifies at the final
 // token exchange.
 func handleContinue(c *gin.Context, cfg *config.Config, s store.Store, keys store.Keys, baseURL, apiDomain string) {
-	p, err := parseAuthorizeParams(c)
-	if err != nil {
-		c.String(http.StatusBadRequest, "%s", err)
+	const origin = "oauth2broker.Continue"
+	p, lerr := parseAuthorizeParams(c, origin)
+	if lerr != nil {
+		httpapi.Fail(c, lerr)
 		return
 	}
 	if p.Provider == "" {
-		c.String(http.StatusBadRequest, "oauth2broker: provider is required")
+		httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "provider is required"))
 		return
 	}
 	provider, err := providerOAuth2Config(cfg, p.Provider)
 	if err != nil {
-		c.String(http.StatusBadRequest, "%s", err)
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin, ""))
 		return
 	}
 
 	doc, err := oidc.FetchDiscovery(provider.Remote.URL, provider.Remote.Proxy)
 	if err != nil {
-		c.String(http.StatusBadGateway, "oauth2broker: %s", err)
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadGateway, origin+".FetchDiscovery", "could not reach login provider %q", p.Provider).
+			WithRetryable(true))
 		return
 	}
 	if doc.AuthorizationEndpoint == "" {
-		c.String(http.StatusBadGateway, "oauth2broker: provider %q has no authorization_endpoint", p.Provider)
+		httpapi.Fail(c, liberrors.New(http.StatusBadGateway, origin, "login provider %q has no authorization_endpoint", p.Provider))
 		return
 	}
 
 	id, err := randomID()
 	if err != nil {
-		c.String(http.StatusInternalServerError, "%s", err)
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".randomID", ""))
 		return
 	}
 	data, err := json.Marshal(pending{
@@ -305,11 +314,11 @@ func handleContinue(c *gin.Context, cfg *config.Config, s store.Store, keys stor
 		ApiDomain:     apiDomain,
 	})
 	if err != nil {
-		c.String(http.StatusInternalServerError, "oauth2broker: %s", err)
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".Marshal", ""))
 		return
 	}
 	if err := s.PutTTL(keys.OAuth2BrokerState(id), data, stateTTL); err != nil {
-		c.String(http.StatusInternalServerError, "oauth2broker: %s", err)
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".PutTTL", ""))
 		return
 	}
 
@@ -320,7 +329,7 @@ func handleContinue(c *gin.Context, cfg *config.Config, s store.Store, keys stor
 
 	authorizeURL, err := url.Parse(doc.AuthorizationEndpoint)
 	if err != nil {
-		c.String(http.StatusBadGateway, "oauth2broker: %s", err)
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadGateway, origin, "login provider %q advertises an invalid authorization_endpoint", p.Provider))
 		return
 	}
 	authorizeURL.RawQuery = url.Values{
@@ -344,29 +353,31 @@ func handleContinue(c *gin.Context, cfg *config.Config, s store.Store, keys stor
 // the CLI's own callback handler's perspective, from the provider
 // having redirected there directly.
 func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
+	const origin = "oauth2broker.Callback"
 	id := c.Query("state")
 	if id == "" {
-		c.String(http.StatusBadRequest, "oauth2broker: callback carried no state")
+		httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "callback carried no state"))
 		return
 	}
 
 	data, err := s.Get(keys.OAuth2BrokerState(id))
 	if err != nil {
-		c.String(http.StatusBadRequest, "oauth2broker: unknown or expired login attempt — run `kayra-cli login` again")
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin+".Get", "unknown or expired login attempt").
+			WithSolution("run `kayra-cli login` again"))
 		return
 	}
 	_ = s.Delete(keys.OAuth2BrokerState(id))
 
 	var pend pending
 	if err := json.Unmarshal(data, &pend); err != nil {
-		c.String(http.StatusInternalServerError, "oauth2broker: %s", err)
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".Unmarshal", ""))
 		return
 	}
 	// Defense in depth: re-check even though handleContinue already
 	// enforced this before ever storing pend — nothing on this path
 	// should ever redirect anywhere but back to a loopback address.
 	if err := requireCLIRedirect(pend.RedirectURI); err != nil {
-		c.String(http.StatusInternalServerError, "oauth2broker: %s", err)
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
 		return
 	}
 	if pend.RedirectURI == oauth2login.OOBRedirectURI {
@@ -376,7 +387,7 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 
 	target, err := url.Parse(pend.RedirectURI)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "oauth2broker: %s", err)
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
 		return
 	}
 
@@ -387,7 +398,7 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 	} else {
 		code := c.Query("code")
 		if code == "" {
-			c.String(http.StatusBadRequest, "oauth2broker: provider callback carried no code")
+			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "provider callback carried no code"))
 			return
 		}
 		q.Set("code", code)
@@ -414,21 +425,22 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 // terminal's own PKCE verifier, but there is still no reason for it to
 // outlive this page.
 func renderLoginCode(c *gin.Context, pend pending) {
+	const origin = "oauth2broker.Callback"
 	c.Header("Cache-Control", "no-store")
 	c.Header("Referrer-Policy", "no-referrer")
-	c.Header("Content-Type", "text/html; charset=utf-8")
 
 	if errParam := c.Query("error"); errParam != "" {
 		msg := errParam
 		if desc := c.Query("error_description"); desc != "" {
 			msg += ": " + desc
 		}
-		c.String(http.StatusBadRequest, loginFailedPageHTML, html.EscapeString(msg))
+		httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "login provider denied the login: %s", msg).
+			WithSolution("run `kayra-cli login --no-browser` again"))
 		return
 	}
 	code := c.Query("code")
 	if code == "" {
-		c.String(http.StatusBadRequest, loginFailedPageHTML, "the provider callback carried no code")
+		httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "provider callback carried no code"))
 		return
 	}
 
@@ -440,10 +452,11 @@ func renderLoginCode(c *gin.Context, pend pending) {
 		ApiDomain:     pend.ApiDomain,
 	})
 	if err != nil {
-		c.String(http.StatusInternalServerError, loginFailedPageHTML, html.EscapeString(err.Error()))
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".EncodeLoginCode", ""))
 		return
 	}
 	// base64url only — nothing to escape, but escape anyway.
+	c.Header("Content-Type", "text/html; charset=utf-8")
 	c.String(http.StatusOK, loginCodePageHTML, html.EscapeString(loginCode))
 }
 
@@ -536,28 +549,6 @@ p.warn{color:#f0b429}
     <button type="button" onclick="var t=document.getElementById('code');t.select();navigator.clipboard&&navigator.clipboard.writeText(t.value);this.textContent='Copied'">Copy</button>
     <p>Paste it at the <code>kayra-cli login --no-browser</code> prompt. It works once, only in that terminal, for the next few minutes.</p>
     <p class="warn">Only paste it into a terminal where you started this login yourself. Never send it to anyone.</p>
-  </div>
-</body>
-</html>
-`
-
-// loginFailedPageHTML is renderLoginCode's failure page — %s is the
-// already-escaped reason.
-const loginFailedPageHTML = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Kayra login failed</title>
-<style>
-body{font-family:system-ui,sans-serif;background:#0b0d12;color:#e6e6e6;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:1rem;box-sizing:border-box}
-.card{background:#151821;border:1px solid #2a2f3a;border-radius:12px;padding:2rem;text-align:center;max-width:480px}
-h1{font-size:1.1rem;font-weight:600;margin:0 0 1rem}
-p{color:#8a8f98;font-size:.9rem}
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1>Login failed</h1>
-    <p>%s</p>
-    <p>Run <code>kayra-cli login --no-browser</code> again.</p>
   </div>
 </body>
 </html>

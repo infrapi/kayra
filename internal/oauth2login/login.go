@@ -41,7 +41,9 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/oidc"
+	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
 // DefaultScopes is requested when a provider's
@@ -311,40 +313,42 @@ type callbackResult struct {
 // human-readable page — there is nothing left for it to do once this
 // fires.
 func callbackHandler(wantState string, resultCh chan<- callbackResult, errCh chan<- error) http.Handler {
+	const origin = "oauth2login.Callback"
 	mux := http.NewServeMux()
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 
 		if errParam := q.Get("error"); errParam != "" {
-			writeCallbackPage(w, false)
-			errCh <- fmt.Errorf("oauth2login: provider denied login: %s: %s", errParam, q.Get("error_description"))
+			lerr := liberrors.New(http.StatusBadRequest, origin, "login provider denied login: %s: %s", errParam, q.Get("error_description"))
+			fail(w, lerr)
+			errCh <- fmt.Errorf("oauth2login: %s", lerr.Message)
 			return
 		}
 		if q.Get("state") != wantState {
-			writeCallbackPage(w, false)
-			errCh <- fmt.Errorf("oauth2login: callback state mismatch (possible CSRF)")
+			lerr := liberrors.New(http.StatusBadRequest, origin, "callback state mismatch (possible CSRF)")
+			fail(w, lerr)
+			errCh <- fmt.Errorf("oauth2login: %s", lerr.Message)
 			return
 		}
 		code := q.Get("code")
 		if code == "" {
-			writeCallbackPage(w, false)
-			errCh <- fmt.Errorf("oauth2login: callback carried no code")
+			lerr := liberrors.New(http.StatusBadRequest, origin, "callback carried no code")
+			fail(w, lerr)
+			errCh <- fmt.Errorf("oauth2login: %s", lerr.Message)
 			return
 		}
-		writeCallbackPage(w, true)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprint(w, "<html><body><p>Login complete — you can close this tab.</p></body></html>")
 		resultCh <- callbackResult{Code: code, TokenEndpoint: q.Get("token_endpoint"), ClientID: q.Get("client_id"), ApiDomain: q.Get("api_domain")}
 	})
 	return mux
 }
 
-func writeCallbackPage(w http.ResponseWriter, ok bool) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if ok {
-		_, _ = fmt.Fprint(w, "<html><body><p>Login complete — you can close this tab.</p></body></html>")
-		return
-	}
-	w.WriteHeader(http.StatusBadRequest)
-	_, _ = fmt.Fprint(w, "<html><body><p>Login failed — check the terminal and try again.</p></body></html>")
+// fail answers the browser with err as problem+json (the same shape as
+// every Kayra API error); the terminal gets err's plain detail via errCh
+// instead, never liberrors' operator-facing Error() form.
+func fail(w http.ResponseWriter, err *liberrors.Error) {
+	httpapi.Write(w, err.WithSolution("check the terminal and run `kayra-cli login` again"))
 }
 
 func randomString(n int) (string, error) {
