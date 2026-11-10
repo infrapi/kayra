@@ -1,3 +1,9 @@
+---
+title: clicontext
+description: Persists kayra-cli login state to ~/.config/kayra/config as kubeconfig-style contexts.
+weight: 40
+---
+
 # clicontext
 
 ```go

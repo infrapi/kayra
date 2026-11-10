@@ -1,3 +1,9 @@
+---
+title: authn
+description: Validates an incoming bearer JWT and resolves the user id it identifies.
+weight: 20
+---
+
 # authn
 
 ```go

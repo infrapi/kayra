@@ -1,3 +1,9 @@
+---
+title: crypto
+description: PAT encryption keypair, RSA signing keys and self-signed JWTs owned by Kayra.
+weight: 60
+---
+
 # crypto
 
 ```go

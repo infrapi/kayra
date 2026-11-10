@@ -1,3 +1,9 @@
+---
+title: API registrations
+description: ApiRegistration declares that an API group exists and who owns it; Kayra never implements the API itself.
+weight: 30
+---
+
 # API registrations
 
 An `ApiRegistration` declares that an API group exists, scoped to this
@@ -27,29 +33,29 @@ Full CRUD at `/apis/catalog.example.com/v1/apiregistrations`, gated by
 [`SysadminGate`](rbac-and-auth.md#two-gates-two-trust-tiers) — same trust
 tier as the cluster RBAC objects.
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli create catalog apiregistrations -d '{
-        "name": "compute.example.com",
-        "short_name": "compute",
-        "active": true,
-        "owner": "sre-a"
-      }'
-    ```
+```bash
+kayra-cli create catalog apiregistrations -d '{
+    "name": "compute.example.com",
+    "short_name": "compute",
+    "active": true,
+    "owner": "sre-a"
+  }'
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{
-        "name": "compute.example.com",
-        "short_name": "compute",
-        "active": true,
-        "owner": "sre-a"
-      }'
-    ```
+```bash
+curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "name": "compute.example.com",
+    "short_name": "compute",
+    "active": true,
+    "owner": "sre-a"
+  }'
+```
 
 A registration's id is its **long name** — the full API group URN it is
 reachable under (`compute.example.com`), a lowercase DNS name of at
@@ -69,25 +75,25 @@ onto the record regardless of what (if anything) the request body
 sends; list, get, update and delete can only ever reach a registration
 in that same scope.
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli get catalog apiregistrations compute.example.com
-    kayra-cli update catalog apiregistrations compute.example.com -d '{"name": "compute.example.com", "owner": "sre-b"}'
-    kayra-cli delete catalog apiregistrations compute.example.com
-    ```
+```bash
+kayra-cli get catalog apiregistrations compute.example.com
+kayra-cli update catalog apiregistrations compute.example.com -d '{"name": "compute.example.com", "owner": "sre-b"}'
+kayra-cli delete catalog apiregistrations compute.example.com
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com \
-      -H "Authorization: Bearer $TOKEN"
-    curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"name": "compute.example.com", "owner": "sre-b"}'
-    curl -s -X DELETE http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com \
-      -H "Authorization: Bearer $TOKEN"
-    ```
+```bash
+curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com \
+  -H "Authorization: Bearer $TOKEN"
+curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "compute.example.com", "owner": "sre-b"}'
+curl -s -X DELETE http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 ## Dependencies
 
@@ -120,19 +126,19 @@ keeps it as given.
 
 The shorthand:
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli update catalog apiregistrations compute.example.com/sync -d '{}'
-    ```
+```bash
+kayra-cli update catalog apiregistrations compute.example.com/sync -d '{}'
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com/sync \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{}'
-    ```
+```bash
+curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com/sync \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{}'
+```
 
 stamps a fresh [`hashicorp/go-uuid`](https://github.com/hashicorp/go-uuid)-generated
 value onto `SyncID` — that's the entire trigger. An explicit value is still
@@ -149,19 +155,19 @@ set of choices.
 By default, bumping `SyncID` reconciles every active subscriber at once.
 To try a new target against one tenant first:
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli update catalog apiregistrations compute.example.com/sync -d '{"canary_namespaces": ["sre"]}'
-    ```
+```bash
+kayra-cli update catalog apiregistrations compute.example.com/sync -d '{"canary_namespaces": ["sre"]}'
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com/sync \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"canary_namespaces": ["sre"]}'
-    ```
+```bash
+curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com/sync \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"canary_namespaces": ["sre"]}'
+```
 
 mints a fresh `SyncID` same as the plain shorthand, but
 [`Reconciler`](subscriptions.md#per-job-locking) only reconciles the named
@@ -173,19 +179,19 @@ registration (`404` otherwise, catching a typo before it becomes
 
 Once satisfied, release the same build to everyone else:
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli update catalog apiregistrations compute.example.com/sync -d '{}'
-    ```
+```bash
+kayra-cli update catalog apiregistrations compute.example.com/sync -d '{}'
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com/sync \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{}'
-    ```
+```bash
+curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com/sync \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{}'
+```
 
 called again with **no** `canary_namespaces` while a rollout is pending —
 this reuses the exact `SyncID` the canary already validated (it does
@@ -248,18 +254,18 @@ comparing each one's `expected_sync_id` yourself. A subscription still
 pending its initial activation is omitted: there's no sync state to
 report for one yet.
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli get catalog apiregistrations compute.example.com/status
-    ```
+```bash
+kayra-cli get catalog apiregistrations compute.example.com/status
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com/status \
-      -H "Authorization: Bearer $TOKEN"
-    ```
+```bash
+curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/compute.example.com/status \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 ```json
 {

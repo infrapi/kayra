@@ -1,3 +1,9 @@
+---
+title: config
+description: Loads and validates the Kayra YAML configuration file.
+weight: 50
+---
+
 # config
 
 ```go

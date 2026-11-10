@@ -1,3 +1,9 @@
+---
+title: middleware
+description: "The two gin middlewares every route sits behind: bearer authentication and the sysadmin gate."
+weight: 80
+---
+
 # middleware
 
 ```go

@@ -1,5 +1,3 @@
-# mkdocs build output
-site/
 
 # go test coverage artifacts (make test)
 cover.out

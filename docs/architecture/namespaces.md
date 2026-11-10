@@ -1,3 +1,9 @@
+---
+title: Namespaces
+description: "A Namespace is the tenant: its name and active state live on one record in internal/catalog."
+weight: 40
+---
+
 # Namespaces
 
 A `Namespace` **is** the legacy model's "Tenant" — not two
@@ -21,19 +27,19 @@ separate `/tenant` child resource. Full CRUD at `/apis/system.example.com/v1/nam
 tier as [ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
 cluster `RoleBinding` scoped to a namespace that doesn't exist yet.
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli create system namespaces -d '{"name": "core"}'
-    ```
+```bash
+kayra-cli create system namespaces -d '{"name": "core"}'
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X POST http://localhost:8080/apis/system.example.com/v1/namespaces \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"name": "core"}'
-    ```
+```bash
+curl -s -X POST http://localhost:8080/apis/system.example.com/v1/namespaces \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "core"}'
+```
 
 `PUT` is a no-op confirmation kept for API shape compatibility: the path
 segment is the only thing that ever identified a namespace, and

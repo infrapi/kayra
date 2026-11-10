@@ -1,3 +1,9 @@
+---
+title: oauth2broker
+description: Server-side relay that lets kayra-cli login run a browser-based OAuth2 flow without local config.
+weight: 90
+---
+
 # oauth2broker
 
 ```go
@@ -24,7 +30,7 @@ the exact same public, PKCE-only registration
 `/oauth2/v1/callback` instead of a loopback address.
 
 The CLI never names a provider at all — see
-[handleAuthorize](#handleauthorize) below — and never reads local
+[Provider resolution](#provider-resolution) below — and never reads local
 config, so `/callback` additionally relays the chosen provider's own
 public `token_endpoint`/`client_id` back to it: everything
 [`oauth2login.LoginToServer`](oauth2login.md#logintoserver) needs to

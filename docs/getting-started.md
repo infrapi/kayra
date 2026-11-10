@@ -1,9 +1,15 @@
+---
+title: Getting started
+description: Install Kayra, run it, bootstrap a token and create a tenant through to a running subscription.
+weight: 20
+---
+
 # Getting started
 
 A full walkthrough: install, run, bootstrap a token, and create a tenant
 all the way through to a running subscription — every command below is
 copy-pasteable `kayra-cli`, with its raw `curl` equivalent in the
-second tab.
+block that follows it.
 
 ## 1. Install
 
@@ -28,12 +34,15 @@ archive also ships `LICENSE`/`README.md`, the `kayra` or `kayra-cli`
 binary inside it). Giving each its own path keeps both tracked
 separately.
 
-??? note "Building from source instead"
+<details>
+<summary>Building from source instead</summary>
 
-    ```bash
-    go build -o kayra ./cmd/kayra
-    go build -o kayra-cli ./cmd/cli
-    ```
+```bash
+go build -o kayra ./cmd/kayra
+go build -o kayra-cli ./cmd/cli
+```
+
+</details>
 
 `kayra` runs the server and its background jobs. `kayra-cli` is the
 separate, portable client an end user logs in with — it never reads
@@ -120,21 +129,21 @@ mints this bootstrap token only when actually needed again.
 
 A namespace *is* a tenant — one call creates both:
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli create system namespaces -d '{"name": "thetenant"}'
-    # {"active": false, "name": "thetenant"}
-    ```
+```bash
+kayra-cli create system namespaces -d '{"name": "thetenant"}'
+# {"active": false, "name": "thetenant"}
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X POST http://localhost:8080/apis/system.example.com/v1/namespaces \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"name": "thetenant"}'
-    # {"active": false, "name": "thetenant"}
-    ```
+```bash
+curl -s -X POST http://localhost:8080/apis/system.example.com/v1/namespaces \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "thetenant"}'
+# {"active": false, "name": "thetenant"}
+```
 
 It comes back `active: false` — only `kayra reconciler` ever flips
 that (see [Namespaces](architecture/namespaces.md)).
@@ -144,43 +153,43 @@ that (see [Namespaces](architecture/namespaces.md)).
 Group → role → rolebinding, cluster-scoped, so this tenant's own
 admins can later manage its day-to-day RBAC themselves:
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli create authorization clustergroups -d '{"name": "thetenant-admins",
-           "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-           "groups": ["sandbox-core-sysadmin"]}'
+```bash
+kayra-cli create authorization clustergroups -d '{"name": "thetenant-admins",
+       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+       "groups": ["sandbox-core-sysadmin"]}'
 
-    kayra-cli create authorization clusterroles -d '{"name": "thetenant-admin-role",
-           "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-           "rules": [{"apis": ["catalog.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
+kayra-cli create authorization clusterroles -d '{"name": "thetenant-admin-role",
+       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+       "rules": [{"apis": ["catalog.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
 
-    kayra-cli create authorization clusterrolebindings -d '{"name": "thetenant-admin-binding",
-           "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-           "role": "thetenant-admin-role", "groups": ["thetenant-admins"]}'
-    ```
+kayra-cli create authorization clusterrolebindings -d '{"name": "thetenant-admin-binding",
+       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+       "role": "thetenant-admin-role", "groups": ["thetenant-admins"]}'
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clustergroups \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"name": "thetenant-admins",
-           "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-           "groups": ["sandbox-core-sysadmin"]}'
+```bash
+curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clustergroups \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "thetenant-admins",
+       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+       "groups": ["sandbox-core-sysadmin"]}'
 
-    curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterroles \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"name": "thetenant-admin-role",
-           "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-           "rules": [{"apis": ["catalog.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
+curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterroles \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "thetenant-admin-role",
+       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+       "rules": [{"apis": ["catalog.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
 
-    curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterrolebindings \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"name": "thetenant-admin-binding",
-           "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-           "role": "thetenant-admin-role", "groups": ["thetenant-admins"]}'
-    ```
+curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterrolebindings \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "thetenant-admin-binding",
+       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+       "role": "thetenant-admin-role", "groups": ["thetenant-admins"]}'
+```
 
 See [who can manage a namespace's RBAC](architecture/rbac-and-auth.md)
 for how this check is actually evaluated.
@@ -192,30 +201,30 @@ and who owns it — Kayra never implements the API itself, only tracks
 it and notifies on changes. A `Subscription` links one namespace to
 one registration by name:
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli create catalog apiregistrations \
-      -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
-    # sync_id is minted automatically — note it down, or just GET it back below
+```bash
+kayra-cli create catalog apiregistrations \
+  -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
+# sync_id is minted automatically — note it down, or just GET it back below
 
-    kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.example.com"}'
-    # {"api": "vault.example.com", "active": false, "state": "init", ...}
-    ```
+kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.example.com"}'
+# {"api": "vault.example.com", "active": false, "state": "init", ...}
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
-    # sync_id is minted automatically — note it down, or just GET it back below
+```bash
+curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
+# sync_id is minted automatically — note it down, or just GET it back below
 
-    curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"api": "vault.example.com"}'
-    # {"api": "vault.example.com", "active": false, "state": "init", ...}
-    ```
+curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"api": "vault.example.com"}'
+# {"api": "vault.example.com", "active": false, "state": "init", ...}
+```
 
 Any caller whose groups are bound to the `catalog.example.com` API
 can do the subscribe step — it doesn't have to be the bootstrap token;
@@ -226,24 +235,24 @@ instead.
 
 ## 8. Trigger a sync and check status
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli update catalog apiregistrations vault.example.com/sync -d '{}'
+```bash
+kayra-cli update catalog apiregistrations vault.example.com/sync -d '{}'
 
-    kayra-cli get catalog apiregistrations vault.example.com/status
-    ```
+kayra-cli get catalog apiregistrations vault.example.com/status
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/vault.example.com/sync \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{}'
+```bash
+curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/vault.example.com/sync \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{}'
 
-    curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/vault.example.com/status \
-      -H "Authorization: Bearer $TOKEN"
-    ```
+curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/vault.example.com/status \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 `kayra reconciler` picks up the new `sync_id` and runs whichever HTTP
 step pipeline `reconciler.mode` configures (none here, so it just logs

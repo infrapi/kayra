@@ -1,3 +1,9 @@
+---
+title: apiserver
+description: The wiring layer that imports every other package and builds the gin engine kayra serve runs.
+weight: 10
+---
+
 # apiserver
 
 ```go

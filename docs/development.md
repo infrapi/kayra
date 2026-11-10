@@ -1,3 +1,9 @@
+---
+title: Development
+description: Build, test and documentation workflow for the Kayra repository, and its source layout.
+weight: 60
+---
+
 # Development
 
 ## Quality gate
@@ -43,13 +49,22 @@ Pages live in `docs/` and the navigation is declared in `mkdocs.yml`. A new
 page must be added to `nav:`, otherwise the CI build — which runs `mkdocs
 build --strict` — fails.
 
-`README.md` is the only copy of the home page text: `docs/index.md` is a
-one-line `--8<-- "README.md"` snippet include, exactly like infrapi/lib.
-Edit the README, not the include. Since the same text renders both on
-GitHub and on this site, every link in the README is absolute: site
-pages as `https://infrapi.github.io/kayra/<page>/`, repository files as
-`https://github.com/infrapi/kayra/blob/main/<path>`. A relative link
-would break in one of the two places.
+Every page is portable, GitHub-native Markdown: it starts with YAML front
+matter (`title`, `description`, `weight` — the page's order inside its
+folder, matching `nav:`), keeps its own H1, and uses GitHub alerts
+(`> [!NOTE]`), `<details>` blocks and plain labelled code blocks rather
+than MkDocs-only admonitions, content tabs or snippet includes, so the
+same file renders on github.com, on this site and in the InfraPI
+developer portal.
+
+`docs/index.md` is a real page — the docs entry point, with the "where to
+start" table and the package table — not an include of the README.
+`README.md` is the repository's front door (what Kayra is, the two
+binaries, core concepts, license) and links into `docs/` with relative
+paths (`docs/getting-started.md`, `docs/packages/config.md`, ...).
+Links between docs pages are relative `.md` paths too, with GitHub-style
+heading anchors. Links to another InfraPI repository's docs stay
+absolute (`https://infrapi.github.io/<repo>/...`).
 
 `.github/workflows/docs.yml` builds the site on every push and PR, and on
 `main` also publishes it through GitHub Pages (Settings > Pages > Source =

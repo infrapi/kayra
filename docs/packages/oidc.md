@@ -1,3 +1,9 @@
+---
+title: oidc
+description: Fetches and caches OIDC discovery documents and JWKS, and serves Kayra's own discovery endpoints.
+weight: 110
+---
+
 # oidc
 
 ```go

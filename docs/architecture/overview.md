@@ -1,3 +1,9 @@
+---
+title: Overview
+description: How Kayra's three concerns are wired onto one gin engine, each in its own package-by-domain directory.
+weight: 10
+---
+
 # Overview
 
 Kayra is three concerns wired onto one gin engine by

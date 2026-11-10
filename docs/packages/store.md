@@ -1,3 +1,9 @@
+---
+title: store
+description: "Key/value backend abstraction: etcd in production or a directory of files for local dev."
+weight: 130
+---
+
 # store
 
 ```go

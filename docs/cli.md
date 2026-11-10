@@ -1,3 +1,9 @@
+---
+title: CLI
+description: Reference for the kayra server binary and the portable kayra-cli client.
+weight: 40
+---
+
 # CLI
 
 Two binaries (both built on [`urfave/cli/v3`](https://github.com/urfave/cli)),
@@ -117,7 +123,7 @@ kayra --config kayra.yaml token mint \
 Only works against a provider whose `authorization:` backend is
 `claims`-typed — the whole point of a self-signed bootstrap token is
 that its own `groups` claim *is* the trust statement, never re-checked
-against a directory (see [config](packages/config.md#claimsauthzconfig)
+against a directory (see [config](packages/config.md#claims-no-directory-at-all)
 and `examples/kayra.yaml`'s `self-claims` entry).
 
 | Flag | Default | Meaning |
@@ -388,61 +394,61 @@ prints `No resources found.` on stderr and no rows on stdout. Errors print
 on stderr as `Error: <title> (<status>): <detail>`, followed by
 `Solution: …` when the server gives one, and the command exits `1`.
 
-Each example's `curl` tab is the exact request the verb sends, against
+Each example's `curl` block is the exact request the verb sends, against
 `http://localhost:8080` with `app.api_domain` left at `example.com` —
 take the token from the current context with
 `TOKEN=$(kayra-cli context token)`.
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    # namespace-scoped: -n selects .../namespaces/<ns>/<resource>
-    kayra-cli get catalog -n thetenant subscriptions
-    # No resources found.
-    kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.example.com"}'
-    # NAMESPACE  NAME               CREATED AT                 UPDATED AT
-    # thetenant  vault.example.com  2026-11-10T14:30:00+01:00  2026-11-10T14:30:00+01:00
-    kayra-cli get catalog -n thetenant subscriptions vault.example.com -o json
-    # {"api": "vault.example.com", "active": false, "state": "init", ...}
-    kayra-cli update catalog -n thetenant subscriptions vault.example.com/sync -d '{}'
-    kayra-cli delete catalog -n thetenant subscriptions vault.example.com
-    # subscriptions "vault.example.com" deleted
+```bash
+# namespace-scoped: -n selects .../namespaces/<ns>/<resource>
+kayra-cli get catalog -n thetenant subscriptions
+# No resources found.
+kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.example.com"}'
+# NAMESPACE  NAME               CREATED AT                 UPDATED AT
+# thetenant  vault.example.com  2026-11-10T14:30:00+01:00  2026-11-10T14:30:00+01:00
+kayra-cli get catalog -n thetenant subscriptions vault.example.com -o json
+# {"api": "vault.example.com", "active": false, "state": "init", ...}
+kayra-cli update catalog -n thetenant subscriptions vault.example.com/sync -d '{}'
+kayra-cli delete catalog -n thetenant subscriptions vault.example.com
+# subscriptions "vault.example.com" deleted
 
-    # cluster-scoped: no -n, addresses .../<resource> directly
-    kayra-cli create catalog apiregistrations -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
-    kayra-cli get catalog apiregistrations
-    kayra-cli create authorization clustergroups -d '{"name": "g", "metadata": {...}, "groups": [...]}'
-    ```
+# cluster-scoped: no -n, addresses .../<resource> directly
+kayra-cli create catalog apiregistrations -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
+kayra-cli get catalog apiregistrations
+kayra-cli create authorization clustergroups -d '{"name": "g", "metadata": {...}, "groups": [...]}'
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    # namespace-scoped: -n selects .../namespaces/<ns>/<resource>
-    curl -s http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
-      -H "Authorization: Bearer $TOKEN"
-    # []
-    curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"api": "vault.example.com"}'
-    # {"api": "vault.example.com", "active": false, "state": "init", ...}
-    curl -s http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
-      -H "Authorization: Bearer $TOKEN"
-    curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com/sync \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{}'
-    curl -s -X DELETE http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
-      -H "Authorization: Bearer $TOKEN"
+```bash
+# namespace-scoped: -n selects .../namespaces/<ns>/<resource>
+curl -s http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
+  -H "Authorization: Bearer $TOKEN"
+# []
+curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"api": "vault.example.com"}'
+# {"api": "vault.example.com", "active": false, "state": "init", ...}
+curl -s http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
+  -H "Authorization: Bearer $TOKEN"
+curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com/sync \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{}'
+curl -s -X DELETE http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
+  -H "Authorization: Bearer $TOKEN"
 
-    # cluster-scoped: no -n, addresses .../<resource> directly
-    curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
-    curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
-      -H "Authorization: Bearer $TOKEN"
-    curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clustergroups \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"name": "g", "metadata": {...}, "groups": [...]}'
-    ```
+# cluster-scoped: no -n, addresses .../<resource> directly
+curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
+curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
+  -H "Authorization: Bearer $TOKEN"
+curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clustergroups \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "g", "metadata": {...}, "groups": [...]}'
+```
 
 `get` maps to `GET` either way — no trailing `<name>` lists the whole
 collection (`.../<resource>`), a `<name>` fetches that one item

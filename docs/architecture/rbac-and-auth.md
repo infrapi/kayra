@@ -1,3 +1,9 @@
+---
+title: "RBAC & auth"
+description: How a request is authenticated and how Kayra decides what the caller is allowed to do.
+weight: 20
+---
+
 # RBAC & auth
 
 How a request becomes "this is `jdoe`, authenticated via `okta`", and how

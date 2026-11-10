@@ -1,3 +1,9 @@
+---
+title: authz
+description: Resolves a user id to directory attributes and group membership via LDAP or a local fixture.
+weight: 30
+---
+
 # authz
 
 ```go

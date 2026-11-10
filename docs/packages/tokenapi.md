@@ -1,3 +1,9 @@
+---
+title: tokenapi
+description: Issues personal access tokens, which are opaque rather than JWTs.
+weight: 140
+---
+
 # tokenapi
 
 ```go

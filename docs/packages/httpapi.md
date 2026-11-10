@@ -1,3 +1,9 @@
+---
+title: httpapi
+description: Turns handler errors into RFC 9457 HTTP error responses using infrapi/lib's pkg/errors.
+weight: 70
+---
+
 # httpapi
 
 ```go

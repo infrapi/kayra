@@ -1,3 +1,9 @@
+---
+title: rbac
+description: Stores and serves cluster- and namespace-scoped Group, Role and RoleBinding objects.
+weight: 120
+---
+
 # rbac
 
 ```go

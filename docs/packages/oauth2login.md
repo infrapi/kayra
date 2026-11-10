@@ -1,3 +1,9 @@
+---
+title: oauth2login
+description: The CLI-side browser-based OAuth2 Authorization Code + PKCE flow against a remote provider.
+weight: 100
+---
+
 # oauth2login
 
 ```go
@@ -34,7 +40,7 @@ result, err := oauth2login.LoginToServer(ctx, serverBaseURL, os.Stderr)
   `kayra.yaml` to read any of that from. cmd/cli is designed to be
   handed to a plain end user who has none of it.
 - It asks `serverBaseURL`'s own broker to pick a provider on its
-  behalf (see [oauth2broker](oauth2broker.md#handleauthorize) —
+  behalf (see [oauth2broker](oauth2broker.md#provider-resolution) —
   automatic when exactly one `remote.oauth2` provider is configured,
   or a human picks from a chooser page when there's more than one),
   and depends on the broker handing back that provider's own

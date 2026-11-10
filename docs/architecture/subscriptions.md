@@ -1,3 +1,9 @@
+---
+title: "Subscriptions & reconciliation"
+description: Subscriptions link a namespace to an API registration, and the reconciler turns them active.
+weight: 50
+---
+
 # Subscriptions & reconciliation
 
 A `Subscription` links a [namespace](namespaces.md) to an
@@ -78,19 +84,19 @@ same cluster `Role.Rules` [RBAC & auth](rbac-and-auth.md#who-can-manage-a-namesp
 describes, so an existing sysadmin role using `resources: ["*"]` already
 covers it.
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli create catalog -n core subscriptions -d '{"api": "compute.example.com"}'
-    ```
+```bash
+kayra-cli create catalog -n core subscriptions -d '{"api": "compute.example.com"}'
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/core/subscriptions \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{"api": "compute.example.com"}'
-    ```
+```bash
+curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/core/subscriptions \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"api": "compute.example.com"}'
+```
 
 Create requires only `api`, which must be the registration's **long
 name** (`compute.example.com`) — a short name is refused (`400`, the
@@ -103,19 +109,19 @@ there's nothing left in the body a caller could legitimately change.
 
 ### Forcing a re-sync
 
-=== "kayra-cli"
+**kayra-cli**
 
-    ```bash
-    kayra-cli update catalog -n sre subscriptions dev.example.com/sync -d '{}'
-    ```
+```bash
+kayra-cli update catalog -n sre subscriptions dev.example.com/sync -d '{}'
+```
 
-=== "curl"
+**curl**
 
-    ```bash
-    curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/namespaces/sre/subscriptions/dev.example.com/sync \
-      -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-      -d '{}'
-    ```
+```bash
+curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/namespaces/sre/subscriptions/dev.example.com/sync \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{}'
+```
 
 Resets `current_sync_id` to empty — nothing else: `active`/`state` are left
 exactly as they were. That's the subscription-level mirror of [an api registration's
@@ -364,7 +370,7 @@ object field, an array element, any combination — renders as a Go
 
 - `.Subscription` — `Api` (the long name), `ShortName` (empty when the registration has none), `Namespace`, `Platform`, `Region`,
   `CurrentSyncID`, `ExpectedSyncID` (all strings; the same values
-  [the response's two sync fields](#active-statecurrentsyncid-are-computed)
+  [the response's two sync fields](#activestatecurrentsyncid-are-computed)
   expose).
 - `.Previous.Outputs` — the *immediately preceding* step's own `outputs`
   (below), empty for the first step.
