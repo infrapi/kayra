@@ -187,13 +187,13 @@ with `allowed: false` and the reason.
 |---|---|---|---|
 | 1 | the namespace doesn't exist | `404` | `namespace "core" not found` |
 | 2 | neither the caller's user id nor any of their groups is listed in any of the namespace's own `Group`s | `allowed: false` | `you are not a member of namespace "core": neither your user id nor any of your groups is listed in any of its groups` |
-| 3 | no `ApiRegistration` whose long name (its id) is `api` exists in this deployment's platform/region; a short name never matches, and the solution names the long one | `404` | `api "telemetry.giservices.io" is not registered in sandbox/eu-west-1` |
-| 4 | the namespace has no subscription to that registration | `403` | `namespace "core" is not subscribed to api "telemetry.giservices.io"` (solution: subscribe first) |
-| 5 | the subscription is not active: its initial sync hasn't completed, so **every verb is refused**, reads included | `403` | `subscription of namespace "core" to api "telemetry.giservices.io" is not active yet (state "init"): its initial sync has not completed, so the api is not ready` |
-| 6 | the api's [OpenAPI spec](api-registrations.md#openapi-spec) has no namespaced `resource`; a singular/plural slip gets a "did you mean" | `404` | `api "telemetry.giservices.io" has no resource "dashboard"` (solution: did you mean "dashboards"?) |
-| 7 | the spec has `resource`, but not `verb` on it | `405` | `resource "dashboards" of api "telemetry.giservices.io" doesn't support "delete" (supported: get, list)` |
-| 8 | no role bound to the caller's groups grants `api` at all | `allowed: false` | `no role bound to your groups in namespace "core" grants api "telemetry.giservices.io"` |
-| 9 | a role grants `api`, but not `verb` on `resource` | `allowed: false` | `your roles in namespace "core" grant api "telemetry.giservices.io", but not "list" on "dashboards"` |
+| 3 | no `ApiRegistration` whose long name (its id) is `api` exists in this deployment's platform/region; a short name never matches, and the solution names the long one | `404` | `api "telemetry.infrapi.io" is not registered in sandbox/eu-west-1` |
+| 4 | the namespace has no subscription to that registration | `403` | `namespace "core" is not subscribed to api "telemetry.infrapi.io"` (solution: subscribe first) |
+| 5 | the subscription is not active: its initial sync hasn't completed, so **every verb is refused**, reads included | `403` | `subscription of namespace "core" to api "telemetry.infrapi.io" is not active yet (state "init"): its initial sync has not completed, so the api is not ready` |
+| 6 | the api's [OpenAPI spec](api-registrations.md#openapi-spec) has no namespaced `resource`; a singular/plural slip gets a "did you mean" | `404` | `api "telemetry.infrapi.io" has no resource "dashboard"` (solution: did you mean "dashboards"?) |
+| 7 | the spec has `resource`, but not `verb` on it | `405` | `resource "dashboards" of api "telemetry.infrapi.io" doesn't support "delete" (supported: get, list)` |
+| 8 | no role bound to the caller's groups grants `api` at all | `allowed: false` | `no role bound to your groups in namespace "core" grants api "telemetry.infrapi.io"` |
+| 9 | a role grants `api`, but not `verb` on `resource` | `allowed: false` | `your roles in namespace "core" grant api "telemetry.infrapi.io", but not "list" on "dashboards"` |
 
 An active subscription always has a stored spec, since the sync that
 activated it needed one. If one is missing anyway, step 6 answers `503`

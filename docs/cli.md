@@ -347,7 +347,7 @@ kayra-cli apis
 # namespaces          -          system.example.com         false       create,delete,get,list,update
 # apiregistrations    -          catalog.example.com        false       create,delete,get,list,update
 # subscriptions       -          catalog.example.com        true        create,delete,get,list,update
-# dashboards          telemetry  telemetry.giservices.io    true        create,delete,get,list
+# dashboards          telemetry  telemetry.infrapi.io    true        create,delete,get,list
 # -                   -          vault.example.com          -           -
 kayra-cli apis --api-group telemetry --namespaced=true
 kayra-cli apis -o yaml

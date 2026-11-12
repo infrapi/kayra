@@ -235,7 +235,7 @@ Any authenticated caller can read the stored spec, exactly as the app served
 it:
 
 ```bash
-curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/telemetry.giservices.io/openapi.json \
+curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/telemetry.infrapi.io/openapi.json \
   -H "Authorization: Bearer $TOKEN"
 ```
 

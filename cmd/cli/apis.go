@@ -43,7 +43,7 @@ func apisCommand() *cli.Command {
 		Name:  "apis",
 		Usage: "list every api group and the resources it serves (like `oc api-resources`)",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "api-group", Usage: "only this api group: its long name (\"telemetry.giservices.io\"), its short name, or its first label (\"telemetry\")"},
+			&cli.StringFlag{Name: "api-group", Usage: "only this api group: its long name (\"telemetry.infrapi.io\"), its short name, or its first label (\"telemetry\")"},
 			&cli.StringFlag{Name: "namespaced", Usage: "only namespaced (true) or cluster-scoped (false) resources"},
 			&cli.StringFlag{Name: "output", Aliases: []string{"o"}, Value: outputTable, Usage: "output format: table, json or yaml"},
 			&cli.StringFlag{Name: "context", Usage: "saved context to use (defaults to the current context)"},

@@ -17,7 +17,7 @@ import (
 func TestApiNameForms(t *testing.T) {
 	long := map[string]bool{
 		"compute.example.com": true,
-		"dev.giservices.io":   true,
+		"dev.infrapi.io":   true,
 		"compute":             false,
 		"Compute.example.com": false,
 		".example.com":        false,
@@ -117,7 +117,7 @@ func TestCheckApiSubscription(t *testing.T) {
 // and rbac steps, wired exactly as apiserver.Build wires them, adding
 // one missing piece of setup per case: each case's answer must be the
 // first step that still fails, never a later one. This is the reported
-// case — listing "dashboards" on "telemetry.giservices.io" in "core" —
+// case — listing "dashboards" on "telemetry.infrapi.io" in "core" —
 // walked through every step.
 func TestCheckRouteOrder(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -132,7 +132,7 @@ func TestCheckRouteOrder(t *testing.T) {
 
 	const (
 		ns    = "core"
-		api   = "telemetry.giservices.io"
+		api   = "telemetry.infrapi.io"
 		group = "core-devs"
 	)
 	engine := gin.New()
@@ -177,7 +177,7 @@ func TestCheckRouteOrder(t *testing.T) {
 		{"2 not a member", func() { must(catalogRepo.PutNamespace(&Namespace{Name: ns})) }, "list", http.StatusOK, `you are not a member of namespace \"core\"`},
 		{"3 api not registered", func() {
 			must(rbacRepo.PutNamespaceGroup(ns, &rbac.Group{Name: "devs", Metadata: meta, Groups: []string{group}}))
-		}, "list", http.StatusNotFound, `api \"telemetry.giservices.io\" is not registered`},
+		}, "list", http.StatusNotFound, `api \"telemetry.infrapi.io\" is not registered`},
 		{"4 not subscribed", func() {
 			must(catalogRepo.PutClusterApiRegistration(&ApiRegistration{Name: api, Platform: testDeployPlatform, Region: testDeployRegion, SyncID: "v1"}))
 		}, "list", http.StatusForbidden, "subscribe first"},
@@ -195,12 +195,12 @@ func TestCheckRouteOrder(t *testing.T) {
 			must(rbacRepo.PutNamespaceRole(ns, &rbac.Role{Name: "compute-reader", Metadata: meta,
 				Rules: []rbac.Rule{{Apis: []string{"compute.example.com"}, Resources: []string{"*"}, Verbs: []string{"*"}}}}))
 			must(rbacRepo.PutNamespaceRoleBinding(ns, &rbac.RoleBinding{Name: "devs-compute", Metadata: meta, Role: "compute-reader", Groups: []string{"devs"}}))
-		}, "list", http.StatusOK, `no role bound to your groups in namespace \"core\" grants api \"telemetry.giservices.io\"`},
+		}, "list", http.StatusOK, `no role bound to your groups in namespace \"core\" grants api \"telemetry.infrapi.io\"`},
 		{"9 api granted but not this verb", func() {
 			must(rbacRepo.PutNamespaceRole(ns, &rbac.Role{Name: "telemetry-reader", Metadata: meta,
 				Rules: []rbac.Rule{{Apis: []string{api}, Resources: []string{"dashboards"}, Verbs: []string{"get"}}}}))
 			must(rbacRepo.PutNamespaceRoleBinding(ns, &rbac.RoleBinding{Name: "devs-telemetry", Metadata: meta, Role: "telemetry-reader", Groups: []string{"devs"}}))
-		}, "list", http.StatusOK, `grant api \"telemetry.giservices.io\", but not \"list\" on \"dashboards\"`},
+		}, "list", http.StatusOK, `grant api \"telemetry.infrapi.io\", but not \"list\" on \"dashboards\"`},
 		{"allowed", func() {}, "get", http.StatusOK, `"allowed":true`},
 		{"allowed while out of date", func() {
 			reg, err := catalogRepo.GetClusterApiRegistration(testDeployPlatform, testDeployRegion, api)
@@ -220,7 +220,7 @@ func TestCheckRouteOrder(t *testing.T) {
 
 func TestCheckApiResource(t *testing.T) {
 	repo := newTestRepo(t)
-	const api = "telemetry.giservices.io"
+	const api = "telemetry.infrapi.io"
 	if err := repo.PutApiSpec(testDeployPlatform, testDeployRegion, &ApiSpec{Api: api, SyncID: "v1", Resources: []ApiResource{
 		{Name: "dashboards", Namespaced: true, Verbs: []string{"get", "list"}},
 		{Name: "dashboards/refresh", Namespaced: true, Verbs: []string{"patch"}},
@@ -258,13 +258,13 @@ func TestCheckApiResource(t *testing.T) {
 
 func TestValidateRoleRules(t *testing.T) {
 	repo := newTestRepo(t)
-	for _, name := range []string{"telemetry.giservices.io", "vault.example.com"} {
+	for _, name := range []string{"telemetry.infrapi.io", "vault.example.com"} {
 		if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: name, Platform: testDeployPlatform, Region: testDeployRegion}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// telemetry has a spec; vault was never synced, so it has none.
-	if err := repo.PutApiSpec(testDeployPlatform, testDeployRegion, &ApiSpec{Api: "telemetry.giservices.io", Resources: []ApiResource{
+	if err := repo.PutApiSpec(testDeployPlatform, testDeployRegion, &ApiSpec{Api: "telemetry.infrapi.io", Resources: []ApiResource{
 		{Name: "dashboards", Namespaced: true, Verbs: []string{"get", "list"}},
 		{Name: "dashboards/refresh", Namespaced: true, Verbs: []string{"patch"}},
 	}}); err != nil {
@@ -278,17 +278,17 @@ func TestValidateRoleRules(t *testing.T) {
 		rules  []rbac.Rule
 		wantIn string // "" means valid
 	}{
-		{"valid", rule("telemetry.giservices.io", []string{"dashboards"}, []string{"get", "list"}), ""},
-		{"verb served by another of the rule's resources", rule("telemetry.giservices.io", []string{"dashboards", "dashboards/refresh"}, []string{"list", "patch"}), ""},
-		{"wildcards", rule("telemetry.giservices.io", []string{"*"}, []string{"*"}), ""},
+		{"valid", rule("telemetry.infrapi.io", []string{"dashboards"}, []string{"get", "list"}), ""},
+		{"verb served by another of the rule's resources", rule("telemetry.infrapi.io", []string{"dashboards", "dashboards/refresh"}, []string{"list", "patch"}), ""},
+		{"wildcards", rule("telemetry.infrapi.io", []string{"*"}, []string{"*"}), ""},
 		{"wildcard api", rule("*", []string{"anything"}, []string{"anything"}), ""},
 		{"kayra's own api", rule(CatalogAPI, []string{"subscriptions"}, []string{"list"}), ""},
 		{"api without a spec yet", rule("vault.example.com", []string{"secrets"}, []string{"get"}), ""},
 		{"unregistered api", rule("nope.example.com", []string{"x"}, []string{"get"}), "is not registered"},
 		{"short name", rule("telemetry", []string{"dashboards"}, []string{"get"}), "is not registered"},
-		{"unknown resource", rule("telemetry.giservices.io", []string{"dashboard"}, []string{"get"}), `did you mean "dashboards"`},
-		{"unsupported verb", rule("telemetry.giservices.io", []string{"dashboards"}, []string{"delete"}), `supports "delete"`},
-		{"wildcard resource, unsupported verb", rule("telemetry.giservices.io", []string{"*"}, []string{"delete"}), `supports "delete"`},
+		{"unknown resource", rule("telemetry.infrapi.io", []string{"dashboard"}, []string{"get"}), `did you mean "dashboards"`},
+		{"unsupported verb", rule("telemetry.infrapi.io", []string{"dashboards"}, []string{"delete"}), `supports "delete"`},
+		{"wildcard resource, unsupported verb", rule("telemetry.infrapi.io", []string{"*"}, []string{"delete"}), `supports "delete"`},
 	}
 	for _, tc := range cases {
 		err := repo.ValidateRoleRules(tc.rules, testDeployPlatform, testDeployRegion)

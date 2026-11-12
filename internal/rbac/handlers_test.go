@@ -512,7 +512,7 @@ func TestNamespaceRoleRulesValidated(t *testing.T) {
 	})
 	base := "/apis/" + AuthorizationAPI + "/v1/namespaces/" + testNamespace + "/roles"
 	role := func(resource string) Role {
-		return Role{Name: "r", Rules: []Rule{{Apis: []string{"telemetry.giservices.io"}, Resources: []string{resource}, Verbs: []string{"get"}}}}
+		return Role{Name: "r", Rules: []Rule{{Apis: []string{"telemetry.infrapi.io"}, Resources: []string{resource}, Verbs: []string{"get"}}}}
 	}
 
 	if w := doJSON(t, engine, http.MethodPost, base, role("bad")); w.Code != http.StatusBadRequest || !bytes.Contains(w.Body.Bytes(), []byte("no namespaced resource")) {

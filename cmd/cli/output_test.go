@@ -12,7 +12,7 @@ func TestRenderTableList(t *testing.T) {
 	created := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
 	updated := time.Date(2026, 11, 10, 14, 30, 0, 0, time.UTC)
 	body := []byte(`[
-		{"api":"telemetry.giservices.io","active":true,"state":"success","created_at":"2026-11-01T09:00:00Z","updated_at":"2026-11-10T14:30:00Z"},
+		{"api":"telemetry.infrapi.io","active":true,"state":"success","created_at":"2026-11-01T09:00:00Z","updated_at":"2026-11-10T14:30:00Z"},
 		{"api":"compute.example.com","active":false,"state":"init"}
 	]`)
 	var out, errOut bytes.Buffer
@@ -27,7 +27,7 @@ func TestRenderTableList(t *testing.T) {
 	if got := strings.Fields(lines[0]); strings.Join(got, " ") != "NAMESPACE NAME CREATED AT UPDATED AT" {
 		t.Fatalf("header = %q", lines[0])
 	}
-	want1 := []string{"core", "telemetry.giservices.io", created.Local().Format(time.RFC3339), updated.Local().Format(time.RFC3339)}
+	want1 := []string{"core", "telemetry.infrapi.io", created.Local().Format(time.RFC3339), updated.Local().Format(time.RFC3339)}
 	if got := strings.Fields(lines[1]); strings.Join(got, " ") != strings.Join(want1, " ") {
 		t.Fatalf("row 1 = %q, want fields %q", lines[1], want1)
 	}
@@ -94,8 +94,8 @@ func TestPrintVerbResponseDeleteAndFallback(t *testing.T) {
 
 func TestRenderProblem(t *testing.T) {
 	var errOut bytes.Buffer
-	renderProblem(&errOut, http.StatusForbidden, []byte(`{"status":403,"title":"Forbidden","detail":"namespace \"core\" is not subscribed to api \"telemetry.giservices.io\"","solution":"subscribe first"}`))
-	want := "Error: Forbidden (403): namespace \"core\" is not subscribed to api \"telemetry.giservices.io\"\nSolution: subscribe first\n"
+	renderProblem(&errOut, http.StatusForbidden, []byte(`{"status":403,"title":"Forbidden","detail":"namespace \"core\" is not subscribed to api \"telemetry.infrapi.io\"","solution":"subscribe first"}`))
+	want := "Error: Forbidden (403): namespace \"core\" is not subscribed to api \"telemetry.infrapi.io\"\nSolution: subscribe first\n"
 	if errOut.String() != want {
 		t.Fatalf("renderProblem = %q, want %q", errOut.String(), want)
 	}
@@ -109,8 +109,8 @@ func TestRenderProblem(t *testing.T) {
 
 func TestPrintYAML(t *testing.T) {
 	var out bytes.Buffer
-	printYAML(&out, []byte(`[{"api":"telemetry.giservices.io","active":true,"state":"init","current_sync_id":"","count":3,"version":"1.0","flag":"true","depends_on":[{"name":"a"}],"metadata":{"namespace":"core"},"none":null}]`))
-	want := `- api: telemetry.giservices.io
+	printYAML(&out, []byte(`[{"api":"telemetry.infrapi.io","active":true,"state":"init","current_sync_id":"","count":3,"version":"1.0","flag":"true","depends_on":[{"name":"a"}],"metadata":{"namespace":"core"},"none":null}]`))
+	want := `- api: telemetry.infrapi.io
   active: true
   state: init
   current_sync_id: ""
@@ -140,7 +140,7 @@ func TestApisFilterAndRender(t *testing.T) {
 			{Name: "apiregistrations", Verbs: []string{"get", "list"}},
 			{Name: "subscriptions", Namespaced: true, Verbs: []string{"create", "list"}},
 		}},
-		{Api: "telemetry.giservices.io", ShortName: "telemetry", Resources: []discoveryResource{
+		{Api: "telemetry.infrapi.io", ShortName: "telemetry", Resources: []discoveryResource{
 			{Name: "dashboards", Namespaced: true, Verbs: []string{"list"}},
 		}},
 		{Api: "vault.example.com", Resources: []discoveryResource{}}, // spec not fetched yet
@@ -155,7 +155,7 @@ func TestApisFilterAndRender(t *testing.T) {
 		{"NAME", "SHORTNAME", "APIGROUP", "NAMESPACED", "VERBS"},
 		{"apiregistrations", "-", "catalog.example.com", "false", "get,list"},
 		{"subscriptions", "-", "catalog.example.com", "true", "create,list"},
-		{"dashboards", "telemetry", "telemetry.giservices.io", "true", "list"},
+		{"dashboards", "telemetry", "telemetry.infrapi.io", "true", "list"},
 		{"-", "-", "vault.example.com", "-", "-"},
 	}
 	if len(lines) != len(want) {
@@ -171,8 +171,8 @@ func TestApisFilterAndRender(t *testing.T) {
 	if got := filterGroups(groups, "", &yes); len(got) != 2 || got[0].Resources[0].Name != "subscriptions" {
 		t.Fatalf("--namespaced=true = %+v", got)
 	}
-	for _, sel := range []string{"telemetry.giservices.io", "telemetry"} {
-		if got := filterGroups(groups, sel, nil); len(got) != 1 || got[0].Api != "telemetry.giservices.io" {
+	for _, sel := range []string{"telemetry.infrapi.io", "telemetry"} {
+		if got := filterGroups(groups, sel, nil); len(got) != 1 || got[0].Api != "telemetry.infrapi.io" {
 			t.Fatalf("--api-group %s = %+v", sel, got)
 		}
 	}

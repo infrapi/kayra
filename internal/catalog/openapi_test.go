@@ -40,21 +40,21 @@ func TestMain(m *testing.M) {
 func TestDeriveResources(t *testing.T) {
 	routes := []Route{
 		// OpenAPI-style params, as an app's spec has them.
-		{"GET", "/apis/telemetry.giservices.io/v1/namespaces/{namespace}/dashboards"},
-		{"POST", "/apis/telemetry.giservices.io/v1/namespaces/{namespace}/dashboards"},
-		{"GET", "/apis/telemetry.giservices.io/v1/namespaces/{namespace}/dashboards/{name}"},
-		{"DELETE", "/apis/telemetry.giservices.io/v1/namespaces/{namespace}/dashboards/{name}"},
-		{"PATCH", "/apis/telemetry.giservices.io/v1/namespaces/{namespace}/dashboards/{name}/refresh"},
+		{"GET", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards"},
+		{"POST", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards"},
+		{"GET", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards/{name}"},
+		{"DELETE", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards/{name}"},
+		{"PATCH", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards/{name}/refresh"},
 		// gin-style params, as Kayra's own route table has them.
-		{"GET", "/apis/telemetry.giservices.io/v1/datasources"},
-		{"PUT", "/apis/telemetry.giservices.io/v1/datasources/:name"},
+		{"GET", "/apis/telemetry.infrapi.io/v1/datasources"},
+		{"PUT", "/apis/telemetry.infrapi.io/v1/datasources/:name"},
 		// "namespaces" itself is a cluster-scoped resource.
-		{"GET", "/apis/telemetry.giservices.io/v1/namespaces/:namespace"},
+		{"GET", "/apis/telemetry.infrapi.io/v1/namespaces/:namespace"},
 		// Not this api's: ignored.
 		{"GET", "/apis/other.example.com/v1/things"},
 		{"GET", "/-/healthz"},
 	}
-	got := DeriveResources("telemetry.giservices.io", routes)
+	got := DeriveResources("telemetry.infrapi.io", routes)
 	want := []ApiResource{
 		{Name: "dashboards", Namespaced: true, Verbs: []string{"create", "delete", "get", "list"}},
 		{Name: "dashboards/refresh", Namespaced: true, Verbs: []string{"patch"}},
@@ -206,7 +206,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := newTestRepo(t)
 	for _, reg := range []ApiRegistration{
-		{Name: "telemetry.giservices.io", ShortName: "telemetry", Owner: "obs", Platform: testDeployPlatform, Region: testDeployRegion, SyncID: "s2"},
+		{Name: "telemetry.infrapi.io", ShortName: "telemetry", Owner: "obs", Platform: testDeployPlatform, Region: testDeployRegion, SyncID: "s2"},
 		{Name: "vault.example.com", Owner: "sre", Platform: testDeployPlatform, Region: testDeployRegion},
 		{Name: "dns.example.com", Platform: "prod", Region: testDeployRegion}, // another platform: not listed
 	} {
@@ -215,9 +215,9 @@ func TestDiscoveryRoutes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	doc := `{"openapi":"3.1.0","paths":{"/apis/telemetry.giservices.io/v1/namespaces/{namespace}/dashboards":{"get":{}}}}`
+	doc := `{"openapi":"3.1.0","paths":{"/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards":{"get":{}}}}`
 	if err := repo.PutApiSpec(testDeployPlatform, testDeployRegion, &ApiSpec{
-		Api: "telemetry.giservices.io", SyncID: "s1", Spec: json.RawMessage(doc),
+		Api: "telemetry.infrapi.io", SyncID: "s1", Spec: json.RawMessage(doc),
 		Resources: []ApiResource{{Name: "dashboards", Namespaced: true, Verbs: []string{"list"}}},
 	}); err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 	for _, g := range groups {
 		names = append(names, g.Api)
 	}
-	if got := strings.Join(names, ","); got != CatalogAPI+",telemetry.giservices.io,vault.example.com" {
+	if got := strings.Join(names, ","); got != CatalogAPI+",telemetry.infrapi.io,vault.example.com" {
 		t.Fatalf("groups = %s, want Kayra's own first, then this platform/region's registrations by name", got)
 	}
 	if !groups[0].Builtin || groups[0].Owner != "kayra" {
@@ -258,7 +258,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 		t.Fatalf("vault (no spec yet) = %+v, want resources [] and no spec_sync_id", v)
 	}
 
-	w = get("/apis/" + CatalogAPI + "/v1/apiregistrations/telemetry.giservices.io/openapi.json")
+	w = get("/apis/" + CatalogAPI + "/v1/apiregistrations/telemetry.infrapi.io/openapi.json")
 	if w.Code != http.StatusOK || w.Body.String() != doc || w.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("openapi.json: status %d, type %q, body %s", w.Code, w.Header().Get("Content-Type"), w.Body.String())
 	}
