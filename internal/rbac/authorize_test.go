@@ -19,22 +19,22 @@ func TestMatchesAny(t *testing.T) {
 
 func TestAllows(t *testing.T) {
 	rules := []Rule{
-		{Apis: []string{"compute.example.com"}, Resources: []string{"*"}, Verbs: []string{"*"}},
+		{Apis: []string{"compute.infrapi.io"}, Resources: []string{"*"}, Verbs: []string{"*"}},
 	}
-	if !Allows(rules, "compute.example.com", "groups", "create") {
+	if !Allows(rules, "compute.infrapi.io", "groups", "create") {
 		t.Fatalf("Allows: wildcard resource/verb should grant")
 	}
-	if Allows(rules, "storage.example.com", "groups", "create") {
+	if Allows(rules, "storage.infrapi.io", "groups", "create") {
 		t.Fatalf("Allows: wrong service should not grant")
 	}
 
 	readOnly := []Rule{
 		{Apis: []string{"*"}, Resources: []string{"*"}, Verbs: []string{"get", "list"}},
 	}
-	if Allows(readOnly, "compute.example.com", "groups", "create") {
+	if Allows(readOnly, "compute.infrapi.io", "groups", "create") {
 		t.Fatalf("Allows: read-only rules should not grant create")
 	}
-	if !Allows(readOnly, "compute.example.com", "groups", "get") {
+	if !Allows(readOnly, "compute.infrapi.io", "groups", "get") {
 		t.Fatalf("Allows: read-only rules should grant get")
 	}
 }
@@ -77,7 +77,7 @@ func TestAuthorizeRequiresMatchingGroupRoleAPIResourceAndVerb(t *testing.T) {
 	callerGroups := []string{"sandbox-core-rw"}
 
 	// no setup at all: nobody is authorized for anything.
-	allowed, reason, err := repo.Authorize("", callerGroups, "core", "compute.example.com", "vm", "list")
+	allowed, reason, err := repo.Authorize("", callerGroups, "core", "compute.infrapi.io", "vm", "list")
 	if err != nil {
 		t.Fatalf("Authorize: %v", err)
 	}
@@ -88,9 +88,9 @@ func TestAuthorizeRequiresMatchingGroupRoleAPIResourceAndVerb(t *testing.T) {
 		t.Fatalf("Authorize: denial should carry a reason")
 	}
 
-	seedNamespaceRBAC(t, repo, "sandbox-core-rw", "core", "compute.example.com", "vm", "list")
+	seedNamespaceRBAC(t, repo, "sandbox-core-rw", "core", "compute.infrapi.io", "vm", "list")
 
-	allowed, _, err = repo.Authorize("", callerGroups, "core", "compute.example.com", "vm", "list")
+	allowed, _, err = repo.Authorize("", callerGroups, "core", "compute.infrapi.io", "vm", "list")
 	if err != nil {
 		t.Fatalf("Authorize: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestAuthorizeRequiresMatchingGroupRoleAPIResourceAndVerb(t *testing.T) {
 	}
 
 	// same everything, wrong verb: must not leak beyond what the rule grants.
-	allowed, _, err = repo.Authorize("", callerGroups, "core", "compute.example.com", "vm", "delete")
+	allowed, _, err = repo.Authorize("", callerGroups, "core", "compute.infrapi.io", "vm", "delete")
 	if err != nil {
 		t.Fatalf("Authorize: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestAuthorizeRequiresMatchingGroupRoleAPIResourceAndVerb(t *testing.T) {
 	}
 
 	// same groups, different namespace: must not leak across namespaces.
-	allowed, _, err = repo.Authorize("", callerGroups, "othertenant", "compute.example.com", "vm", "list")
+	allowed, _, err = repo.Authorize("", callerGroups, "othertenant", "compute.infrapi.io", "vm", "list")
 	if err != nil {
 		t.Fatalf("Authorize: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestAuthorizeRequiresMatchingGroupRoleAPIResourceAndVerb(t *testing.T) {
 	}
 
 	// different groups, same namespace: must not leak across callers.
-	allowed, _, err = repo.Authorize("", []string{"some-other-group"}, "core", "compute.example.com", "vm", "list")
+	allowed, _, err = repo.Authorize("", []string{"some-other-group"}, "core", "compute.infrapi.io", "vm", "list")
 	if err != nil {
 		t.Fatalf("Authorize: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestAuthorizeAllowsDirectUserSource(t *testing.T) {
 	}
 	if err := repo.PutNamespaceRole("core", &Role{
 		Name: "core-role-oneoff", Metadata: Metadata{Namespace: "core"},
-		Rules: []Rule{{Apis: []string{"compute.example.com"}, Resources: []string{"vm"}, Verbs: []string{"list"}}},
+		Rules: []Rule{{Apis: []string{"compute.infrapi.io"}, Resources: []string{"vm"}, Verbs: []string{"list"}}},
 	}); err != nil {
 		t.Fatalf("PutNamespaceRole: %v", err)
 	}
@@ -247,7 +247,7 @@ func TestAuthorizeAllowsDirectUserSource(t *testing.T) {
 		t.Fatalf("PutNamespaceRoleBinding: %v", err)
 	}
 
-	allowed, _, err := repo.Authorize("jdoe", nil, "core", "compute.example.com", "vm", "list")
+	allowed, _, err := repo.Authorize("jdoe", nil, "core", "compute.infrapi.io", "vm", "list")
 	if err != nil {
 		t.Fatalf("Authorize: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestAuthorizeAllowsDirectUserSource(t *testing.T) {
 		t.Fatalf("Authorize: should allow a user id matching a direct user source")
 	}
 
-	allowed, reason, err := repo.Authorize("someone-else", nil, "core", "compute.example.com", "vm", "list")
+	allowed, reason, err := repo.Authorize("someone-else", nil, "core", "compute.infrapi.io", "vm", "list")
 	if err != nil {
 		t.Fatalf("Authorize: %v", err)
 	}

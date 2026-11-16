@@ -155,7 +155,7 @@ kayra-cli login --server https://kayra.example.com
 #
 #   https://kayra.example.com/oauth2/v1/authorize?...
 #
-# kayra-cli: logged in — saved context "kayra.example.com" to ~/.config/kayra/config (now current)
+# kayra-cli: logged in — saved context "kayra.infrapi.io" to ~/.config/kayra/config (now current)
 # kayra-cli: run `kayra-cli context token` to print the bearer token
 ```
 
@@ -173,12 +173,10 @@ own public token endpoint/client ID back at the end so this CLI can finish
 the PKCE exchange itself, with zero prior knowledge of which provider it
 was.
 
-The server's own `app.api_domain` is relayed the same way and saved into
-the context alongside the token — `auth can-i` and the
-[generic verbs](#kayra-cli-get-create-update-patch-delete) read it back
-from there, so they never have to guess `example.com` for a server that
-configured something else. A context saved before this existed (or one
-created by hand) simply has none, same fallback as before.
+Nothing about the server but its URL is saved: what the commands need of
+it, they discover — its check endpoint and own groups from
+[`/.well-known/kayra.json`](packages/discovery.md), every API group's full
+name and short name from `GET /apis`.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
@@ -201,7 +199,7 @@ kayra-cli login --server https://kayra.example.com --no-browser
 #   https://kayra.example.com/oauth2/v1/authorize?...redirect_uri=urn%3Aietf%3Awg%3Aoauth%3A2.0%3Aoob...
 #
 # Paste the login code shown in the browser: eyJjb2RlIjoi...
-# kayra-cli: logged in — saved context "kayra.example.com" to ~/.config/kayra/config (now current)
+# kayra-cli: logged in — saved context "kayra.infrapi.io" to ~/.config/kayra/config (now current)
 ```
 
 The code is safe to carry across by hand: it is only redeemable together
@@ -250,7 +248,7 @@ kayra-cli context delete staging        # drop a saved login
 |------------|------|---------|
 | `list` | — | list saved contexts, marking the current one with `*` |
 | `current` | — | print the current context's name, server, expiry |
-| `set` | `<name>` | save `--token` for `--server` (optionally `--api-domain`) as a context and make it current — no login flow |
+| `set` | `<name>` | save `--token` for `--server` as a context and make it current — no login flow |
 | `use` | `<name>` | switch the current context |
 | `delete` | `<name>` | remove a saved context |
 | `token` | `[name]` | print a context's bearer token (defaults to current) |
@@ -263,18 +261,19 @@ than managing it.
 #### can-i
 
 Mirrors `kubectl auth can-i`: asks the server's own
-[`/apis/authorization.<domain>/v1/check`](architecture/rbac-and-auth.md#authorizing-other-apps-requests)
+[check endpoint](architecture/rbac-and-auth.md#authorizing-other-apps-requests),
+the one its [`/.well-known/kayra.json`](packages/discovery.md) names,
 whether the current context's already-authenticated identity is
 granted `<verb>` on `<resource>` for `--api` — the decision is always
 the server's, never asserted locally.
 
 ```bash
-kayra-cli auth can-i get pods --api compute.example.com --namespace core
+kayra-cli auth can-i get pods --api compute.infrapi.io --namespace core
 # yes
 
-kayra-cli auth can-i delete pods --api compute.example.com --namespace core
+kayra-cli auth can-i delete pods --api compute.infrapi.io --namespace core
 # no
-# kayra-cli: your roles in namespace "core" grant api "compute.example.com", but not "delete" on "pods"
+# kayra-cli: your roles in namespace "core" grant api "compute.infrapi.io", but not "delete" on "pods"
 ```
 
 Prints `yes`/`no` to stdout and exits `0`/`1` accordingly — scriptable
@@ -305,9 +304,8 @@ command nor the server exposes that comparison any other way.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `--api` | — | required; the API group being asked about, e.g. `compute.example.com` — never Kayra's own `authorization.<domain>` |
+| `--api` | — | required; the API group being asked about, by its full name (`compute.infrapi.io`) or short name (`compute`, resolved through `GET /apis`) — never Kayra's own `authorization.<domain>` |
 | `--namespace` | — | required; the namespace to check against |
-| `--api-domain` | everything in `--api` past its first label, else the current context's own saved `api_domain` (see `login`), else `example.com` | this deployment's own `app.api_domain` — only used to reach `/apis/authorization.<domain>/v1/check` itself; `--api compute.example.com` alone is enough, since the check endpoint lives on that same domain |
 | `--context` | current context | saved context to use instead |
 
 #### whoami
@@ -344,11 +342,11 @@ OpenAPI spec the reconciler fetched for it (see
 ```bash
 kayra-cli apis
 # NAME                SHORTNAME  APIGROUP                   NAMESPACED  VERBS
-# namespaces          -          system.example.com         false       create,delete,get,list,update
-# apiregistrations    -          catalog.example.com        false       create,delete,get,list,update
-# subscriptions       -          catalog.example.com        true        create,delete,get,list,update
+# namespaces          -          system.infrapi.io         false       create,delete,get,list,update
+# apiregistrations    -          catalog.infrapi.io        false       create,delete,get,list,update
+# subscriptions       -          catalog.infrapi.io        true        create,delete,get,list,update
 # dashboards          telemetry  telemetry.infrapi.io    true        create,delete,get,list
-# -                   -          vault.example.com          -           -
+# -                   -          vault.infrapi.io          -           -
 kayra-cli apis --api-group telemetry --namespaced=true
 kayra-cli apis -o yaml
 ```
@@ -366,14 +364,18 @@ listed with `-`.
 ## kayra-cli (get, create, update, patch, delete)
 
 kubectl-style top-level verbs — a thin, generic REST client against
-*any* app's own API, following the exact URN/route convention Kayra's
+*any* app's own API, following the exact route convention Kayra's
 own resources use (see
 [RBAC & auth](architecture/rbac-and-auth.md#authorizing-other-apps-requests)):
 
 ```
-{server}/apis/<api>.<domain>/v1/namespaces/<namespace>/<resource>[/<name>]   # -n given: namespace-scoped
-{server}/apis/<api>.<domain>/v1/<resource>[/<name>]                          # -n omitted: cluster-scoped
+{server}/apis/<group>/v1/namespaces/<namespace>/<resource>[/<name>]   # -n given: namespace-scoped
+{server}/apis/<group>/v1/<resource>[/<name>]                          # -n omitted: cluster-scoped
 ```
+
+`<api>` is the group's full name (`vault.infrapi.io`), or its short name
+or first label (`vault`, `catalog`), which `GET /apis` resolves to the one
+group it names — as `kubectl` resolves a resource through discovery.
 
 authenticated with the current context's own bearer token. Kayra
 itself never implements any of these APIs (see
@@ -395,7 +397,7 @@ on stderr as `Error: <title> (<status>): <detail>`, followed by
 `Solution: …` when the server gives one, and the command exits `1`.
 
 Each example's `curl` block is the exact request the verb sends, against
-`http://localhost:8080` with `app.api_domain` left at `example.com` —
+`http://localhost:8080` with `app.api_domain` left at `infrapi.io` —
 take the token from the current context with
 `TOKEN=$(kayra-cli context token)`.
 
@@ -405,17 +407,17 @@ take the token from the current context with
 # namespace-scoped: -n selects .../namespaces/<ns>/<resource>
 kayra-cli get catalog -n thetenant subscriptions
 # No resources found.
-kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.example.com"}'
+kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.infrapi.io"}'
 # NAMESPACE  NAME               CREATED AT                 UPDATED AT
-# thetenant  vault.example.com  2026-11-10T14:30:00+01:00  2026-11-10T14:30:00+01:00
-kayra-cli get catalog -n thetenant subscriptions vault.example.com -o json
-# {"api": "vault.example.com", "active": false, "state": "init", ...}
-kayra-cli update catalog -n thetenant subscriptions vault.example.com/sync -d '{}'
-kayra-cli delete catalog -n thetenant subscriptions vault.example.com
-# subscriptions "vault.example.com" deleted
+# thetenant  vault.infrapi.io  2026-11-10T14:30:00+01:00  2026-11-10T14:30:00+01:00
+kayra-cli get catalog -n thetenant subscriptions vault.infrapi.io -o json
+# {"api": "vault.infrapi.io", "active": false, "state": "init", ...}
+kayra-cli update catalog -n thetenant subscriptions vault.infrapi.io/sync -d '{}'
+kayra-cli delete catalog -n thetenant subscriptions vault.infrapi.io
+# subscriptions "vault.infrapi.io" deleted
 
 # cluster-scoped: no -n, addresses .../<resource> directly
-kayra-cli create catalog apiregistrations -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
+kayra-cli create catalog apiregistrations -d '{"name": "vault.infrapi.io", "short_name": "vault", "owner": "sre"}'
 kayra-cli get catalog apiregistrations
 kayra-cli create authorization clustergroups -d '{"name": "g", "metadata": {...}, "groups": [...]}'
 ```
@@ -424,28 +426,28 @@ kayra-cli create authorization clustergroups -d '{"name": "g", "metadata": {...}
 
 ```bash
 # namespace-scoped: -n selects .../namespaces/<ns>/<resource>
-curl -s http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
+curl -s http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/thetenant/subscriptions \
   -H "Authorization: Bearer $TOKEN"
 # []
-curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
+curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/thetenant/subscriptions \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"api": "vault.example.com"}'
-# {"api": "vault.example.com", "active": false, "state": "init", ...}
-curl -s http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
+  -d '{"api": "vault.infrapi.io"}'
+# {"api": "vault.infrapi.io", "active": false, "state": "init", ...}
+curl -s http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/thetenant/subscriptions/vault.infrapi.io \
   -H "Authorization: Bearer $TOKEN"
-curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com/sync \
+curl -s -X PUT http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/thetenant/subscriptions/vault.infrapi.io/sync \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{}'
-curl -s -X DELETE http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions/vault.example.com \
+curl -s -X DELETE http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/thetenant/subscriptions/vault.infrapi.io \
   -H "Authorization: Bearer $TOKEN"
 
 # cluster-scoped: no -n, addresses .../<resource> directly
-curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
+curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
-curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
+  -d '{"name": "vault.infrapi.io", "short_name": "vault", "owner": "sre"}'
+curl -s http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations \
   -H "Authorization: Bearer $TOKEN"
-curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clustergroups \
+curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clustergroups \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "g", "metadata": {...}, "groups": [...]}'
 ```
@@ -472,7 +474,6 @@ the body (typically the same RFC 9457 problem-detail shape
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--namespace`, `-n` | — | the namespace to address — omit for a cluster-scoped resource |
-| `--api-domain` | everything in `<api>` past its first label, else the current context's own saved `api_domain` (see `login`), else `example.com` | same resolution as `auth can-i`'s flag of the same name |
 | `--data`, `-d` | — | request body, as a raw JSON string (`create`/`update`/`patch` only) |
 | `--filename`, `-f` | — | request body, read from a file — `-` for stdin (`create`/`update`/`patch` only) |
 | `--context` | current context | saved context to use instead |

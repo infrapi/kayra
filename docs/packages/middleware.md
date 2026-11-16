@@ -79,7 +79,7 @@ id, so `resolvePAT` reads `SnapshotGroups`/`SnapshotAttributes` instead
 
 ```go
 gate := middleware.SysadminGate(authenticator, requiredGroups)
-cluster := engine.Group("/apis/authorization.example.com/v1", gate)
+cluster := engine.Group("/apis/authorization.infrapi.io/v1", gate)
 ```
 
 Not a separate trust path — a privilege check layered on top of the exact

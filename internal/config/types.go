@@ -42,7 +42,7 @@ type AppConfig struct {
 	// entry an operator authors, is "<group>.<APIDomain>" (e.g.
 	// "authorization.<APIDomain>"), never a hardcoded domain. Not part
 	// of ToVariables: infrapi/lib has no notion of it, it's read
-	// directly by apiserver.Build. Empty falls back to "example.com".
+	// directly by apiserver.Build. Empty falls back to "infrapi.io".
 	APIDomain string `yaml:"api_domain"`
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/infrapi/kayra/internal/catalog"
 	gconfig "github.com/infrapi/kayra/internal/config"
 	gcrypto "github.com/infrapi/kayra/internal/crypto"
+	"github.com/infrapi/kayra/internal/discovery"
 	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/oauth2broker"
@@ -94,7 +95,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 
 	baseURL := appCfg.AppUrl
 
-	// Empty cfg.App.APIDomain falls back to "example.com" — every API
+	// Empty cfg.App.APIDomain falls back to "infrapi.io" — every API
 	// group internal/rbac and internal/catalog mount, and every
 	// Role.Rules entry an operator authors, is "<group>.<domain>", so
 	// this must be resolved before either package registers a single
@@ -102,7 +103,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	// login` so the CLI never has to guess it either).
 	apiDomain := cfg.App.APIDomain
 	if apiDomain == "" {
-		apiDomain = "example.com"
+		apiDomain = "infrapi.io"
 	}
 	rbac.SetAPIDomain(apiDomain)
 	catalog.SetAPIDomain(apiDomain)
@@ -114,7 +115,13 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	})
 
 	oidc.RegisterRoutes(engine, manager, baseURL)
-	oauth2broker.RegisterRoutes(engine, cfg, s, keys, baseURL, apiDomain)
+	// /.well-known/kayra.json: the domain, built-in groups and endpoints
+	// apps built on infrapi/lib and kayra-cli discover instead of
+	// configuring them.
+	discovery.Register(engine, discovery.New(apiDomain, discovery.Groups{
+		System: catalog.SystemAPI, Catalog: catalog.CatalogAPI, Authorization: rbac.AuthorizationAPI,
+	}, "/oauth2/userinfo", "/oauth2/discovery/keys", "/apis"))
+	oauth2broker.RegisterRoutes(engine, cfg, s, keys, baseURL)
 
 	userinfoHandler := func(c *gin.Context) {
 		ac, ok := middleware.GetAuth(c)

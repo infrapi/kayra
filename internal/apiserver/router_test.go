@@ -106,9 +106,9 @@ func TestBuildRejectsUnknownFieldsOnWrongResourceEndpoint(t *testing.T) {
 	// Group endpoint must now be rejected outright instead of silently
 	// dropping "rules" and returning a Group with authorization: null —
 	// the bug report this guards against.
-	body := []byte(`{"name":"thetenant-role-sysadmin","description":"default role for sysadmin","metadata":{"namespace":"thetenant","region":"eu-west-1","platform":"sandbox"},"rules":[{"apis":["compute.example.com"],"resources":["*"],"verbs":["*"]}]}`)
+	body := []byte(`{"name":"thetenant-role-sysadmin","description":"default role for sysadmin","metadata":{"namespace":"thetenant","region":"eu-west-1","platform":"sandbox"},"rules":[{"apis":["compute.infrapi.io"],"resources":["*"],"verbs":["*"]}]}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/apis/authorization.example.com/v1/clustergroups", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/apis/authorization.infrapi.io/v1/clustergroups", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -120,7 +120,7 @@ func TestBuildRejectsUnknownFieldsOnWrongResourceEndpoint(t *testing.T) {
 
 	// The matching correctly-shaped Role payload on the right endpoint
 	// must still succeed.
-	req = httptest.NewRequest(http.MethodPost, "/apis/authorization.example.com/v1/clusterroles", bytes.NewReader(body))
+	req = httptest.NewRequest(http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
@@ -161,7 +161,7 @@ func TestUserinfoSupportsGetAndPost(t *testing.T) {
 }
 
 // TestAuthorizeCheckRoute confirms the RBAC decision endpoint lives at
-// /apis/authorization.example.com/v1/check and that, before any RBAC
+// /apis/authorization.infrapi.io/v1/check and that, before any RBAC
 // rule is consulted, it refuses a namespace that doesn't exist (see
 // catalog.Repository.CheckNamespace, wired in Build).
 func TestAuthorizeCheckRoute(t *testing.T) {
@@ -174,8 +174,8 @@ func TestAuthorizeCheckRoute(t *testing.T) {
 	}
 	token := mintSysadminToken(t, cfg)
 
-	body := []byte(`{"namespace":"core","api":"compute.example.com","resource":"vm","verb":"list"}`)
-	req := httptest.NewRequest(http.MethodPost, "/apis/authorization.example.com/v1/check", bytes.NewReader(body))
+	body := []byte(`{"namespace":"core","api":"compute.infrapi.io","resource":"vm","verb":"list"}`)
+	req := httptest.NewRequest(http.MethodPost, "/apis/authorization.infrapi.io/v1/check", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -200,7 +200,7 @@ func TestUnknownRouteIsProblemDetail(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/apis/nope.example.com/v1/things", nil))
+	engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/apis/nope.infrapi.io/v1/things", nil))
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
@@ -254,11 +254,11 @@ func TestDiscoveryListsBuiltinGroups(t *testing.T) {
 		namespaced bool
 		verbs      string
 	}{
-		{"system.example.com", "namespaces", false, "create,delete,get,list,update"},
-		{"catalog.example.com", "apiregistrations", false, "create,delete,get,list,update"},
-		{"catalog.example.com", "subscriptions", true, "create,delete,get,list,update"},
-		{"authorization.example.com", "clusterroles", false, "create,delete,get,list,update"},
-		{"authorization.example.com", "roles", true, "create,delete,get,list,update"},
+		{"system.infrapi.io", "namespaces", false, "create,delete,get,list,update"},
+		{"catalog.infrapi.io", "apiregistrations", false, "create,delete,get,list,update"},
+		{"catalog.infrapi.io", "subscriptions", true, "create,delete,get,list,update"},
+		{"authorization.infrapi.io", "clusterroles", false, "create,delete,get,list,update"},
+		{"authorization.infrapi.io", "roles", true, "create,delete,get,list,update"},
 	} {
 		r := find(tc.api, tc.name, tc.namespaced)
 		if r == nil {

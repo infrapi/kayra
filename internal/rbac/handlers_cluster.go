@@ -36,7 +36,7 @@ func validateClusterRoleBinding(repo *Repository, rb RoleBinding) *liberrors.Err
 }
 
 // RegisterClusterRoutes mounts full CRUD for the cluster bootstrap
-// resources at /apis/authorization.example.com/v1/{clustergroups,
+// resources at /apis/authorization.infrapi.io/v1/{clustergroups,
 // clusterroles,clusterrolebindings} — cluster-scoped siblings of this
 // package's own namespace-scoped groups/roles/rolebindings, same API
 // group, "cluster" folded into the resource name itself rather than a

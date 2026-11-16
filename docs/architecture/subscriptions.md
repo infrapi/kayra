@@ -37,7 +37,7 @@ missing when there's nothing to report, so a caller never has to treat
 
 ```json
 {
-  "api": "compute.example.com",
+  "api": "compute.infrapi.io",
   "active": true,
   "state": "success",
   "current_sync_id": "2026-01-01T00Z",
@@ -76,7 +76,7 @@ so a sync that keeps failing never loops.
 
 ## Managing one
 
-Full CRUD at `/apis/catalog.example.com/v1/namespaces/:namespace/subscriptions{,/:api}`,
+Full CRUD at `/apis/catalog.infrapi.io/v1/namespaces/:namespace/subscriptions{,/:api}`,
 gated by [`Authenticator`](rbac-and-auth.md#two-gates-two-trust-tiers) plus
 [`rbac.RequireClusterRBAC(repo, "subscriptions", verb)`](../packages/rbac.md#requireclusterrbac)
 — "subscriptions" is just another `resource` value checked against the
@@ -87,19 +87,19 @@ covers it.
 **kayra-cli**
 
 ```bash
-kayra-cli create catalog -n core subscriptions -d '{"api": "compute.example.com"}'
+kayra-cli create catalog -n core subscriptions -d '{"api": "compute.infrapi.io"}'
 ```
 
 **curl**
 
 ```bash
-curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/core/subscriptions \
+curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/core/subscriptions \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"api": "compute.example.com"}'
+  -d '{"api": "compute.infrapi.io"}'
 ```
 
 Create requires only `api`, which must be the registration's **long
-name** (`compute.example.com`) — a short name is refused (`400`, the
+name** (`compute.infrapi.io`) — a short name is refused (`400`, the
 error names the long one to use when a registration has that
 `short_name`); subscribing to an api registration that doesn't exist in
 this deployment's scope is rejected (`404`).
@@ -112,13 +112,13 @@ there's nothing left in the body a caller could legitimately change.
 **kayra-cli**
 
 ```bash
-kayra-cli update catalog -n sre subscriptions dev.example.com/sync -d '{}'
+kayra-cli update catalog -n sre subscriptions dev.infrapi.io/sync -d '{}'
 ```
 
 **curl**
 
 ```bash
-curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/namespaces/sre/subscriptions/dev.example.com/sync \
+curl -s -X PUT http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/sre/subscriptions/dev.infrapi.io/sync \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{}'
 ```

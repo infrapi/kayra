@@ -51,7 +51,7 @@ func TestDeriveResources(t *testing.T) {
 		// "namespaces" itself is a cluster-scoped resource.
 		{"GET", "/apis/telemetry.infrapi.io/v1/namespaces/:namespace"},
 		// Not this api's: ignored.
-		{"GET", "/apis/other.example.com/v1/things"},
+		{"GET", "/apis/other.infrapi.io/v1/things"},
 		{"GET", "/-/healthz"},
 	}
 	got := DeriveResources("telemetry.infrapi.io", routes)
@@ -70,7 +70,7 @@ func TestFetchSpec(t *testing.T) {
 	var body atomic.Value
 	var status atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/apis/compute.example.com/-/openapi.json" {
+		if r.URL.Path != "/apis/compute.infrapi.io/-/openapi.json" {
 			http.NotFound(w, r)
 			return
 		}
@@ -81,12 +81,12 @@ func TestFetchSpec(t *testing.T) {
 	ctx := context.Background()
 
 	status.Store(200)
-	body.Store([]byte(`{"openapi": "3.1.0", "paths": {"/apis/compute.example.com/v1/namespaces/{namespace}/vms": {"get": {}}}}`))
-	spec, err := FetchSpec(ctx, srv.Client(), srv.URL+"/", "compute.example.com")
+	body.Store([]byte(`{"openapi": "3.1.0", "paths": {"/apis/compute.infrapi.io/v1/namespaces/{namespace}/vms": {"get": {}}}}`))
+	spec, err := FetchSpec(ctx, srv.Client(), srv.URL+"/", "compute.infrapi.io")
 	if err != nil {
 		t.Fatalf("FetchSpec: %v", err)
 	}
-	if spec.URL != srv.URL+"/apis/compute.example.com/-/openapi.json" || len(spec.Resources) != 1 || spec.Resources[0].Name != "vms" {
+	if spec.URL != srv.URL+"/apis/compute.infrapi.io/-/openapi.json" || len(spec.Resources) != 1 || spec.Resources[0].Name != "vms" {
 		t.Fatalf("spec = %+v", spec)
 	}
 	if !json.Valid(spec.Spec) || strings.Contains(string(spec.Spec), " ") {
@@ -110,7 +110,7 @@ func TestFetchSpec(t *testing.T) {
 		if tc.gateway == "-" {
 			gw = ""
 		}
-		if _, err := FetchSpec(ctx, srv.Client(), gw, "compute.example.com"); err == nil {
+		if _, err := FetchSpec(ctx, srv.Client(), gw, "compute.infrapi.io"); err == nil {
 			t.Errorf("%s: FetchSpec succeeded, want an error", desc)
 		}
 	}
@@ -130,12 +130,12 @@ func TestReconcilerStoresSpecOnSyncAndBlocksWithoutIt(t *testing.T) {
 			http.Error(w, "down", http.StatusBadGateway)
 			return
 		}
-		_, _ = w.Write([]byte(`{"openapi":"3.1.0","paths":{"/apis/vault.example.com/v1/namespaces/{namespace}/secrets":{"get":{},"post":{}}}}`))
+		_, _ = w.Write([]byte(`{"openapi":"3.1.0","paths":{"/apis/vault.infrapi.io/v1/namespaces/{namespace}/secrets":{"get":{},"post":{}}}}`))
 	}))
 	defer gw.Close()
 
 	repo := newTestRepo(t)
-	reg := ApiRegistration{Name: "vault.example.com", Platform: testDeployPlatform, Region: testDeployRegion, Active: true, SyncID: "sync-1", Mode: "trigger"}
+	reg := ApiRegistration{Name: "vault.infrapi.io", Platform: testDeployPlatform, Region: testDeployRegion, Active: true, SyncID: "sync-1", Mode: "trigger"}
 	if err := repo.PutClusterApiRegistration(&reg); err != nil {
 		t.Fatal(err)
 	}
@@ -207,8 +207,8 @@ func TestDiscoveryRoutes(t *testing.T) {
 	repo := newTestRepo(t)
 	for _, reg := range []ApiRegistration{
 		{Name: "telemetry.infrapi.io", ShortName: "telemetry", Owner: "obs", Platform: testDeployPlatform, Region: testDeployRegion, SyncID: "s2"},
-		{Name: "vault.example.com", Owner: "sre", Platform: testDeployPlatform, Region: testDeployRegion},
-		{Name: "dns.example.com", Platform: "prod", Region: testDeployRegion}, // another platform: not listed
+		{Name: "vault.infrapi.io", Owner: "sre", Platform: testDeployPlatform, Region: testDeployRegion},
+		{Name: "dns.infrapi.io", Platform: "prod", Region: testDeployRegion}, // another platform: not listed
 	} {
 		reg := reg
 		if err := repo.PutClusterApiRegistration(&reg); err != nil {
@@ -244,7 +244,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 	for _, g := range groups {
 		names = append(names, g.Api)
 	}
-	if got := strings.Join(names, ","); got != CatalogAPI+",telemetry.infrapi.io,vault.example.com" {
+	if got := strings.Join(names, ","); got != CatalogAPI+",telemetry.infrapi.io,vault.infrapi.io" {
 		t.Fatalf("groups = %s, want Kayra's own first, then this platform/region's registrations by name", got)
 	}
 	if !groups[0].Builtin || groups[0].Owner != "kayra" {
@@ -262,10 +262,10 @@ func TestDiscoveryRoutes(t *testing.T) {
 	if w.Code != http.StatusOK || w.Body.String() != doc || w.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("openapi.json: status %d, type %q, body %s", w.Code, w.Header().Get("Content-Type"), w.Body.String())
 	}
-	if w = get("/apis/" + CatalogAPI + "/v1/apiregistrations/vault.example.com/openapi.json"); w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "next sync") {
+	if w = get("/apis/" + CatalogAPI + "/v1/apiregistrations/vault.infrapi.io/openapi.json"); w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "next sync") {
 		t.Fatalf("openapi.json before any fetch: status %d, body %s", w.Code, w.Body.String())
 	}
-	if w = get("/apis/" + CatalogAPI + "/v1/apiregistrations/nope.example.com/openapi.json"); w.Code != http.StatusNotFound {
+	if w = get("/apis/" + CatalogAPI + "/v1/apiregistrations/nope.infrapi.io/openapi.json"); w.Code != http.StatusNotFound {
 		t.Fatalf("openapi.json of an unknown registration: status %d", w.Code)
 	}
 }

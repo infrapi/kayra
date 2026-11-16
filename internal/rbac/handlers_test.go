@@ -118,14 +118,14 @@ func TestClusterGroupRoleBindingFlow(t *testing.T) {
 
 	meta := Metadata{Namespace: "thetenant", Region: "eu-west-1", Platform: "sandbox"}
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clustergroups", Group{
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clustergroups", Group{
 		Name: "thetenant-group-sysadmin", Metadata: meta,
 	})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create group: status %d, body %s", w.Code, w.Body.String())
 	}
 
-	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterroles", Role{
+	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", Role{
 		Name: "thetenant-role-sysadmin", Metadata: meta,
 		Rules: []Rule{{Apis: []string{AuthorizationAPI}, Resources: []string{"*"}, Verbs: []string{"*"}}},
 	})
@@ -133,7 +133,7 @@ func TestClusterGroupRoleBindingFlow(t *testing.T) {
 		t.Fatalf("create role: status %d, body %s", w.Code, w.Body.String())
 	}
 
-	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterrolebindings", RoleBinding{
+	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterrolebindings", RoleBinding{
 		Name: "thetenant-binding-sysadmin", Metadata: meta,
 		Role: "thetenant-role-sysadmin", Groups: []string{"thetenant-group-sysadmin"},
 	})
@@ -148,9 +148,9 @@ func TestClusterRoleBindingRejectsMetadataMismatch(t *testing.T) {
 	meta := Metadata{Namespace: "thetenant", Region: "eu-west-1", Platform: "sandbox"}
 	otherMeta := Metadata{Namespace: "other", Region: "eu-west-1", Platform: "sandbox"}
 
-	doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterroles", Role{Name: "r1", Metadata: meta})
+	doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", Role{Name: "r1", Metadata: meta})
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterrolebindings", RoleBinding{
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterrolebindings", RoleBinding{
 		Name: "b1", Metadata: otherMeta, Role: "r1",
 	})
 	if w.Code != http.StatusConflict {
@@ -161,7 +161,7 @@ func TestClusterRoleBindingRejectsMetadataMismatch(t *testing.T) {
 func TestNamespaceGroupDefaultsMetadataNamespace(t *testing.T) {
 	engine, repo := newTestEngine(t)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/myns/groups", Group{
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/myns/groups", Group{
 		Name:   "myns-group-apps",
 		Groups: []string{"group-a"},
 	})
@@ -181,7 +181,7 @@ func TestNamespaceGroupDefaultsMetadataNamespace(t *testing.T) {
 func TestNamespaceGroupRejectsMismatchedNamespace(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/myns/groups", Group{
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/myns/groups", Group{
 		Name:     "myns-group-apps",
 		Metadata: Metadata{Namespace: "otherns"},
 	})
@@ -193,10 +193,10 @@ func TestNamespaceGroupRejectsMismatchedNamespace(t *testing.T) {
 func TestClusterGroupCRUD(t *testing.T) {
 	engine, _ := newTestEngine(t)
 
-	doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clustergroups", Group{Name: "g1", Description: "v1"})
+	doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clustergroups", Group{Name: "g1", Description: "v1"})
 
 	// list
-	w := doJSON(t, engine, http.MethodGet, "/apis/authorization.example.com/v1/clustergroups", nil)
+	w := doJSON(t, engine, http.MethodGet, "/apis/authorization.infrapi.io/v1/clustergroups", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("list: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -211,19 +211,19 @@ func TestClusterGroupCRUD(t *testing.T) {
 	}
 
 	// get one
-	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.example.com/v1/clustergroups/g1", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.infrapi.io/v1/clustergroups/g1", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("get: status %d, body %s", w.Code, w.Body.String())
 	}
 
 	// get missing -> 404
-	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.example.com/v1/clustergroups/missing", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.infrapi.io/v1/clustergroups/missing", nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("get missing: status %d, want 404, body %s", w.Code, w.Body.String())
 	}
 
 	// update
-	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.example.com/v1/clustergroups/g1", Group{Name: "ignored-should-use-path", Description: "v2"})
+	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.infrapi.io/v1/clustergroups/g1", Group{Name: "ignored-should-use-path", Description: "v2"})
 	if w.Code != http.StatusOK {
 		t.Fatalf("update: status %d, body %s", w.Code, w.Body.String())
 	}
@@ -236,23 +236,23 @@ func TestClusterGroupCRUD(t *testing.T) {
 	}
 
 	// update missing -> 404, and must not create it
-	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.example.com/v1/clustergroups/missing", Group{Description: "x"})
+	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.infrapi.io/v1/clustergroups/missing", Group{Description: "x"})
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("update missing: status %d, want 404, body %s", w.Code, w.Body.String())
 	}
 
 	// delete
-	w = doJSON(t, engine, http.MethodDelete, "/apis/authorization.example.com/v1/clustergroups/g1", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/authorization.infrapi.io/v1/clustergroups/g1", nil)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete: status %d, body %s", w.Code, w.Body.String())
 	}
-	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.example.com/v1/clustergroups/g1", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.infrapi.io/v1/clustergroups/g1", nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("get after delete: status %d, want 404", w.Code)
 	}
 
 	// delete missing -> 404
-	w = doJSON(t, engine, http.MethodDelete, "/apis/authorization.example.com/v1/clustergroups/g1", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/authorization.infrapi.io/v1/clustergroups/g1", nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("delete missing: status %d, want 404", w.Code)
 	}
@@ -264,17 +264,17 @@ func TestClusterRoleBindingUpdateRevalidatesMetadata(t *testing.T) {
 	meta := Metadata{Namespace: "thetenant", Region: "eu-west-1", Platform: "sandbox"}
 	otherMeta := Metadata{Namespace: "other", Region: "eu-west-1", Platform: "sandbox"}
 
-	doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterroles", Role{Name: "r1", Metadata: meta})
-	doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterrolebindings", RoleBinding{Name: "b1", Metadata: meta, Role: "r1"})
+	doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", Role{Name: "r1", Metadata: meta})
+	doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterrolebindings", RoleBinding{Name: "b1", Metadata: meta, Role: "r1"})
 
 	// valid update
-	w := doJSON(t, engine, http.MethodPut, "/apis/authorization.example.com/v1/clusterrolebindings/b1", RoleBinding{Metadata: meta, Role: "r1", Groups: []string{}})
+	w := doJSON(t, engine, http.MethodPut, "/apis/authorization.infrapi.io/v1/clusterrolebindings/b1", RoleBinding{Metadata: meta, Role: "r1", Groups: []string{}})
 	if w.Code != http.StatusOK {
 		t.Fatalf("update: status %d, body %s", w.Code, w.Body.String())
 	}
 
 	// update that would mismatch the role's metadata is rejected, same as create
-	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.example.com/v1/clusterrolebindings/b1", RoleBinding{Metadata: otherMeta, Role: "r1"})
+	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.infrapi.io/v1/clusterrolebindings/b1", RoleBinding{Metadata: otherMeta, Role: "r1"})
 	if w.Code != http.StatusConflict {
 		t.Fatalf("update with mismatched metadata: status %d, want 409, body %s", w.Code, w.Body.String())
 	}
@@ -284,9 +284,9 @@ func TestNamespaceRoleCRUD(t *testing.T) {
 	engine, _ := newTestEngine(t)
 	ns := "myns"
 
-	doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/"+ns+"/roles", Role{Name: "r1"})
+	doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/"+ns+"/roles", Role{Name: "r1"})
 
-	w := doJSON(t, engine, http.MethodGet, "/apis/authorization.example.com/v1/namespaces/"+ns+"/roles", nil)
+	w := doJSON(t, engine, http.MethodGet, "/apis/authorization.infrapi.io/v1/namespaces/"+ns+"/roles", nil)
 	var roles []Role
 	if err := json.Unmarshal(w.Body.Bytes(), &roles); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
@@ -295,18 +295,18 @@ func TestNamespaceRoleCRUD(t *testing.T) {
 		t.Fatalf("list = %v, want [r1]", roles)
 	}
 
-	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.example.com/v1/namespaces/"+ns+"/roles/r1", Role{
+	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.infrapi.io/v1/namespaces/"+ns+"/roles/r1", Role{
 		Rules: []Rule{{Apis: []string{"*"}, Resources: []string{"*"}, Verbs: []string{"get"}}},
 	})
 	if w.Code != http.StatusOK {
 		t.Fatalf("update: status %d, body %s", w.Code, w.Body.String())
 	}
 
-	w = doJSON(t, engine, http.MethodDelete, "/apis/authorization.example.com/v1/namespaces/"+ns+"/roles/r1", nil)
+	w = doJSON(t, engine, http.MethodDelete, "/apis/authorization.infrapi.io/v1/namespaces/"+ns+"/roles/r1", nil)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete: status %d, body %s", w.Code, w.Body.String())
 	}
-	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.example.com/v1/namespaces/"+ns+"/roles/r1", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.infrapi.io/v1/namespaces/"+ns+"/roles/r1", nil)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("get after delete: status %d, want 404", w.Code)
 	}
@@ -321,13 +321,13 @@ func TestNamespaceWriteDeniedWithoutClusterRBAC(t *testing.T) {
 	RegisterClusterRoutes(engine, repo, noopGate)
 	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("nobody"), nil)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/myns/groups", Group{Name: "g1"})
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/myns/groups", Group{Name: "g1"})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body %s", w.Code, w.Body.String())
 	}
 
 	// reads are gated too, not just writes.
-	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.example.com/v1/namespaces/myns/groups", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.infrapi.io/v1/namespaces/myns/groups", nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("list status = %d, want 403, body %s", w.Code, w.Body.String())
 	}
@@ -337,7 +337,7 @@ func TestNamespaceWriteDeniedOutsideGrantedNamespace(t *testing.T) {
 	engine, _ := newTestEngine(t)
 	// testAdmin is authorized for "myns" only (seeded by newTestEngine).
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/otherns/groups", Group{Name: "g1"})
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/otherns/groups", Group{Name: "g1"})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body %s", w.Code, w.Body.String())
 	}
@@ -356,7 +356,7 @@ func TestNamespaceWriteGrantedEndToEndViaHTTPBootstrap(t *testing.T) {
 	meta := Metadata{Namespace: "thetenant"}
 
 	// before bootstrap: denied.
-	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/thetenant/groups", Group{Name: "g1"})
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/thetenant/groups", Group{Name: "g1"})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("before bootstrap: status = %d, want 403, body %s", w.Code, w.Body.String())
 	}
@@ -365,15 +365,15 @@ func TestNamespaceWriteGrantedEndToEndViaHTTPBootstrap(t *testing.T) {
 	// deliberately no /refresh call: authorization no longer depends on
 	// a synced member list, only on the caller's own resolved groups
 	// matching the cluster group's configured LDAP source.
-	doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clustergroups", Group{
+	doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clustergroups", Group{
 		Name: "thetenant-group-sysadmin", Metadata: meta,
 		Groups: []string{"sandbox-thetenant-sysadmin"},
 	})
-	doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterroles", Role{
+	doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", Role{
 		Name: "thetenant-role-sysadmin", Metadata: meta,
 		Rules: []Rule{{Apis: []string{AuthorizationAPI}, Resources: []string{"*"}, Verbs: []string{"*"}}},
 	})
-	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterrolebindings", RoleBinding{
+	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterrolebindings", RoleBinding{
 		Name: "thetenant-binding-sysadmin", Metadata: meta,
 		Role: "thetenant-role-sysadmin", Groups: []string{"thetenant-group-sysadmin"},
 	})
@@ -383,13 +383,13 @@ func TestNamespaceWriteGrantedEndToEndViaHTTPBootstrap(t *testing.T) {
 
 	// after bootstrap: jdoe can now manage namespace RBAC for "thetenant",
 	// with no refresh step ever having run.
-	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/thetenant/groups", Group{Name: "g1"})
+	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/thetenant/groups", Group{Name: "g1"})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("after bootstrap: status = %d, want 201, body %s", w.Code, w.Body.String())
 	}
 
 	// but still not for an unrelated namespace.
-	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/otherns/groups", Group{Name: "g1"})
+	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/otherns/groups", Group{Name: "g1"})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("other namespace: status = %d, want 403, body %s", w.Code, w.Body.String())
 	}
@@ -413,20 +413,20 @@ func TestNamespaceWriteGrantedEndToEndViaDirectUserBootstrap(t *testing.T) {
 	meta := Metadata{Namespace: "thetenant"}
 
 	// before bootstrap: denied.
-	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/thetenant/groups", Group{Name: "g1"})
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/thetenant/groups", Group{Name: "g1"})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("before bootstrap: status = %d, want 403, body %s", w.Code, w.Body.String())
 	}
 
-	doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clustergroups", Group{
+	doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clustergroups", Group{
 		Name: "thetenant-group-jdoe", Metadata: meta,
 		Users: []string{"jdoe"},
 	})
-	doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterroles", Role{
+	doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", Role{
 		Name: "thetenant-role-sysadmin", Metadata: meta,
 		Rules: []Rule{{Apis: []string{AuthorizationAPI}, Resources: []string{"*"}, Verbs: []string{"*"}}},
 	})
-	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clusterrolebindings", RoleBinding{
+	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterrolebindings", RoleBinding{
 		Name: "thetenant-binding-sysadmin", Metadata: meta,
 		Role: "thetenant-role-sysadmin", Groups: []string{"thetenant-group-jdoe"},
 	})
@@ -436,13 +436,13 @@ func TestNamespaceWriteGrantedEndToEndViaDirectUserBootstrap(t *testing.T) {
 
 	// after bootstrap: jdoe can now manage namespace RBAC for "thetenant",
 	// purely on the strength of being listed directly.
-	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/thetenant/groups", Group{Name: "g1"})
+	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/thetenant/groups", Group{Name: "g1"})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("after bootstrap: status = %d, want 201, body %s", w.Code, w.Body.String())
 	}
 
 	// but still not for an unrelated namespace.
-	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/namespaces/otherns/groups", Group{Name: "g1"})
+	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/otherns/groups", Group{Name: "g1"})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("other namespace: status = %d, want 403, body %s", w.Code, w.Body.String())
 	}
@@ -463,7 +463,7 @@ func TestClusterGroupTimestamps(t *testing.T) {
 
 	forged := time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.example.com/v1/clustergroups",
+	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clustergroups",
 		Group{Name: "g1", Timestamps: store.Timestamps{CreatedAt: forged, UpdatedAt: forged}})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create: status %d, body %s", w.Code, w.Body)
@@ -476,11 +476,11 @@ func TestClusterGroupTimestamps(t *testing.T) {
 		t.Fatalf("create: created_at/updated_at = %v/%v, want both %v", created.CreatedAt, created.UpdatedAt, t1)
 	}
 
-	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.example.com/v1/clustergroups/g1", Group{Description: "v2"})
+	w = doJSON(t, engine, http.MethodPut, "/apis/authorization.infrapi.io/v1/clustergroups/g1", Group{Description: "v2"})
 	if w.Code != http.StatusOK {
 		t.Fatalf("update: status %d, body %s", w.Code, w.Body)
 	}
-	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.example.com/v1/clustergroups/g1", nil)
+	w = doJSON(t, engine, http.MethodGet, "/apis/authorization.infrapi.io/v1/clustergroups/g1", nil)
 	var got Group
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal get: %v", err)

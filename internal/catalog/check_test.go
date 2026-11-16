@@ -16,12 +16,12 @@ import (
 
 func TestApiNameForms(t *testing.T) {
 	long := map[string]bool{
-		"compute.example.com": true,
-		"dev.infrapi.io":   true,
-		"compute":             false,
-		"Compute.example.com": false,
-		".example.com":        false,
-		"compute..com":        false,
+		"compute.infrapi.io": true,
+		"dev.infrapi.io":     true,
+		"compute":            false,
+		"Compute.infrapi.io": false,
+		".infrapi.io":        false,
+		"compute..com":       false,
 	}
 	for name, want := range long {
 		if got := IsLongApiName(name); got != want {
@@ -29,11 +29,11 @@ func TestApiNameForms(t *testing.T) {
 		}
 	}
 	short := map[string]bool{
-		"compute":             true,
-		"dev-1":               true,
-		"compute.example.com": false,
-		"-dev":                false,
-		"":                    false,
+		"compute":            true,
+		"dev-1":              true,
+		"compute.infrapi.io": false,
+		"-dev":               false,
+		"":                   false,
 	}
 	for name, want := range short {
 		if got := IsShortApiName(name); got != want {
@@ -62,20 +62,20 @@ func TestCheckApiSubscription(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "compute.example.com", ShortName: "compute", Platform: testDeployPlatform, Region: testDeployRegion, SyncID: "v2"}); err != nil {
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "compute.infrapi.io", ShortName: "compute", Platform: testDeployPlatform, Region: testDeployRegion, SyncID: "v2"}); err != nil {
 		t.Fatal(err)
 	}
 	// Registered elsewhere only: must not count as existing here.
-	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "dns.example.com", Platform: "prod", Region: testDeployRegion}); err != nil {
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "dns.infrapi.io", Platform: "prod", Region: testDeployRegion}); err != nil {
 		t.Fatal(err)
 	}
 	subs := map[string]Subscription{
-		"core":    {ApiName: "compute.example.com", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "v2"},
-		"pending": {ApiName: "compute.example.com", State: SubscriptionStateInit},
-		"failed":  {ApiName: "compute.example.com", State: SubscriptionStateError},
+		"core":    {ApiName: "compute.infrapi.io", Active: true, State: SubscriptionStateSuccess, CurrentSyncID: "v2"},
+		"pending": {ApiName: "compute.infrapi.io", State: SubscriptionStateInit},
+		"failed":  {ApiName: "compute.infrapi.io", State: SubscriptionStateError},
 		// Active but one sync behind (v1 vs v2), and the last re-sync
 		// failed: a v1 api stays backward compatible, so still usable.
-		"behind": {ApiName: "compute.example.com", Active: true, State: SubscriptionStateError, CurrentSyncID: "v1"},
+		"behind": {ApiName: "compute.infrapi.io", Active: true, State: SubscriptionStateError, CurrentSyncID: "v1"},
 	}
 	for ns, sub := range subs {
 		sub := sub
@@ -89,14 +89,14 @@ func TestCheckApiSubscription(t *testing.T) {
 		wantCode             int    // 0 means no error
 		wantInSolution       string // checked when non-empty
 	}{
-		{"active and synced", "core", "compute.example.com", 0, ""},
-		{"active, out of date, last sync failed", "behind", "compute.example.com", 0, ""},
-		{"short name is not an id", "core", "compute", http.StatusNotFound, `long name "compute.example.com"`},
-		{"api not registered", "core", "vault.example.com", http.StatusNotFound, ""},
-		{"api registered in another platform", "core", "dns.example.com", http.StatusNotFound, ""},
-		{"namespace not subscribed", "other", "compute.example.com", http.StatusForbidden, "subscribe first"},
-		{"inactive: initial sync pending", "pending", "compute.example.com", http.StatusForbidden, "wait for the initial sync"},
-		{"inactive: initial sync failed", "failed", "compute.example.com", http.StatusForbidden, "re-sync"},
+		{"active and synced", "core", "compute.infrapi.io", 0, ""},
+		{"active, out of date, last sync failed", "behind", "compute.infrapi.io", 0, ""},
+		{"short name is not an id", "core", "compute", http.StatusNotFound, `long name "compute.infrapi.io"`},
+		{"api not registered", "core", "vault.infrapi.io", http.StatusNotFound, ""},
+		{"api registered in another platform", "core", "dns.infrapi.io", http.StatusNotFound, ""},
+		{"namespace not subscribed", "other", "compute.infrapi.io", http.StatusForbidden, "subscribe first"},
+		{"inactive: initial sync pending", "pending", "compute.infrapi.io", http.StatusForbidden, "wait for the initial sync"},
+		{"inactive: initial sync failed", "failed", "compute.infrapi.io", http.StatusForbidden, "re-sync"},
 	}
 	for _, tc := range cases {
 		err := repo.CheckApiSubscription(tc.namespace, tc.api, testDeployPlatform, testDeployRegion)
@@ -193,7 +193,7 @@ func TestCheckRouteOrder(t *testing.T) {
 		{"7 verb not supported", func() { resource = "dashboards" }, "delete", http.StatusMethodNotAllowed, `doesn't support \"delete\" (supported: get, list)`},
 		{"8 no role grants the api", func() {
 			must(rbacRepo.PutNamespaceRole(ns, &rbac.Role{Name: "compute-reader", Metadata: meta,
-				Rules: []rbac.Rule{{Apis: []string{"compute.example.com"}, Resources: []string{"*"}, Verbs: []string{"*"}}}}))
+				Rules: []rbac.Rule{{Apis: []string{"compute.infrapi.io"}, Resources: []string{"*"}, Verbs: []string{"*"}}}}))
 			must(rbacRepo.PutNamespaceRoleBinding(ns, &rbac.RoleBinding{Name: "devs-compute", Metadata: meta, Role: "compute-reader", Groups: []string{"devs"}}))
 		}, "list", http.StatusOK, `no role bound to your groups in namespace \"core\" grants api \"telemetry.infrapi.io\"`},
 		{"9 api granted but not this verb", func() {
@@ -239,7 +239,7 @@ func TestCheckApiResource(t *testing.T) {
 		{"singular typo", api, "dashboard", "list", http.StatusNotFound, `did you mean "dashboards"`},
 		{"cluster-scoped resource", api, "datasources", "list", http.StatusNotFound, "cluster-scoped"},
 		{"verb not supported", api, "dashboards", "delete", http.StatusMethodNotAllowed, "supported: get, list"},
-		{"no spec stored", "vault.example.com", "secrets", "get", http.StatusServiceUnavailable, "sync_id"},
+		{"no spec stored", "vault.infrapi.io", "secrets", "get", http.StatusServiceUnavailable, "sync_id"},
 	}
 	for _, tc := range cases {
 		err := repo.CheckApiResource(tc.api, tc.resource, tc.verb, testDeployPlatform, testDeployRegion)
@@ -258,7 +258,7 @@ func TestCheckApiResource(t *testing.T) {
 
 func TestValidateRoleRules(t *testing.T) {
 	repo := newTestRepo(t)
-	for _, name := range []string{"telemetry.infrapi.io", "vault.example.com"} {
+	for _, name := range []string{"telemetry.infrapi.io", "vault.infrapi.io"} {
 		if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: name, Platform: testDeployPlatform, Region: testDeployRegion}); err != nil {
 			t.Fatal(err)
 		}
@@ -283,8 +283,8 @@ func TestValidateRoleRules(t *testing.T) {
 		{"wildcards", rule("telemetry.infrapi.io", []string{"*"}, []string{"*"}), ""},
 		{"wildcard api", rule("*", []string{"anything"}, []string{"anything"}), ""},
 		{"kayra's own api", rule(CatalogAPI, []string{"subscriptions"}, []string{"list"}), ""},
-		{"api without a spec yet", rule("vault.example.com", []string{"secrets"}, []string{"get"}), ""},
-		{"unregistered api", rule("nope.example.com", []string{"x"}, []string{"get"}), "is not registered"},
+		{"api without a spec yet", rule("vault.infrapi.io", []string{"secrets"}, []string{"get"}), ""},
+		{"unregistered api", rule("nope.infrapi.io", []string{"x"}, []string{"get"}), "is not registered"},
 		{"short name", rule("telemetry", []string{"dashboards"}, []string{"get"}), "is not registered"},
 		{"unknown resource", rule("telemetry.infrapi.io", []string{"dashboard"}, []string{"get"}), `did you mean "dashboards"`},
 		{"unsupported verb", rule("telemetry.infrapi.io", []string{"dashboards"}, []string{"delete"}), `supports "delete"`},

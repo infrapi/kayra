@@ -23,13 +23,6 @@ import (
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
-// testApiDomain is testBroker's own app.api_domain — deliberately not
-// "example.com" (the fallback a server with none configured would use)
-// so a test asserting on it can't be fooled by that fallback kicking
-// in instead of the real relay (see pending.ApiDomain) actually
-// carrying it through.
-const testApiDomain = "kayra-test.example"
-
 // fakeIDP serves just enough of a real OIDC provider for a full
 // broker-relayed Authorization Code + PKCE round trip: discovery, an
 // authorization endpoint that immediately approves (redirecting back
@@ -115,7 +108,7 @@ func testBroker(t *testing.T, cfg *config.Config) *httptest.Server {
 	// Routes can be registered on engine after the server starts —
 	// httptest.NewServer just dispatches to engine.ServeHTTP per
 	// request, it doesn't snapshot the router tree.
-	RegisterRoutes(engine, cfg, s, keys, srv.URL, testApiDomain)
+	RegisterRoutes(engine, cfg, s, keys, srv.URL)
 	cfg.App.URL = srv.URL
 	return srv
 }
@@ -186,9 +179,6 @@ func TestLoginToServerAutoSelectsSingleProvider(t *testing.T) {
 	}
 	if result.AccessToken != "real-access-token" {
 		t.Fatalf("AccessToken = %q, want real-access-token", result.AccessToken)
-	}
-	if result.ApiDomain != testApiDomain {
-		t.Fatalf("ApiDomain = %q, want %q (relayed from the broker's own pending.ApiDomain)", result.ApiDomain, testApiDomain)
 	}
 }
 
@@ -468,9 +458,6 @@ func TestLoginToServerManualRunsFullFlowThroughBroker(t *testing.T) {
 	}
 	if result.AccessToken != "real-access-token" {
 		t.Fatalf("AccessToken = %q, want real-access-token", result.AccessToken)
-	}
-	if result.ApiDomain != testApiDomain {
-		t.Fatalf("ApiDomain = %q, want %q", result.ApiDomain, testApiDomain)
 	}
 }
 

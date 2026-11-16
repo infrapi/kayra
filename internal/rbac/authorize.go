@@ -20,7 +20,7 @@ func MatchesAny(list []string, value string) bool {
 
 // Allows reports whether any rule grants verb on resource for api — the
 // rules[] shape: apis/resources/verbs, each wildcardable with "*". api
-// is the full API group URN (e.g. "compute.example.com"), never the
+// is the full API group URN (e.g. "compute.infrapi.io"), never the
 // bare app name.
 func Allows(rules []Rule, api, resource, verb string) bool {
 	for _, r := range rules {
@@ -33,19 +33,19 @@ func Allows(rules []Rule, api, resource, verb string) bool {
 
 // AuthorizationAPI is the fixed Rule.Apis value Kayra's own RBAC
 // management resources are checked against — named by its API group's
-// own URN exactly like any other app's (e.g. "compute.example.com"):
+// own URN exactly like any other app's (e.g. "compute.infrapi.io"):
 // it gates "groups", "roles", "rolebindings" (CanManageNamespaceRBAC),
-// mounted under /apis/authorization.example.com/v1/.... Its sibling for
+// mounted under /apis/authorization.infrapi.io/v1/.... Its sibling for
 // subscriptions, catalog.CatalogAPI, lives with the routes it
 // gates in internal/catalog. A role that needs both grants a rule per
 // api.
 //
-// "example.com" is a placeholder, not a hardcoded domain: SetAPIDomain
+// "infrapi.io" is a placeholder, not a hardcoded domain: SetAPIDomain
 // rebuilds it from a deployment's own domain (config.AppConfig.APIDomain)
 // — call it once, before any route is registered or any stored Rule is
 // compared against it, since every mount path and every authored
 // Role.Rules entry must agree on the same URN.
-var AuthorizationAPI = "authorization.example.com"
+var AuthorizationAPI = "authorization.infrapi.io"
 
 // SetAPIDomain rebuilds AuthorizationAPI as "authorization.<domain>".
 func SetAPIDomain(domain string) {
@@ -160,8 +160,8 @@ func (r *Repository) clusterGroupsMatching(userID string, callerGroups []string)
 // infrapi/lib's auth package calls over HTTP so any app built on top of
 // it can authorize a request without storing or evaluating RBAC rules
 // itself. api is that app's own full API group URN (e.g.
-// "compute.example.com"), matching how it's actually reachable
-// (/apis/compute.example.com/v1/...), never the bare app name. Either
+// "compute.infrapi.io"), matching how it's actually reachable
+// (/apis/compute.infrapi.io/v1/...), never the bare app name. Either
 // one of callerGroups must be listed in the Groups of one of
 // namespace's own Group objects, or userID must be listed in its Users,
 // and that Group must be bound by one of namespace's own RoleBindings,

@@ -135,7 +135,6 @@ func runLogin(ctx context.Context, cmd *cli.Command) error {
 		Token:     result.AccessToken,
 		TokenType: result.TokenType,
 		Expiry:    result.Expiry,
-		ApiDomain: result.ApiDomain,
 	})
 	if err := f.Save(); err != nil {
 		return err
@@ -180,7 +179,6 @@ func contextCommand() *cli.Command {
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "server", Required: true, Usage: "Kayra server base URL, e.g. http://localhost:8080"},
 					&cli.StringFlag{Name: "token", Required: true, Usage: "bearer token to save"},
-					&cli.StringFlag{Name: "api-domain", Usage: "the server's own app.api_domain (defaults to example.com when left empty)"},
 				},
 				Action: runContextSet,
 			},
@@ -247,9 +245,6 @@ func runContextCurrent(ctx context.Context, cmd *cli.Command) error {
 	if c.Username != "" {
 		fmt.Printf("username: %s\n", c.Username)
 	}
-	if c.ApiDomain != "" {
-		fmt.Printf("api_domain: %s\n", c.ApiDomain)
-	}
 	if !c.Expiry.IsZero() {
 		fmt.Printf("expiry:   %s\n", c.Expiry.Local().Format(time.RFC3339))
 	}
@@ -274,7 +269,6 @@ func runContextSet(ctx context.Context, cmd *cli.Command) error {
 		Server:    cmd.String("server"),
 		Token:     cmd.String("token"),
 		TokenType: "Bearer",
-		ApiDomain: cmd.String("api-domain"),
 	})
 	if err := f.Save(); err != nil {
 		return err
@@ -384,14 +378,11 @@ func resolveContext(cmd *cli.Command) (clicontext.Context, error) {
 }
 
 // canICommand mirrors `kubectl auth can-i`: ask the server's own
-// rbac.RegisterAuthorizeRoute check — POST /apis/authorization.<api
-// -domain>/v1/check — whether the current context's own already
-// -authenticated identity (never asserted locally) is granted verb on
-// resource for --api. --api-domain is this one check endpoint's own
-// mount point (a Kayra deployment's app.api_domain, "example.com" when
-// a deployment never set one — see config.AppConfig.APIDomain); --api
-// is the application being asked about (e.g. "compute.example.com"),
-// an entirely different thing.
+// rbac.RegisterAuthorizeRoute check — the endpoint its
+// /.well-known/kayra.json names — whether the current context's own
+// already-authenticated identity (never asserted locally) is granted
+// verb on resource for --api, the application being asked about, by its
+// full name or short name (see resolveAPI).
 //
 // This only ever tests rbac.Repository.Authorize — namespace-scoped
 // Group/Role/RoleBinding objects, the mechanism other apps built on
@@ -408,9 +399,8 @@ func canICommand() *cli.Command {
 		Description: "Tests rbac.Authorize (namespace-scoped Group/Role/RoleBinding) — the authorization path other apps built on infrapi/lib use for their own API. Kayra's own management-plane routes (namespaces, api registrations, cluster/namespace groups-roles-rolebindings, subscriptions) are gated by other mechanisms entirely and are never decided by this check — asking about one of those prints a warning alongside the answer.",
 		ArgsUsage:   "<verb> <resource>",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "api", Required: true, Usage: "the API group being asked about, e.g. compute.example.com"},
+			&cli.StringFlag{Name: "api", Required: true, Usage: "the API group being asked about: its full name (compute.infrapi.io) or its short name (compute)"},
 			&cli.StringFlag{Name: "namespace", Required: true, Usage: "the namespace to check against"},
-			&cli.StringFlag{Name: "api-domain", Usage: "the Kayra deployment's own app.api_domain, to reach its /apis/authorization.<domain>/v1/check — defaults to everything in --api past its first label, or \"example.com\" if --api has no dot"},
 			&cli.StringFlag{Name: "context", Usage: "saved context to use (defaults to the current context)"},
 		},
 		Action: runCanI,
@@ -429,14 +419,20 @@ func runCanI(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("can-i: %w", err)
 	}
 
-	api := cmd.String("api")
-	apiDomain := resolveAPIDomain(cmd.String("api-domain"), api, c.ApiDomain)
+	doc, err := fetchKayra(ctx, c)
+	if err != nil {
+		return fmt.Errorf("can-i: %w", err)
+	}
+	api, err := resolveAPI(ctx, c, cmd.String("api"))
+	if err != nil {
+		return fmt.Errorf("can-i: %w", err)
+	}
 
-	if warning := kayraOwnManagementWarning(apiDomain, api, resource); warning != "" {
+	if warning := kayraOwnManagementWarning(doc, api, resource); warning != "" {
 		fmt.Fprintln(os.Stderr, "kayra-cli: warning:", warning)
 	}
 
-	allowed, reason, err := checkAuthorized(ctx, c, apiDomain, cmd.String("namespace"), api, resource, verb)
+	allowed, reason, err := checkAuthorized(ctx, c, doc.Endpoints.Check, cmd.String("namespace"), api, resource, verb)
 	if err != nil {
 		return fmt.Errorf("can-i: %w", err)
 	}
@@ -530,33 +526,9 @@ func formatUserinfoValue(v any) string {
 	return strings.Join(parts, ", ")
 }
 
-// resolveAPIDomain picks, in order: --api-domain when the caller set
-// it; else whatever api itself already carries (api is normally its
-// own app's full URN, "compute.example.com", and this deployment's
-// authorization.* check/verb endpoints are mounted on that exact same
-// domain — only the first label, "compute", differs) — a bare api
-// with no dot at all (unusual, but not invalid, see rbac.Rule.Apis)
-// has no domain to derive this way; else contextDomain, the current
-// login's own saved api_domain (see clicontext.Context.ApiDomain,
-// written by `login` — see oauth2login.Result.ApiDomain), when the
-// login actually has one; else the server's own documented default,
-// for a context saved before this existed or a server that never
-// relays one.
-func resolveAPIDomain(explicit, api, contextDomain string) string {
-	if explicit != "" {
-		return explicit
-	}
-	if i := strings.Index(api, "."); i >= 0 {
-		return api[i+1:]
-	}
-	if contextDomain != "" {
-		return contextDomain
-	}
-	return "example.com"
-}
-
 // kayraOwnManagementWarning reports, when api/resource names one of
-// Kayra's own management-plane resources (under apiDomain), which
+// Kayra's own management-plane resources (its built-in groups, per
+// doc), which
 // other mechanism actually gates it — none of them go through
 // rbac.Authorize (what the /check endpoint, and so can-i, tests) at
 // all:
@@ -573,7 +545,7 @@ func resolveAPIDomain(explicit, api, contextDomain string) string {
 //     no Rule of any kind consulted.
 //
 // Empty when api/resource doesn't name one of these — including any
-// api that simply isn't under apiDomain at all, since that's another
+// api that isn't one of Kayra's built-in groups, since that's another
 // app's own API, exactly what Authorize is for.
 // singularizeResource strips a trailing "s" so "group"/"groups",
 // "role"/"roles", etc. both match — a human typing `can-i ... delete
@@ -584,34 +556,36 @@ func singularizeResource(resource string) string {
 	return strings.TrimSuffix(resource, "s")
 }
 
-func kayraOwnManagementWarning(apiDomain, api, resource string) string {
+func kayraOwnManagementWarning(doc kayraDocument, api, resource string) string {
 	switch api {
-	case "authorization." + apiDomain:
+	case "":
+		return ""
+	case doc.builtinGroup("authorization"):
 		switch singularizeResource(resource) {
 		case "group", "role", "rolebinding":
 			return "namespace groups/roles/rolebindings are gated by cluster RBAC (CanManageNamespaceRBAC), never by this check — it tests a different, namespace-scoped Group/Role/RoleBinding set"
 		case "clustergroup", "clusterrole", "clusterrolebinding":
 			return "cluster groups/roles/rolebindings are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
 		}
-	case "catalog." + apiDomain:
+	case doc.builtinGroup("catalog"):
 		switch singularizeResource(resource) {
 		case "subscription", "subscriptions/sync":
 			return "subscriptions are gated by cluster RBAC (CanManageNamespaceRBAC), never by this check — it tests a different, namespace-scoped Group/Role/RoleBinding set"
 		case "apiregistration":
 			return "api registrations are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
 		}
-	case "system." + apiDomain:
+	case doc.builtinGroup("system"):
 		return "namespaces are gated by the sysadmin group alone (SysadminGate) — compare `auth whoami`'s groups against sysadmin.groups yourself, this check can't see either"
 	}
 	return ""
 }
 
-// checkAuthorized POSTs c's own bearer token against server's
-// /apis/authorization.<apiDomain>/v1/check — the exact same
+// checkAuthorized POSTs c's own bearer token against the server's check
+// endpoint, checkPath (from its discovery document) — the exact same
 // rbac.AuthorizeRequest/AuthorizeResponse shape infrapi/lib's own auth
 // client uses, so this never duplicates or re-derives the decision
 // itself, only asks for it.
-func checkAuthorized(ctx context.Context, c clicontext.Context, apiDomain, namespace, api, resource, verb string) (allowed bool, reason string, err error) {
+func checkAuthorized(ctx context.Context, c clicontext.Context, checkPath, namespace, api, resource, verb string) (allowed bool, reason string, err error) {
 	body, err := json.Marshal(map[string]string{
 		"namespace": namespace,
 		"api":       api,
@@ -622,7 +596,7 @@ func checkAuthorized(ctx context.Context, c clicontext.Context, apiDomain, names
 		return false, "", fmt.Errorf("encode request: %w", err)
 	}
 
-	checkURL := strings.TrimRight(c.Server, "/") + "/apis/authorization." + apiDomain + "/v1/check"
+	checkURL := strings.TrimRight(c.Server, "/") + checkPath
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, checkURL, bytes.NewReader(body))
 	if err != nil {
 		return false, "", fmt.Errorf("build request: %w", err)

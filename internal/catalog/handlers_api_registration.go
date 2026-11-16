@@ -50,7 +50,7 @@ func validateApiRegistration(repo *Repository, reg ApiRegistration) *liberrors.E
 		return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "name is required")
 	}
 	if !IsLongApiName(reg.Name) {
-		return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "name %q must be the api's long name, a lowercase DNS name such as \"compute.example.com\"", reg.Name)
+		return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "name %q must be the api's long name, a lowercase DNS name such as \"compute.infrapi.io\"", reg.Name)
 	}
 	if reg.ShortName != "" {
 		if !IsShortApiName(reg.ShortName) {
@@ -76,7 +76,7 @@ func validateApiRegistration(repo *Repository, reg ApiRegistration) *liberrors.E
 }
 
 // RegisterApiRegistrationRoutes mounts cluster-wide ApiRegistration CRUD
-// at /apis/catalog.example.com/v1/apiregistrations (its own API group —
+// at /apis/catalog.infrapi.io/v1/apiregistrations (its own API group —
 // an ApiRegistration isn't one of internal/rbac's cluster RBAC objects,
 // it just happens to share the same trust tier) behind gate (normally
 // middleware.SysadminGate). Ported from the legacy Postgres "stacks"

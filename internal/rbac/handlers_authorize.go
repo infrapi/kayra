@@ -17,7 +17,7 @@ import (
 // the parsing rule itself (verbs match HTTP methods, everything past
 // :api is Resource, an action is just part of Resource) needs no
 // Kayra-specific knowledge to apply. Api is the calling app's own full
-// API group URN (e.g. "compute.example.com"), matching how it's
+// API group URN (e.g. "compute.infrapi.io"), matching how it's
 // actually reachable — never the bare app name.
 type AuthorizeRequest struct {
 	Namespace string `json:"namespace" binding:"required"`
@@ -53,12 +53,12 @@ type Prechecks struct {
 
 // RegisterAuthorizeRoute mounts the one route other apps built on
 // infrapi/lib call to authorize a request against this namespace's own
-// RBAC objects: POST /apis/authorization.example.com/v1/check, gated by
+// RBAC objects: POST /apis/authorization.infrapi.io/v1/check, gated by
 // gate (normally middleware.Authenticator, any configured provider) so
 // the caller's user id and groups come from this same request's own
 // resolved identity, not from the request body.
 //
-// "check" sits in the same api group ("authorization.example.com")
+// "check" sits in the same api group ("authorization.infrapi.io")
 // as the groups/roles/rolebindings it decides against, but is not
 // itself gated by Allows against that group — exactly like
 // Kubernetes' SelfSubjectAccessReview (authorization.k8s.io) needs no

@@ -21,8 +21,8 @@ both:
 
 | Gate | Accepts | Used by |
 |------|---------|---------|
-| `Authenticator` | any configured `authentifications.<name>` provider, or a PAT | namespace-scoped routes (rbac, subscriptions), `/oauth2/userinfo`, `POST /apis/authorization.example.com/v1/check`, `POST /api/v1/tokens` |
-| `SysadminGate` | **only** local signing keys, requiring the `<platform>-core-sysadmin` group claim | `/apis/authorization.example.com/v1/cluster*`, the namespace collection (`/apis/system.example.com/v1/namespaces`) |
+| `Authenticator` | any configured `authentifications.<name>` provider, or a PAT | namespace-scoped routes (rbac, subscriptions), `/oauth2/userinfo`, `POST /apis/authorization.infrapi.io/v1/check`, `POST /api/v1/tokens` |
+| `SysadminGate` | **only** local signing keys, requiring the `<platform>-core-sysadmin` group claim | `/apis/authorization.infrapi.io/v1/cluster*`, the namespace collection (`/apis/system.infrapi.io/v1/namespaces`) |
 
 ## Verifying a bearer token
 
@@ -57,7 +57,7 @@ see [`kayra cache clean`](../cli.md#cache-clean).
 
 ## Bootstrapping with SysadminGate
 
-The `/apis/authorization.example.com/v1/cluster*` endpoints (and the
+The `/apis/authorization.infrapi.io/v1/cluster*` endpoints (and the
 namespace collection) require the caller's resolved groups to intersect a
 configured sysadmin group list
 ([config.SysadminConfig.Groups](../packages/config.md)) — authored directly
@@ -102,9 +102,9 @@ type RoleBinding struct {
 }
 ```
 
-Cluster-scoped (`/apis/authorization.example.com/v1/{clustergroups,
+Cluster-scoped (`/apis/authorization.infrapi.io/v1/{clustergroups,
 clusterroles,clusterrolebindings}`, `SysadminGate`) and namespace-scoped
-(`/apis/authorization.example.com/v1/namespaces/:namespace/{groups,roles,rolebindings}`,
+(`/apis/authorization.infrapi.io/v1/namespaces/:namespace/{groups,roles,rolebindings}`,
 `Authenticator` + the check below) copies of the same three objects — see
 [rbac](../packages/rbac.md#types) for the full field reference. A
 `RoleBinding`'s `Role` and every `Group` it names must share its exact
@@ -121,8 +121,8 @@ authenticated: either one of the caller's own resolved groups (the same
 listed in its `users` — and that `Group` must be bound by a cluster
 `RoleBinding` scoped to that exact
 namespace, to a cluster `Role` granting
-`apis: ["authorization.example.com"]` (groups/roles/rolebindings) or
-`apis: ["catalog.example.com"]` (subscriptions) for the relevant
+`apis: ["authorization.infrapi.io"]` (groups/roles/rolebindings) or
+`apis: ["catalog.infrapi.io"]` (subscriptions) for the relevant
 verb — evaluated in
 [`rbac.Repository.CanManageNamespaceRBAC`](../packages/rbac.md#canmanagenamespacerbac).
 This is exactly the spec's cluster bootstrap flow (group → role →
@@ -133,9 +133,9 @@ rolebinding for this namespace, or a role that doesn't grant the verb.
 Both groups split the same way: their namespace-scoped resources are
 gated by these rules, their cluster-scoped ones (`clustergroups`/
 `clusterroles`/`clusterrolebindings`, `apiregistrations`) by
-`SysadminGate` alone. So `resources: ["*"]` on `catalog.example.com`
+`SysadminGate` alone. So `resources: ["*"]` on `catalog.infrapi.io`
 grants subscriptions only, never apiregistrations — just as `"*"` on
-`authorization.example.com` never grants cluster roles.
+`authorization.infrapi.io` never grants cluster roles.
 
 This check is **not** based on a synced group membership list — there is
 no `/refresh` action and no "members" record anywhere in Kayra.
@@ -158,16 +158,16 @@ for) a directory group of its own.
 ## Authorizing other apps' requests
 
 Any app built on `infrapi/lib` exposing routes shaped
-`/apis/compute.example.com/v1/namespaces/:namespace/<resource>` can
+`/apis/compute.infrapi.io/v1/namespaces/:namespace/<resource>` can
 authorize a request against **that namespace's own**
 `Group`/`Role`/`RoleBinding` objects (the ones its admins create via
 `RegisterNamespaceRoutes`, once `CanManageNamespaceRBAC` let them in) by
-calling Kayra's `POST /apis/authorization.example.com/v1/check`,
+calling Kayra's `POST /apis/authorization.infrapi.io/v1/check`,
 gated by `Authenticator` like every other namespace-scoped route:
 
 ```json
 // request, Authorization: Bearer <the caller's own token>
-{"namespace": "core", "api": "compute.example.com", "resource": "vm", "verb": "list"}
+{"namespace": "core", "api": "compute.infrapi.io", "resource": "vm", "verb": "list"}
 // response
 {"allowed": true}
 ```
@@ -221,7 +221,7 @@ not a reason to refuse callers. See
 [subscriptions](subscriptions.md#state).
 
 `Namespace`/`Api` come straight from the URL (`Api` is the calling
-app's own full API group URN, e.g. "compute.example.com", matching how
+app's own full API group URN, e.g. "compute.infrapi.io", matching how
 it's actually reachable — never the bare app name); `Resource`/`Verb`
 are derived from the rest of the path and the HTTP method — verbs match
 HTTP methods (`list`/`get` for `GET`, `create` for `POST`, `update` for

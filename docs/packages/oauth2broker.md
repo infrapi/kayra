@@ -133,7 +133,7 @@ The one other accepted value is the exact string
 `kayra-cli login --no-browser`). It redirects nowhere, so it can't be
 abused as an open redirect: at `/callback` the broker instead renders the
 `oauth2login.LoginCode` the loopback redirect would have carried (code,
-the CLI's own state, token endpoint, client ID, `api_domain`), as one
+the CLI's own state, token endpoint, client ID), as one
 base64url string for the user to paste into their terminal. The page is
 sent `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. The
 code is only redeemable with the verifier the originating CLI holds
