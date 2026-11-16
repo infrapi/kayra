@@ -15,7 +15,7 @@ Stores and serves the cluster- and namespace-scoped `Group`/`Role`/
 (`CanManageNamespaceRBAC`) that decides who can manage them, and the check
 (`Authorize`) any app built on `infrapi/lib` calls to decide what an
 already-authenticated caller may do against its own
-`/apis/compute.example.com/v1/namespaces/:namespace/<resource>`-shaped routes.
+`/apis/compute.infrapi.io/v1/namespaces/:namespace/<resource>`-shaped routes.
 
 ## Types
 
@@ -32,7 +32,7 @@ type Group struct {
 }
 
 type Rule struct {
-	Apis, Resources, Verbs []string // each wildcardable with "*"; Apis is the full API group URN, e.g. "compute.example.com"
+	Apis, Resources, Verbs []string // each wildcardable with "*"; Apis is the full API group URN, e.g. "compute.infrapi.io"
 }
 
 type Role struct {
@@ -85,13 +85,13 @@ rbac.RegisterAuthorizeRoute(engine, repo, authenticator.Middleware(), rbac.Prech
 ```
 
 - **Cluster** — full CRUD at
-  `/apis/authorization.example.com/v1/{clustergroups,clusterroles,
+  `/apis/authorization.infrapi.io/v1/{clustergroups,clusterroles,
   clusterrolebindings}`, gated by
   [`middleware.SysadminGate`](middleware.md#sysadmingate): this is the
   bootstrap tier, so it can't itself depend on any RBAC object already
   existing.
 - **Namespace** — full CRUD at
-  `/apis/authorization.example.com/v1/namespaces/:namespace/{groups,roles,rolebindings}`,
+  `/apis/authorization.infrapi.io/v1/namespaces/:namespace/{groups,roles,rolebindings}`,
   gated by `authenticator.Middleware()` **plus**
   [`RequireClusterRBAC(repo, api, resource, verb)`](#requireclusterrbac)
   per route (`api` is `AuthorizationAPI` here) — a caller must
@@ -104,7 +104,7 @@ rbac.RegisterAuthorizeRoute(engine, repo, authenticator.Middleware(), rbac.Prech
   is given; `apiserver.Build` passes `catalog.Repository.ValidateRoleRules`,
   which checks them against each api's OpenAPI spec (see
   [RBAC & auth](../architecture/rbac-and-auth.md#authorizing-other-apps-requests)).
-- **Authorize** — `POST /apis/authorization.example.com/v1/check`,
+- **Authorize** — `POST /apis/authorization.infrapi.io/v1/check`,
   gated only by `authenticator.Middleware()` (any configured provider),
   never by `Allows` against that same api group — the general-purpose
   decision endpoint any app built on `infrapi/lib` calls, deciding only
@@ -159,9 +159,9 @@ direct-user-or-group→role→rolebinding evaluation, but against
 `Group`/`Role`/`RoleBinding` objects (what that namespace's admins create
 via [`RegisterNamespaceRoutes`](#routes), once `CanManageNamespaceRBAC` let
 them in) instead of the cluster's, and against an arbitrary `api` —
-that calling app's own full API group URN, e.g. "compute.example.com",
+that calling app's own full API group URN, e.g. "compute.infrapi.io",
 never the bare app name — instead of one of Kayra's own two fixed
-URNs. This is what backs `POST /apis/authorization.example.com/v1/check`
+URNs. This is what backs `POST /apis/authorization.infrapi.io/v1/check`
 ([`RegisterAuthorizeRoute`](#routes)) — the one call `infrapi/lib`'s
 `pkg/auth` makes to authorize a request on behalf of any app built on
 top of it, without that app storing or evaluating RBAC rules itself.

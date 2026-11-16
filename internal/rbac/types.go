@@ -52,9 +52,9 @@ type Group struct {
 
 // Rule is one RBAC rule: which apis, resources and verbs it grants.
 // Apis matches the full API group URN (see Authorize) for any other
-// app's own routes — e.g. "compute.example.com", never the bare app
+// app's own routes — e.g. "compute.infrapi.io", never the bare app
 // name "compute" — mirroring how that app is actually reachable
-// (/apis/compute.example.com/v1/...). Kayra's own management-plane
+// (/apis/compute.infrapi.io/v1/...). Kayra's own management-plane
 // resources are just two fixed API URNs in that same vocabulary —
 // rbac.AuthorizationAPI and catalog.CatalogAPI — not a
 // separate concept.

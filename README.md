@@ -40,7 +40,7 @@ copy, and [config](docs/packages/config.md) for the full reference.
   synced membership list). See
   [RBAC & auth](docs/architecture/rbac-and-auth.md).
 - **ApiRegistration** — declares that an API group exists and who owns
-  it (e.g. "compute.example.com", its long name and id); Kayra never implements the API itself. See
+  it (e.g. "compute.infrapi.io", its long name and id); Kayra never implements the API itself. See
   [API registrations](docs/architecture/api-registrations.md).
 - **Namespace** — *is* the tenant, not two things joined by a name.
   See [Namespaces](docs/architecture/namespaces.md).

@@ -38,6 +38,7 @@ own types, storage and HTTP handlers together.
 | [`internal/store`](packages/store.md) | etcd / local storage backend |
 | [`internal/crypto`](packages/crypto.md) | PAT encryption, self-signed JWT signing |
 | [`internal/oidc`](packages/oidc.md) | Discovery/JWKS fetch, caching, own endpoints |
+| [`internal/discovery`](packages/discovery.md) | `/.well-known/kayra.json`: the API domain, built-in groups and endpoints clients discover |
 | [`internal/authn`](packages/authn.md) | Verifying a bearer token, resolving its user id |
 | [`internal/authz`](packages/authz.md) | Resolving a user id to groups/attributes (LDAP or fixture) |
 | [`internal/middleware`](packages/middleware.md) | The two gin auth middlewares (general + sysadmin) |

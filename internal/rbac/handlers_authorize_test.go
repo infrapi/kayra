@@ -13,7 +13,7 @@ import (
 )
 
 func postCheck(engine *gin.Engine) *httptest.ResponseRecorder {
-	body := []byte(`{"namespace":"core","api":"compute.example.com","resource":"vm","verb":"list"}`)
+	body := []byte(`{"namespace":"core","api":"compute.infrapi.io","resource":"vm","verb":"list"}`)
 	req := httptest.NewRequest(http.MethodPost, "/apis/"+AuthorizationAPI+"/v1/check", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -36,7 +36,7 @@ func TestAuthorizeRouteOrder(t *testing.T) {
 			Api:       func(string, string) *liberrors.Error { calls = append(calls, "api"); return apiErr },
 		}
 	}
-	forbidden := liberrors.New(http.StatusForbidden, "test", "namespace \"core\" is not subscribed to api \"compute.example.com\"")
+	forbidden := liberrors.New(http.StatusForbidden, "test", "namespace \"core\" is not subscribed to api \"compute.infrapi.io\"")
 	missing := liberrors.New(http.StatusNotFound, "test", "namespace \"core\" not found")
 
 	cases := []struct {
@@ -57,7 +57,7 @@ func TestAuthorizeRouteOrder(t *testing.T) {
 		calls = nil
 		repo := newTestRepo(t)
 		if tc.member {
-			seedNamespaceRBAC(t, repo, "alice-group", "core", "compute.example.com", "vm", "list")
+			seedNamespaceRBAC(t, repo, "alice-group", "core", "compute.infrapi.io", "vm", "list")
 		}
 		engine := gin.New()
 		RegisterAuthorizeRoute(engine, repo, fakeAuthGate("alice", "alice-group"), prechecks(tc.nsErr, tc.apiErr))

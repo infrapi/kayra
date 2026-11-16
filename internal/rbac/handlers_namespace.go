@@ -84,10 +84,10 @@ func RequireClusterRBAC(repo *Repository, api, resource, verb string) gin.Handle
 
 // RegisterNamespaceRoutes mounts full CRUD for the per-namespace default
 // groups/roles/rolebindings resources at
-// /apis/authorization.example.com/v1/namespaces/:namespace/{groups,
+// /apis/authorization.infrapi.io/v1/namespaces/:namespace/{groups,
 // roles,rolebindings} — Kayra's own authorization management plane,
 // its own API group exactly like any other app's own
-// /apis/<app>.example.com/v1/namespaces/:namespace/<resource> routes —
+// /apis/<app>.infrapi.io/v1/namespaces/:namespace/<resource> routes —
 // behind gate (normally middleware.Authenticator, any configured
 // provider) followed by RequireClusterRBAC, so only a caller whose
 // cluster-level group membership grants them AuthorizationAPI rights

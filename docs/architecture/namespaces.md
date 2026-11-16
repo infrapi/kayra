@@ -20,9 +20,9 @@ type Namespace struct {
 
 ## Managing one
 
-`POST /apis/system.example.com/v1/namespaces` (body `{name}`) creates it directly — no
-separate `/tenant` child resource. Full CRUD at `/apis/system.example.com/v1/namespaces`
-(collection) and `/apis/system.example.com/v1/namespaces/:namespace` (one), gated by
+`POST /apis/system.infrapi.io/v1/namespaces` (body `{name}`) creates it directly — no
+separate `/tenant` child resource. Full CRUD at `/apis/system.infrapi.io/v1/namespaces`
+(collection) and `/apis/system.infrapi.io/v1/namespaces/:namespace` (one), gated by
 [`SysadminGate`](rbac-and-auth.md#two-gates-two-trust-tiers) — same trust
 tier as [ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
 cluster `RoleBinding` scoped to a namespace that doesn't exist yet.
@@ -36,7 +36,7 @@ kayra-cli create system namespaces -d '{"name": "core"}'
 **curl**
 
 ```bash
-curl -s -X POST http://localhost:8080/apis/system.example.com/v1/namespaces \
+curl -s -X POST http://localhost:8080/apis/system.infrapi.io/v1/namespaces \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "core"}'
 ```

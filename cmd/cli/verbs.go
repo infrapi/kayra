@@ -12,9 +12,10 @@
 // — Kayra only tracks that one exists and who owns it); this is just
 // the one HTTP convention every app following it shares, so one verb
 // set works against all of them without kayra-cli knowing anything
-// about any particular one. <api> may be given bare ("compute") or
-// already domain-qualified ("compute.example.com") — see
-// resolveAPIDomain, shared with `auth can-i`.
+// about any particular one. <api> is a group's full name
+// ("compute.infrapi.io"), or its short name or first label ("compute"),
+// resolved through the server's GET /apis — see resolveAPI, shared with
+// `auth can-i`.
 package main
 
 import (
@@ -76,7 +77,6 @@ func verbCommand(verb, method string, spec verbSpec) *cli.Command {
 	usage := fmt.Sprintf("%s a resource under any app's own API (kubectl-style)", verb)
 	flags := []cli.Flag{
 		&cli.StringFlag{Name: "namespace", Aliases: []string{"n"}, Usage: "the namespace to address — omit for a cluster-scoped resource (e.g. catalog's apiregistrations, authorization's clustergroups/clusterroles/clusterrolebindings)"},
-		&cli.StringFlag{Name: "api-domain", Usage: "this api's own domain — defaults to everything in <api> past its first label, or \"example.com\" if <api> has no dot"},
 		&cli.StringFlag{Name: "context", Usage: "saved context to use (defaults to the current context)"},
 		&cli.StringFlag{Name: "output", Aliases: []string{"o"}, Value: outputTable, Usage: "output format: table (namespace, name, created/updated at), or json / yaml (the full response)"},
 	}
@@ -146,10 +146,9 @@ func runVerb(ctx context.Context, cmd *cli.Command, verb, method string, spec ve
 		}
 	}
 
-	apiDomain := resolveAPIDomain(cmd.String("api-domain"), apiName, c.ApiDomain)
-	fullAPI := apiName
-	if !strings.Contains(apiName, ".") {
-		fullAPI = apiName + "." + apiDomain
+	fullAPI, err := resolveAPI(ctx, c, apiName)
+	if err != nil {
+		return fmt.Errorf("%s: %w", verb, err)
 	}
 
 	// A namespace scopes the resource under .../namespaces/<ns>/<resource>

@@ -17,7 +17,7 @@ var (
 )
 
 // IsLongApiName reports whether name is a valid api id: a lowercase DNS
-// name of at least two labels, e.g. "compute.example.com".
+// name of at least two labels, e.g. "compute.infrapi.io".
 func IsLongApiName(name string) bool { return longApiName.MatchString(name) }
 
 // IsShortApiName reports whether name is a valid ApiRegistration
@@ -58,7 +58,7 @@ func (r *Repository) CheckNamespace(namespace string) *liberrors.Error {
 // once the caller is known to be a member of namespace (step 2), so a
 // non-member never learns what a namespace is subscribed to:
 //
-//  3. api (its long name, e.g. "compute.example.com") is an
+//  3. api (its long name, e.g. "compute.infrapi.io") is an
 //     ApiRegistration in this deployment's own
 //     deploymentPlatform/deploymentRegion (404),
 //  4. namespace is subscribed to it (403),

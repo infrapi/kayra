@@ -78,7 +78,7 @@ func validateSubscription(repo *Repository, sub Subscription, deploymentPlatform
 		return liberrors.New(http.StatusBadRequest, "catalog.Subscription", "state %q is not one of init, success, error", sub.State)
 	}
 	if !IsLongApiName(sub.ApiName) {
-		msg := "api %q must be the api's long name, e.g. \"compute.example.com\""
+		msg := "api %q must be the api's long name, e.g. \"compute.infrapi.io\""
 		args := []any{sub.ApiName}
 		if reg, found, err := repo.findByShortName(deploymentPlatform, deploymentRegion, sub.ApiName); err == nil && found {
 			msg = "api %q is a short name: subscribe with its long name %q"
@@ -94,11 +94,11 @@ func validateSubscription(repo *Repository, sub Subscription, deploymentPlatform
 
 // RegisterNamespaceRoutes mounts namespace-scoped Subscription CRUD —
 // the legacy model's tenant↔api registration link — at
-// /apis/catalog.example.com/v1/namespaces/:namespace/
+// /apis/catalog.infrapi.io/v1/namespaces/:namespace/
 // subscriptions{,/:api{,/sync}}, the namespace-scoped half of CatalogAPI
 // next to the cluster-scoped apiregistrations, exactly like
 // internal/rbac's namespace groups/roles/rolebindings sit next to its
-// cluster ones under authorization.example.com. Behind gate (normally
+// cluster ones under authorization.infrapi.io. Behind gate (normally
 // middleware.Authenticator) followed by
 // rbac.RequireClusterRBAC(rbacRepo, CatalogAPI,
 // "subscriptions"|"subscriptions/sync", verb): a Subscription is gated by

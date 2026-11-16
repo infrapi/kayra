@@ -13,7 +13,7 @@ func TestRenderTableList(t *testing.T) {
 	updated := time.Date(2026, 11, 10, 14, 30, 0, 0, time.UTC)
 	body := []byte(`[
 		{"api":"telemetry.infrapi.io","active":true,"state":"success","created_at":"2026-11-01T09:00:00Z","updated_at":"2026-11-10T14:30:00Z"},
-		{"api":"compute.example.com","active":false,"state":"init"}
+		{"api":"compute.infrapi.io","active":false,"state":"init"}
 	]`)
 	var out, errOut bytes.Buffer
 	ok, err := renderTable(&out, &errOut, body, "core")
@@ -32,7 +32,7 @@ func TestRenderTableList(t *testing.T) {
 		t.Fatalf("row 1 = %q, want fields %q", lines[1], want1)
 	}
 	// No timestamps (a record from before they existed): "-".
-	if got := strings.Fields(lines[2]); strings.Join(got, " ") != "core compute.example.com - -" {
+	if got := strings.Fields(lines[2]); strings.Join(got, " ") != "core compute.infrapi.io - -" {
 		t.Fatalf("row 2 = %q", lines[2])
 	}
 	// Only those four columns: nothing else from the body leaks in.
@@ -43,14 +43,14 @@ func TestRenderTableList(t *testing.T) {
 
 func TestRenderTableClusterScopedSingleObject(t *testing.T) {
 	var out, errOut bytes.Buffer
-	ok, err := renderTable(&out, &errOut, []byte(`{"name":"vault.example.com","owner":"sre"}`), "")
+	ok, err := renderTable(&out, &errOut, []byte(`{"name":"vault.infrapi.io","owner":"sre"}`), "")
 	if err != nil || !ok {
 		t.Fatalf("renderTable: ok=%v err=%v", ok, err)
 	}
 	if strings.Contains(out.String(), "NAMESPACE") {
 		t.Fatalf("cluster-scoped resource shows a NAMESPACE column:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "vault.example.com") {
+	if !strings.Contains(out.String(), "vault.infrapi.io") {
 		t.Fatalf("missing the name:\n%s", out.String())
 	}
 }
@@ -68,15 +68,15 @@ func TestRenderTableEmptyAndUnnamed(t *testing.T) {
 
 func TestPrintVerbResponseDeleteAndFallback(t *testing.T) {
 	var out, errOut bytes.Buffer
-	if err := printVerbResponse(&out, &errOut, outputTable, "delete", "subscriptions", "vault.example.com", "core", nil); err != nil {
+	if err := printVerbResponse(&out, &errOut, outputTable, "delete", "subscriptions", "vault.infrapi.io", "core", nil); err != nil {
 		t.Fatal(err)
 	}
-	if out.String() != "subscriptions \"vault.example.com\" deleted\n" {
+	if out.String() != "subscriptions \"vault.infrapi.io\" deleted\n" {
 		t.Fatalf("delete = %q", out.String())
 	}
 
 	out.Reset()
-	if err := printVerbResponse(&out, &errOut, outputTable, "get", "apiregistrations", "vault.example.com/status", "", []byte(`{"sync_id":"v2","subscriptions":[]}`)); err != nil {
+	if err := printVerbResponse(&out, &errOut, outputTable, "get", "apiregistrations", "vault.infrapi.io/status", "", []byte(`{"sync_id":"v2","subscriptions":[]}`)); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), `"sync_id": "v2"`) {
@@ -136,14 +136,14 @@ func TestPrintYAML(t *testing.T) {
 
 func TestApisFilterAndRender(t *testing.T) {
 	groups := []discoveryGroup{
-		{Api: "catalog.example.com", Builtin: true, Resources: []discoveryResource{
+		{Api: "catalog.infrapi.io", Builtin: true, Resources: []discoveryResource{
 			{Name: "apiregistrations", Verbs: []string{"get", "list"}},
 			{Name: "subscriptions", Namespaced: true, Verbs: []string{"create", "list"}},
 		}},
 		{Api: "telemetry.infrapi.io", ShortName: "telemetry", Resources: []discoveryResource{
 			{Name: "dashboards", Namespaced: true, Verbs: []string{"list"}},
 		}},
-		{Api: "vault.example.com", Resources: []discoveryResource{}}, // spec not fetched yet
+		{Api: "vault.infrapi.io", Resources: []discoveryResource{}}, // spec not fetched yet
 	}
 
 	var out, errOut bytes.Buffer
@@ -153,10 +153,10 @@ func TestApisFilterAndRender(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
 	want := [][]string{
 		{"NAME", "SHORTNAME", "APIGROUP", "NAMESPACED", "VERBS"},
-		{"apiregistrations", "-", "catalog.example.com", "false", "get,list"},
-		{"subscriptions", "-", "catalog.example.com", "true", "create,list"},
+		{"apiregistrations", "-", "catalog.infrapi.io", "false", "get,list"},
+		{"subscriptions", "-", "catalog.infrapi.io", "true", "create,list"},
 		{"dashboards", "telemetry", "telemetry.infrapi.io", "true", "list"},
-		{"-", "-", "vault.example.com", "-", "-"},
+		{"-", "-", "vault.infrapi.io", "-", "-"},
 	}
 	if len(lines) != len(want) {
 		t.Fatalf("got %d lines, want %d:\n%s", len(lines), len(want), out.String())
@@ -176,7 +176,7 @@ func TestApisFilterAndRender(t *testing.T) {
 			t.Fatalf("--api-group %s = %+v", sel, got)
 		}
 	}
-	if got := filterGroups(groups, "catalog", nil); len(got) != 1 || got[0].Api != "catalog.example.com" {
+	if got := filterGroups(groups, "catalog", nil); len(got) != 1 || got[0].Api != "catalog.infrapi.io" {
 		t.Fatalf("--api-group catalog (first label) = %+v", got)
 	}
 

@@ -68,17 +68,12 @@ const stateTTL = 10 * time.Minute
 // a provider — can still finish the PKCE exchange itself, directly
 // against the provider (see oauth2login.LoginToServer). Kayra itself
 // can never do that exchange on the CLI's behalf: the code_verifier
-// backing code_challenge never leaves the CLI. ApiDomain is this
-// instance's own resolved app.api_domain, relayed the same way so
-// `kayra-cli login` can save it into the context it writes — every
-// later `can-i`/verb command reads it back from there instead of
-// guessing "example.com".
+// backing code_challenge never leaves the CLI.
 type pending struct {
 	RedirectURI   string `json:"redirect_uri"`
 	State         string `json:"state"`
 	TokenEndpoint string `json:"token_endpoint"`
 	ClientID      string `json:"client_id"`
-	ApiDomain     string `json:"api_domain"`
 }
 
 // RegisterRoutes mounts the three routes one CLI oauth2-login round
@@ -87,12 +82,10 @@ type pending struct {
 // this instance's own resolved public URL — the same value
 // oidc.RegisterRoutes is given, never cfg.App.URL's raw YAML value
 // directly, so both land on the one address a provider's app
-// registration actually allowlists. apiDomain is this instance's own
-// already-resolved app.api_domain (apiserver.Build's own
-// "" -> "example.com" fallback already applied) — see pending.ApiDomain.
-func RegisterRoutes(r gin.IRouter, cfg *config.Config, s store.Store, keys store.Keys, baseURL, apiDomain string) {
+// registration actually allowlists.
+func RegisterRoutes(r gin.IRouter, cfg *config.Config, s store.Store, keys store.Keys, baseURL string) {
 	r.GET("/oauth2/v1/authorize", func(c *gin.Context) { handleAuthorize(c, cfg) })
-	r.GET("/oauth2/v1/authorize/continue", func(c *gin.Context) { handleContinue(c, cfg, s, keys, baseURL, apiDomain) })
+	r.GET("/oauth2/v1/authorize/continue", func(c *gin.Context) { handleContinue(c, cfg, s, keys, baseURL) })
 	r.GET("/oauth2/v1/callback", func(c *gin.Context) { handleCallback(c, s, keys) })
 }
 
@@ -273,7 +266,7 @@ func renderProviderChooser(c *gin.Context, p authorizeParams, names []string) {
 // code_challenge passed straight through unchanged, so the CLI's own
 // code_verifier (never seen by Kayra) still verifies at the final
 // token exchange.
-func handleContinue(c *gin.Context, cfg *config.Config, s store.Store, keys store.Keys, baseURL, apiDomain string) {
+func handleContinue(c *gin.Context, cfg *config.Config, s store.Store, keys store.Keys, baseURL string) {
 	const origin = "oauth2broker.Continue"
 	p, lerr := parseAuthorizeParams(c, origin)
 	if lerr != nil {
@@ -311,7 +304,6 @@ func handleContinue(c *gin.Context, cfg *config.Config, s store.Store, keys stor
 		State:         p.State,
 		TokenEndpoint: doc.TokenEndpoint,
 		ClientID:      provider.Remote.OAuth2.ClientID,
-		ApiDomain:     apiDomain,
 	})
 	if err != nil {
 		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".Marshal", ""))
@@ -409,7 +401,6 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 		// provider it was, or reading any local config.
 		q.Set("token_endpoint", pend.TokenEndpoint)
 		q.Set("client_id", pend.ClientID)
-		q.Set("api_domain", pend.ApiDomain)
 	}
 	target.RawQuery = q.Encode()
 
@@ -449,7 +440,6 @@ func renderLoginCode(c *gin.Context, pend pending) {
 		State:         pend.State,
 		TokenEndpoint: pend.TokenEndpoint,
 		ClientID:      pend.ClientID,
-		ApiDomain:     pend.ApiDomain,
 	})
 	if err != nil {
 		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".EncodeLoginCode", ""))

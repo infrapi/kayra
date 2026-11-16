@@ -21,8 +21,8 @@ app:
   # api_domain names this deployment's own API groups — every route
   # mounts under "/apis/<group>.<api_domain>/v1/...", and every
   # Role.Rules entry you author must name that same URN. Defaults to
-  # "example.com" when omitted; set it to a domain you actually control.
-  api_domain: "example.com"
+  # "infrapi.io" when omitted; set it to a domain you actually control.
+  api_domain: "infrapi.io"
 
 database:
   main:

@@ -139,7 +139,7 @@ kayra-cli create system namespaces -d '{"name": "thetenant"}'
 **curl**
 
 ```bash
-curl -s -X POST http://localhost:8080/apis/system.example.com/v1/namespaces \
+curl -s -X POST http://localhost:8080/apis/system.infrapi.io/v1/namespaces \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "thetenant"}'
 # {"active": false, "name": "thetenant"}
@@ -162,7 +162,7 @@ kayra-cli create authorization clustergroups -d '{"name": "thetenant-admins",
 
 kayra-cli create authorization clusterroles -d '{"name": "thetenant-admin-role",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-       "rules": [{"apis": ["catalog.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
+       "rules": [{"apis": ["catalog.infrapi.io"], "resources": ["*"], "verbs": ["*"]}]}'
 
 kayra-cli create authorization clusterrolebindings -d '{"name": "thetenant-admin-binding",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
@@ -172,19 +172,19 @@ kayra-cli create authorization clusterrolebindings -d '{"name": "thetenant-admin
 **curl**
 
 ```bash
-curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clustergroups \
+curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clustergroups \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "thetenant-admins",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
        "groups": ["sandbox-core-sysadmin"]}'
 
-curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterroles \
+curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clusterroles \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "thetenant-admin-role",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-       "rules": [{"apis": ["catalog.example.com"], "resources": ["*"], "verbs": ["*"]}]}'
+       "rules": [{"apis": ["catalog.infrapi.io"], "resources": ["*"], "verbs": ["*"]}]}'
 
-curl -s -X POST http://localhost:8080/apis/authorization.example.com/v1/clusterrolebindings \
+curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clusterrolebindings \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "thetenant-admin-binding",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
@@ -196,7 +196,7 @@ for how this check is actually evaluated.
 
 ## 7. Register an API and subscribe the tenant to it
 
-An `ApiRegistration` declares that an API group exists (e.g. "vault.example.com", its long name — its id)
+An `ApiRegistration` declares that an API group exists (e.g. "vault.infrapi.io", its long name — its id)
 and who owns it — Kayra never implements the API itself, only tracks
 it and notifies on changes. A `Subscription` links one namespace to
 one registration by name:
@@ -205,28 +205,28 @@ one registration by name:
 
 ```bash
 kayra-cli create catalog apiregistrations \
-  -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
+  -d '{"name": "vault.infrapi.io", "short_name": "vault", "owner": "sre"}'
 # sync_id is minted automatically — note it down, or just GET it back below
 
-kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.example.com"}'
-# {"api": "vault.example.com", "active": false, "state": "init", ...}
+kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.infrapi.io"}'
+# {"api": "vault.infrapi.io", "active": false, "state": "init", ...}
 ```
 
 **curl**
 
 ```bash
-curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/apiregistrations \
+curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name": "vault.example.com", "short_name": "vault", "owner": "sre"}'
+  -d '{"name": "vault.infrapi.io", "short_name": "vault", "owner": "sre"}'
 # sync_id is minted automatically — note it down, or just GET it back below
 
-curl -s -X POST http://localhost:8080/apis/catalog.example.com/v1/namespaces/thetenant/subscriptions \
+curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/thetenant/subscriptions \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"api": "vault.example.com"}'
-# {"api": "vault.example.com", "active": false, "state": "init", ...}
+  -d '{"api": "vault.infrapi.io"}'
+# {"api": "vault.infrapi.io", "active": false, "state": "init", ...}
 ```
 
-Any caller whose groups are bound to the `catalog.example.com` API
+Any caller whose groups are bound to the `catalog.infrapi.io` API
 can do the subscribe step — it doesn't have to be the bootstrap token;
 `$TOKEN` works here only because step 6's rolebinding happens to grant
 `sandbox-core-sysadmin` (the bootstrap token's own group) that right
@@ -238,19 +238,19 @@ instead.
 **kayra-cli**
 
 ```bash
-kayra-cli update catalog apiregistrations vault.example.com/sync -d '{}'
+kayra-cli update catalog apiregistrations vault.infrapi.io/sync -d '{}'
 
-kayra-cli get catalog apiregistrations vault.example.com/status
+kayra-cli get catalog apiregistrations vault.infrapi.io/status
 ```
 
 **curl**
 
 ```bash
-curl -s -X PUT http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/vault.example.com/sync \
+curl -s -X PUT http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/vault.infrapi.io/sync \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{}'
 
-curl -s http://localhost:8080/apis/catalog.example.com/v1/apiregistrations/vault.example.com/status \
+curl -s http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/vault.infrapi.io/status \
   -H "Authorization: Bearer $TOKEN"
 ```
 

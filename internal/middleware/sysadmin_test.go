@@ -29,7 +29,7 @@ func newSysadminTestGinContext(t *testing.T, authHeader string) (*gin.Context, *
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	req := httptest.NewRequest(http.MethodPost, "/apis/authorization.example.com/v1/clustergroups", nil)
+	req := httptest.NewRequest(http.MethodPost, "/apis/authorization.infrapi.io/v1/clustergroups", nil)
 	if authHeader != "" {
 		req.Header.Set("Authorization", authHeader)
 	}

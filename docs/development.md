@@ -57,6 +57,13 @@ than MkDocs-only admonitions, content tabs or snippet includes, so the
 same file renders on github.com, on this site and in the InfraPI
 developer portal.
 
+Every example of a call to Kayra's API is given twice: a `**kayra-cli**`
+paragraph followed by its code block, then a `**curl**` paragraph followed
+by the same requests. github.com shows them one after the other; the
+developer portal renders consecutive labelled code blocks as tabs. Things
+only one of them can do (`kayra token mint`, `kayra-cli context set`)
+stay a single block.
+
 `docs/index.md` is a real page — the docs entry point, with the "where to
 start" table and the package table — not an include of the README.
 `README.md` is the repository's front door (what Kayra is, the two
@@ -79,6 +86,7 @@ internal/config      kayra.yaml loading and validation
 internal/store       etcd/local key-value abstraction, Watch
 internal/crypto      PAT keypair, PAT encryption, self-signing keys, self-JWT
 internal/oidc        discovery/JWKS fetch+cache, Kayra's own discovery endpoint
+internal/discovery   /.well-known/kayra.json, what infrapi/lib and kayra-cli discover
 internal/authn       bearer token verification, user id resolution
 internal/authz       LDAP/dev-local directory resolution, resolved-user cache
 internal/oauth2broker server-side relay for kayra-cli login's browser-based OAuth2 flow

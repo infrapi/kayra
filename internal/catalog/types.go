@@ -26,13 +26,13 @@ import "github.com/infrapi/kayra/internal/store"
 // AuthorizationAPI "*" never covers cluster roles. SystemAPI
 // (namespaces, the base every other group is scoped by) is
 // SysadminGate-only too (see
-// RegisterNamespaceCollectionRoutes). "example.com" is a placeholder:
+// RegisterNamespaceCollectionRoutes). "infrapi.io" is a placeholder:
 // SetAPIDomain rebuilds both from a deployment's own domain
 // (config.AppConfig.APIDomain) — call it once, before any Register
 // function or any stored Rule is compared against these.
 var (
-	CatalogAPI = "catalog.example.com"
-	SystemAPI  = "system.example.com"
+	CatalogAPI = "catalog.infrapi.io"
+	SystemAPI  = "system.infrapi.io"
 )
 
 // SetAPIDomain rebuilds CatalogAPI and SystemAPI as "catalog.<domain>"
@@ -65,7 +65,7 @@ type ApiRegistrationRef struct {
 // so it is folded directly into the owning ApiRegistration.
 type ApiRegistration struct {
 	// Name is the api's id: its long name, the full API group URN it is
-	// reachable under (e.g. "compute.example.com") — the only name a
+	// reachable under (e.g. "compute.infrapi.io") — the only name a
 	// Subscription, a /v1/check request or a Role rule ever refers to it
 	// by. See IsLongApiName.
 	Name string `json:"name" yaml:"name"`
