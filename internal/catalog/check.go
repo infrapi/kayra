@@ -129,9 +129,9 @@ func (r *Repository) CheckApiResource(api, resource, verb, deploymentPlatform, d
 		}
 		lerr := liberrors.New(http.StatusNotFound, origin, "api %q has no resource %q", api, resource)
 		if guess := closeResource(spec.Resources, resource); guess != "" {
-			return lerr.WithSolution("did you mean %q? List its resources with `kayra-cli apis --api-group %s`", guess, api)
+			return lerr.WithSolution("did you mean %q? List its resources with `infrapi-cli apis --api-group %s`", guess, api)
 		}
-		return lerr.WithSolution("list its resources with `kayra-cli apis --api-group %s`", api)
+		return lerr.WithSolution("list its resources with `infrapi-cli apis --api-group %s`", api)
 	}
 	if !containsString(res.Verbs, verb) {
 		return liberrors.New(http.StatusMethodNotAllowed, origin, "resource %q of api %q doesn't support %q (supported: %s)", resource, api, verb, strings.Join(res.Verbs, ", "))
@@ -182,7 +182,7 @@ func (r *Repository) ValidateRoleRules(rules []rbac.Rule, deploymentPlatform, de
 			if _, err := r.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, api); err != nil {
 				if err == store.ErrNotFound {
 					return liberrors.New(http.StatusBadRequest, origin, "rules[%d]: api %q is not registered", i, api).
-						WithSolution("use the api's long name, as `kayra-cli apis` lists it")
+						WithSolution("use the api's long name, as `infrapi-cli apis` lists it")
 				}
 				return liberrors.Wrap(err, http.StatusInternalServerError, origin, "read api registration %q", api)
 			}
@@ -210,9 +210,9 @@ func (r *Repository) ValidateRoleRules(rules []rbac.Rule, deploymentPlatform, de
 				if !ok {
 					lerr := liberrors.New(http.StatusBadRequest, origin, "rules[%d]: api %q has no namespaced resource %q", i, api, name)
 					if guess := closeResource(spec.Resources, name); guess != "" {
-						return lerr.WithSolution("did you mean %q? List its resources with `kayra-cli apis --api-group %s`", guess, api)
+						return lerr.WithSolution("did you mean %q? List its resources with `infrapi-cli apis --api-group %s`", guess, api)
 					}
-					return lerr.WithSolution("list its resources with `kayra-cli apis --api-group %s`", api)
+					return lerr.WithSolution("list its resources with `infrapi-cli apis --api-group %s`", api)
 				}
 				for _, v := range res.Verbs {
 					verbs[v] = true

@@ -84,10 +84,10 @@ same cluster `Role.Rules` [RBAC & auth](rbac-and-auth.md#who-can-manage-a-namesp
 describes, so an existing sysadmin role using `resources: ["*"]` already
 covers it.
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli create catalog -n core subscriptions -d '{"api": "compute.infrapi.io"}'
+infrapi-cli create catalog -n core subscriptions -d '{"api": "compute.infrapi.io"}'
 ```
 
 **curl**
@@ -109,10 +109,10 @@ there's nothing left in the body a caller could legitimately change.
 
 ### Forcing a re-sync
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli update catalog -n sre subscriptions dev.infrapi.io/sync -d '{}'
+infrapi-cli update catalog -n sre subscriptions dev.infrapi.io/sync -d '{}'
 ```
 
 **curl**

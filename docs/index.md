@@ -23,7 +23,7 @@ disabled records active.
 | Create or update an API registration | [API registrations](architecture/api-registrations.md) |
 | Create or update a tenant | [Namespaces](architecture/namespaces.md) |
 | Subscribe a tenant to an API registration, or trigger reconcile | [Subscriptions & reconciliation](architecture/subscriptions.md) |
-| Run a command (`serve`, `reconciler`, `cache clean`, `token mint`) or use `kayra-cli` | [CLI](cli.md) |
+| Run a command (`serve`, `reconciler`, `cache clean`, `token mint`) or use `infrapi-cli` | [CLI](cli.md) |
 | Look up one `internal/*` package's API | [Packages](#packages) |
 | Build, test, or work on the docs themselves | [Development](development.md) |
 
@@ -45,14 +45,10 @@ own types, storage and HTTP handlers together.
 | [`internal/rbac`](packages/rbac.md) | `Group`/`Role`/`RoleBinding`, cluster + namespace scoped |
 | `internal/catalog` | `ApiRegistration`/`Namespace`/`Subscription` + the reconciler (see [API registrations](architecture/api-registrations.md), [Namespaces](architecture/namespaces.md), [Subscriptions & reconciliation](architecture/subscriptions.md)) |
 | [`internal/tokenapi`](packages/tokenapi.md) | Personal access token issuance |
-| [`internal/oauth2broker`](packages/oauth2broker.md) | Server-side relay for `kayra-cli login`'s browser-based OAuth2 flow |
+| [`internal/oauth2broker`](packages/oauth2broker.md) | Server-side relay for `infrapi-cli login`'s browser-based OAuth2 flow |
 | [`internal/httpapi`](packages/httpapi.md) | RFC 9457 error response helper |
 | [`internal/apiserver`](packages/apiserver.md) | Wires every package above onto one gin engine |
 
-`cmd/kayra` wires all of it together; `cmd/cli` depends on none of it.
-The client side has its own two packages, used only by `cmd/cli`:
-
-| Package | Owns |
-|---|---|
-| [`internal/oauth2login`](packages/oauth2login.md) | The CLI-side half of the browser-based OAuth2 login flow |
-| [`internal/clicontext`](packages/clicontext.md) | `cmd/cli`'s own `~/.config/kayra/config` (kubeconfig-style contexts) |
+`cmd/kayra` wires all of it together. The end user's client,
+[`infrapi-cli`](https://github.com/infrapi/cli), lives in its own
+repository and only ever talks to Kayra's API.

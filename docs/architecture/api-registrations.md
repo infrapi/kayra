@@ -34,10 +34,10 @@ Full CRUD at `/apis/catalog.infrapi.io/v1/apiregistrations`, gated by
 [`SysadminGate`](rbac-and-auth.md#two-gates-two-trust-tiers) — same trust
 tier as the cluster RBAC objects.
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli create catalog apiregistrations -d '{
+infrapi-cli create catalog apiregistrations -d '{
     "name": "compute.infrapi.io",
     "short_name": "compute",
     "active": true,
@@ -82,12 +82,12 @@ onto the record regardless of what (if anything) the request body
 sends; list, get, update and delete can only ever reach a registration
 in that same scope.
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli get catalog apiregistrations compute.infrapi.io
-kayra-cli update catalog apiregistrations compute.infrapi.io -d '{"name": "compute.infrapi.io", "owner": "sre-b"}'
-kayra-cli delete catalog apiregistrations compute.infrapi.io
+infrapi-cli get catalog apiregistrations compute.infrapi.io
+infrapi-cli update catalog apiregistrations compute.infrapi.io -d '{"name": "compute.infrapi.io", "owner": "sre-b"}'
+infrapi-cli delete catalog apiregistrations compute.infrapi.io
 ```
 
 **curl**
@@ -133,10 +133,10 @@ keeps it as given.
 
 The shorthand:
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli update catalog apiregistrations compute.infrapi.io/sync -d '{}'
+infrapi-cli update catalog apiregistrations compute.infrapi.io/sync -d '{}'
 ```
 
 **curl**
@@ -162,10 +162,10 @@ set of choices.
 By default, bumping `SyncID` reconciles every active subscriber at once.
 To try a new target against one tenant first:
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli update catalog apiregistrations compute.infrapi.io/sync -d '{"canary_namespaces": ["sre"]}'
+infrapi-cli update catalog apiregistrations compute.infrapi.io/sync -d '{"canary_namespaces": ["sre"]}'
 ```
 
 **curl**
@@ -186,10 +186,10 @@ registration (`404` otherwise, catching a typo before it becomes
 
 Once satisfied, release the same build to everyone else:
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli update catalog apiregistrations compute.infrapi.io/sync -d '{}'
+infrapi-cli update catalog apiregistrations compute.infrapi.io/sync -d '{}'
 ```
 
 **curl**
@@ -254,7 +254,7 @@ curl -s http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/teleme
 `GET /apis` lists every api group with its resources: Kayra's own, derived
 from its live route table, then each registration's, from its stored spec.
 A registration with no spec yet is listed with no resources. This is what
-[`kayra-cli apis`](../cli.md#apis) shows.
+[`infrapi-cli apis`](https://infrapi.github.io/cli/commands/#apis) shows.
 
 ## Checking sync status
 
@@ -266,10 +266,10 @@ comparing each one's `expected_sync_id` yourself. A subscription still
 pending its initial activation is omitted: there's no sync state to
 report for one yet.
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli get catalog apiregistrations compute.infrapi.io/status
+infrapi-cli get catalog apiregistrations compute.infrapi.io/status
 ```
 
 **curl**

@@ -1,6 +1,6 @@
 ---
 title: discovery
-description: Serves Kayra's discovery document, /.well-known/kayra.json — its API domain, built-in groups and endpoints — for infrapi/lib and kayra-cli.
+description: Serves Kayra's discovery document, /.well-known/kayra.json — its API domain, built-in groups and endpoints — for infrapi/lib and infrapi-cli.
 weight: 65
 ---
 
@@ -52,8 +52,8 @@ Its readers:
 
 - [infrapi/lib](https://github.com/infrapi/lib)'s `auth.Client`, which
   finds the check endpoint `RequireAccess` asks there;
-- `kayra-cli`, for `auth can-i`'s check endpoint and to tell Kayra's own
-  groups from other APIs (see [cli](../cli.md#can-i)).
+- `infrapi-cli`, for `auth can-i`'s check endpoint and to tell Kayra's own
+  groups from other APIs (see [cli](https://infrapi.github.io/cli/commands/#can-i)).
 
 ```go
 discovery.Register(engine, discovery.New(apiDomain, discovery.Groups{

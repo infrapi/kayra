@@ -1,7 +1,7 @@
 // Package discovery serves Kayra's own discovery document,
 // /.well-known/kayra.json: its API domain (app.api_domain), the paths of
 // its built-in API groups and the endpoints clients call, so neither apps
-// built on infrapi/lib nor kayra-cli configure any of them. It describes
+// built on infrapi/lib nor infrapi-cli configure any of them. It describes
 // Kayra itself, not the catalog: every API group, whatever its domain, is
 // listed by GET /apis.
 package discovery

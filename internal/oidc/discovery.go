@@ -27,7 +27,7 @@ var defaultHTTPClient = &http.Client{Timeout: 10 * time.Second}
 // ClientFor returns the *http.Client every outbound call for one provider
 // should use: the shared, env-proxy-aware default when proxy is empty, or a
 // client pinned to that exact proxy otherwise — each provider's outbound
-// traffic (discovery, JWKS, userinfo, and oauth2login's own authorize/token
+// traffic (discovery, JWKS, userinfo, and infrapi-cli's own authorize/token
 // calls) is routed independently, never through one process-wide setting.
 func ClientFor(proxy string) (*http.Client, error) {
 	if proxy == "" {

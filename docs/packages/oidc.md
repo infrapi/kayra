@@ -69,7 +69,7 @@ info, err := oidc.FetchUserinfo(url, token, proxy)    // POST with Authorization
 
 `DiscoveryDoc` also carries `AuthorizationEndpoint`/`TokenEndpoint` —
 unused by anything in this package itself, but what
-[oauth2login](oauth2login.md) builds its own Authorization Code + PKCE
+[oauth2login](https://infrapi.github.io/cli/packages/#oauth2login) builds its own Authorization Code + PKCE
 flow against.
 
 `proxy` is a provider's own `authentifications.<name>.remote.proxy`
@@ -88,7 +88,7 @@ Returns the `*http.Client` every outbound call for one provider should
 use: a single shared, env-proxy-aware client (`http.DefaultTransport`,
 which already honors `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`) when `proxy`
 is empty, or a client pinned to that exact proxy URL otherwise. Also
-used by [oauth2login.Login](oauth2login.md) for its own token-exchange
+used by [oauth2login.Login](https://infrapi.github.io/cli/packages/#oauth2login) for its own token-exchange
 call, so a provider's `remote.proxy` applies there too.
 
 ## Kayra's own endpoints

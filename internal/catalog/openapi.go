@@ -46,7 +46,7 @@ type ApiSpec struct {
 	store.Timestamps
 }
 
-// ApiResource is one resource an api serves, as kayra-cli api-resources
+// ApiResource is one resource an api serves, as infrapi-cli api-resources
 // lists it.
 type ApiResource struct {
 	// Name is the path past the api's version (and past

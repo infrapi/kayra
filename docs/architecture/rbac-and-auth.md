@@ -77,7 +77,7 @@ live lookup, or (for a claims-backed `authorizations.<name>`) straight out
 of the caller's own already-verified token/userinfo.
 
 ```bash
-kayra-cli login --server https://kayra.example.com
+infrapi-cli login --server https://kayra.example.com
 ```
 
 ## The RBAC model

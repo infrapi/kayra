@@ -27,10 +27,10 @@ separate `/tenant` child resource. Full CRUD at `/apis/system.infrapi.io/v1/name
 tier as [ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
 cluster `RoleBinding` scoped to a namespace that doesn't exist yet.
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli create system namespaces -d '{"name": "core"}'
+infrapi-cli create system namespaces -d '{"name": "core"}'
 ```
 
 **curl**

@@ -3,7 +3,6 @@
 cover.out
 coverage.html
 kayra
-kayra-cli
 
 # goreleaser output
 dist/

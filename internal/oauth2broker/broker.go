@@ -1,4 +1,4 @@
-// Package oauth2broker lets `kayra-cli login` (cmd/cli — the
+// Package oauth2broker lets `infrapi-cli login` (github.com/infrapi/cli — the
 // portable, end-user client, running on someone's laptop with no
 // local config of its own) complete a browser-based OAuth2
 // Authorization Code + PKCE login against a provider that will never
@@ -22,7 +22,7 @@
 // more than one configured) — and never reads local config, so
 // handleCallback additionally relays the chosen provider's own public
 // token_endpoint and client_id back to it: everything
-// oauth2login.LoginToServer needs to finish the PKCE exchange itself,
+// infrapi-cli login needs to finish the PKCE exchange itself,
 // with zero prior knowledge of the provider. Kayra could never run
 // that exchange on the CLI's behalf either way — the code_verifier
 // backing code_challenge never leaves the CLI process.
@@ -45,7 +45,6 @@ import (
 
 	"github.com/infrapi/kayra/internal/config"
 	"github.com/infrapi/kayra/internal/httpapi"
-	"github.com/infrapi/kayra/internal/oauth2login"
 	"github.com/infrapi/kayra/internal/oidc"
 	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
@@ -64,9 +63,9 @@ const stateTTL = 10 * time.Minute
 // directly. TokenEndpoint/ClientID are the chosen provider's own public
 // OAuth2 client metadata (never a secret — this is a PKCE-only public
 // client registration), relayed back to the CLI at /callback so that
-// `kayra-cli login` — which never reads local config and never names
+// `infrapi-cli login` — which never reads local config and never names
 // a provider — can still finish the PKCE exchange itself, directly
-// against the provider (see oauth2login.LoginToServer). Kayra itself
+// against the provider (see infrapi-cli login). Kayra itself
 // can never do that exchange on the CLI's behalf: the code_verifier
 // backing code_challenge never leaves the CLI.
 type pending struct {
@@ -82,6 +81,41 @@ type pending struct {
 // this instance's own resolved public URL — the same value
 // oidc.RegisterRoutes is given, never cfg.App.URL's raw YAML value
 // directly, so both land on the one address a provider's app
+
+// OOBRedirectURI is the redirect_uri `infrapi-cli login --no-browser`
+// sends instead of a loopback address: the standard OAuth2 "out-of-band"
+// value. It never reaches the provider, which always sees Kayra's own
+// callback: it tells the broker to show the user a login code to copy
+// (see handleCallback) instead of redirecting their browser to a local
+// listener that, on another machine, would not exist.
+const OOBRedirectURI = "urn:ietf:wg:oauth:2.0:oob"
+
+// loginCodeFields is everything a loopback callback would have carried,
+// bundled into the one string the broker shows a no-browser login's user
+// to paste back into their terminal. It is base64url JSON, no padding:
+// infrapi-cli's oauth2login.DecodeLoginCode reads exactly this, keep the
+// two in step. Safe to display: Code is only redeemable together with the
+// code_verifier, which never leaves the CLI (PKCE), and State ties it to
+// that one login.
+type loginCodeFields struct {
+	Code          string `json:"code"`
+	State         string `json:"state"`
+	TokenEndpoint string `json:"token_endpoint"`
+	ClientID      string `json:"client_id"`
+}
+
+func encodeLoginCode(c loginCodeFields) (string, error) {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return "", fmt.Errorf("oauth2broker: encode login code: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+// DefaultScopes is requested when a provider's
+// authentifications.<name>.remote.oauth2.scopes is empty.
+var DefaultScopes = []string{"openid", "profile", "email"}
+
 // registration actually allowlists.
 func RegisterRoutes(r gin.IRouter, cfg *config.Config, s store.Store, keys store.Keys, baseURL string) {
 	r.GET("/oauth2/v1/authorize", func(c *gin.Context) { handleAuthorize(c, cfg) })
@@ -93,7 +127,7 @@ func RegisterRoutes(r gin.IRouter, cfg *config.Config, s store.Store, keys store
 // out of the CLI-built URL — the same query string carries over from
 // one to the other via the confirmation (or chooser) page's own link.
 // Provider is never set by the incoming /authorize request itself —
-// `kayra-cli login` (the only client) never names one; handleAuthorize
+// `infrapi-cli login` (the only client) never names one; handleAuthorize
 // always resolves it from cfg before building the confirmation/chooser
 // link onward, so by the time /authorize/continue parses this same
 // struct, Provider is always present (and always one Kayra itself
@@ -134,7 +168,7 @@ func parseAuthorizeParams(c *gin.Context, origin string) (authorizeParams, *libe
 	}
 	if p.RedirectURI == "" || p.State == "" || p.CodeChallenge == "" {
 		return p, liberrors.New(http.StatusBadRequest, origin, "redirect_uri, state and code_challenge are all required").
-			WithSolution("start the login with `kayra-cli login` rather than opening this URL by hand")
+			WithSolution("start the login with `infrapi-cli login` rather than opening this URL by hand")
 	}
 	if p.CodeChallengeMethod != "S256" {
 		return p, liberrors.New(http.StatusBadRequest, origin, "code_challenge_method must be S256")
@@ -166,11 +200,11 @@ func configuredOAuth2Providers(cfg *config.Config) []string {
 // a crafted /oauth2/v1/authorize?...&redirect_uri=https://evil.example
 // link would walk a victim through a genuine Okta login and then hand
 // the resulting authorization code to evil.example instead of the real
-// CLI. The one other value accepted is oauth2login.OOBRedirectURI
-// (`kayra-cli login --no-browser`), which redirects nowhere at all —
+// CLI. The one other value accepted is OOBRedirectURI
+// (`infrapi-cli login --no-browser`), which redirects nowhere at all —
 // handleCallback shows the code to the user instead.
 func requireCLIRedirect(raw string) error {
-	if raw == oauth2login.OOBRedirectURI {
+	if raw == OOBRedirectURI {
 		return nil
 	}
 	u, err := url.Parse(raw)
@@ -234,7 +268,7 @@ func handleAuthorize(c *gin.Context, cfg *config.Config) {
 	c.String(http.StatusOK, confirmPageHTML, continueURL, providerName, providerName)
 }
 
-// renderProviderChooser is shown only to the agnostic `kayra-cli login`
+// renderProviderChooser is shown only to the agnostic `infrapi-cli login`
 // flow when Kayra configures more than one remote.oauth2 provider
 // and so can't silently pick one on the caller's behalf — each button
 // carries p's own query through unchanged, plus that option's
@@ -316,7 +350,7 @@ func handleContinue(c *gin.Context, cfg *config.Config, s store.Store, keys stor
 
 	scopes := provider.Remote.OAuth2.Scopes
 	if len(scopes) == 0 {
-		scopes = oauth2login.DefaultScopes
+		scopes = DefaultScopes
 	}
 
 	authorizeURL, err := url.Parse(doc.AuthorizationEndpoint)
@@ -355,7 +389,7 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 	data, err := s.Get(keys.OAuth2BrokerState(id))
 	if err != nil {
 		httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin+".Get", "unknown or expired login attempt").
-			WithSolution("run `kayra-cli login` again"))
+			WithSolution("run `infrapi-cli login` again"))
 		return
 	}
 	_ = s.Delete(keys.OAuth2BrokerState(id))
@@ -372,7 +406,7 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
 		return
 	}
-	if pend.RedirectURI == oauth2login.OOBRedirectURI {
+	if pend.RedirectURI == OOBRedirectURI {
 		renderLoginCode(c, pend)
 		return
 	}
@@ -396,7 +430,7 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 		q.Set("code", code)
 		// Public, non-secret OAuth2 client metadata for the provider
 		// this login just went through — relayed back so a fully
-		// agnostic caller (oauth2login.LoginToServer) can finish the
+		// agnostic caller (infrapi-cli login) can finish the
 		// PKCE exchange itself without ever having been told which
 		// provider it was, or reading any local config.
 		q.Set("token_endpoint", pend.TokenEndpoint)
@@ -407,11 +441,11 @@ func handleCallback(c *gin.Context, s store.Store, keys store.Keys) {
 	c.Redirect(http.StatusFound, target.String())
 }
 
-// renderLoginCode ends a `kayra-cli login --no-browser` attempt: no
+// renderLoginCode ends a `infrapi-cli login --no-browser` attempt: no
 // local listener exists to redirect to, so the browser is shown the
-// oauth2login.LoginCode the loopback redirect would otherwise have
+// the login code the loopback redirect would otherwise have
 // carried, for the user to paste into the terminal that is waiting for
-// it (see oauth2login.LoginToServerManual). Never cached or leaked via
+// it (see infrapi-cli login --no-browser). Never cached or leaked via
 // Referer: the code is single-use and only redeemable with that
 // terminal's own PKCE verifier, but there is still no reason for it to
 // outlive this page.
@@ -426,7 +460,7 @@ func renderLoginCode(c *gin.Context, pend pending) {
 			msg += ": " + desc
 		}
 		httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "login provider denied the login: %s", msg).
-			WithSolution("run `kayra-cli login --no-browser` again"))
+			WithSolution("run `infrapi-cli login --no-browser` again"))
 		return
 	}
 	code := c.Query("code")
@@ -435,7 +469,7 @@ func renderLoginCode(c *gin.Context, pend pending) {
 		return
 	}
 
-	loginCode, err := oauth2login.EncodeLoginCode(oauth2login.LoginCode{
+	loginCode, err := encodeLoginCode(loginCodeFields{
 		Code:          code,
 		State:         pend.State,
 		TokenEndpoint: pend.TokenEndpoint,
@@ -451,7 +485,7 @@ func renderLoginCode(c *gin.Context, pend pending) {
 }
 
 // callbackURL is Kayra's own redirect_uri — must byte-for-byte match
-// what oauth2login.LoginToServer later sends as RedirectURL on its
+// what infrapi-cli login later sends as RedirectURL on its
 // token exchange, since the provider checks that string against what
 // was actually used at /authorize (RFC 6749 §4.1.3). baseURL is this
 // instance's own resolved app.url; LoginToServer derives the identical
@@ -492,7 +526,7 @@ p{color:#8a8f98;font-size:.85rem;margin-top:1.5rem}
 `
 
 // chooserPageHTML is shown only when Kayra configures more than one
-// remote.oauth2 provider and the caller (kayra-cli login) named none —
+// remote.oauth2 provider and the caller (infrapi-cli login) named none —
 // %s is the pre-built, already-escaped sequence of <a class="btn">
 // buttons from renderProviderChooser.
 const chooserPageHTML = `<!DOCTYPE html>
@@ -509,7 +543,7 @@ a.btn:hover{background:#2563eb}
 </head>
 <body>
   <div class="card">
-    <h1>kayra-cli login</h1>
+    <h1>infrapi-cli login</h1>
     <div class="buttons">%s</div>
   </div>
 </body>
@@ -537,7 +571,7 @@ p.warn{color:#f0b429}
     <h1>Paste this code into your terminal</h1>
     <textarea id="code" readonly onclick="this.select()">%s</textarea>
     <button type="button" onclick="var t=document.getElementById('code');t.select();navigator.clipboard&&navigator.clipboard.writeText(t.value);this.textContent='Copied'">Copy</button>
-    <p>Paste it at the <code>kayra-cli login --no-browser</code> prompt. It works once, only in that terminal, for the next few minutes.</p>
+    <p>Paste it at the <code>infrapi-cli login --no-browser</code> prompt. It works once, only in that terminal, for the next few minutes.</p>
     <p class="warn">Only paste it into a terminal where you started this login yourself. Never send it to anyone.</p>
   </div>
 </body>

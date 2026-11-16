@@ -13,16 +13,6 @@ builds:
     ldflags:
       - -s -w -X main.version={{.Version}}
 
-  - id: kayra-cli
-    main: ./cmd/cli
-    binary: kayra-cli
-    env:
-      - CGO_ENABLED=0
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
-    ldflags:
-      - -s -w -X main.version={{.Version}}
-
 archives:
   - id: kayra
     ids: [kayra]
@@ -38,28 +28,16 @@ archives:
       - examples/kayra.yaml
       - examples/kayra-users.yaml
 
-  - id: kayra-cli
-    ids: [kayra-cli]
-    name_template: >-
-      kayra-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
-    formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
-    files:
-      - LICENSE
-      - README.md
-
 checksum:
   name_template: "checksums.txt"
 
-# The container image, multi-platform, on every release: the binaries
-# above in the Dockerfile at the repository root. Tags: the version
+# The container image, multi-platform, on every release: the binary above
+# in the Dockerfile at the repository root. Tags: the version
 # (0.5.0), its minor (0.5) and latest, the last two only for a release
 # that is not a pre-release. The CI logs in to ghcr.io first.
 dockers_v2:
   - id: kayra
-    ids: [kayra, kayra-cli]
+    ids: [kayra]
     dockerfile: Dockerfile
     images:
       - ghcr.io/infrapi/kayra

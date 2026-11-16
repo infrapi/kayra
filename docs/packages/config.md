@@ -211,15 +211,15 @@ it resolves users against, and exactly one of:
     transport already honors when this is unset. [Validate](#validate)
     rejects an unparseable one.
   - `oauth2` — `client_id` (required if set) and `scopes` (defaults to
-    `oauth2login.DefaultScopes`: `openid`, `profile`, `email`) for
-    [`kayra-cli login`](../cli.md#login): a real browser-based OAuth2
+    `oauth2broker.DefaultScopes`: `openid`, `profile`, `email`) for
+    [`infrapi-cli login`](https://infrapi.github.io/cli/commands/#login): a real browser-based OAuth2
     Authorization Code + PKCE flow, saving the provider's own token into
     a context. The CLI's browser opens at *this Kayra instance's
     own* `/oauth2/v1/authorize`, never this provider's directly — most
     enterprise IdPs (Okta included) will never allowlist a CLI's
     loopback redirect_uri — which relays the real flow on to
     `authorization_endpoint`/`token_endpoint` and back (see
-    [oauth2broker](oauth2broker.md)/[oauth2login](oauth2login.md)). A
+    [oauth2broker](oauth2broker.md)/[oauth2login](https://infrapi.github.io/cli/packages/#oauth2login)). A
     public client throughout (PKCE replaces the need for a
     `client_secret`, and Kayra's relay never introduces one), so
     there is nothing else to configure here — just this same

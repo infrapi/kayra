@@ -9,7 +9,7 @@ same bearer-auth and cluster-RBAC model every other endpoint uses, with
 a separate `kayra reconciler` process turning disabled records active.
 
 New here? Start with the [quickstart](docs/getting-started.md) — install,
-run, bootstrap a token, and create a tenant end to end with `kayra-cli`.
+run, bootstrap a token, and create a tenant end to end with `infrapi-cli`.
 
 ## Why "Kayra"
 
@@ -18,14 +18,14 @@ primordial waters, shaped the land and gave each of his sons a realm to
 govern. Kayra does the same here: it creates namespaces, decides who
 rules what through RBAC, and leaves each API to the team that owns it.
 
-## Two binaries
+## The binary, and its client
 
 - **`kayra`** (`cmd/kayra`) — the server: `serve`, `reconciler`,
   `cache clean`, `token mint`. Reads `kayra.yaml` directly; not
   something a plain end user runs.
-- **`kayra-cli`** (`cmd/cli`) — the portable client an end user logs in
-  with. Never reads `kayra.yaml` or any local config — see the
-  [CLI reference](docs/cli.md).
+- **[`infrapi-cli`](https://github.com/infrapi/cli)**, in its own
+  repository — the portable client an end user logs in with. Never reads
+  `kayra.yaml` or any local config: it only talks to Kayra's API.
 
 One YAML file configures the server — `app:` (infrapi/lib's shared
 `INFRAPI_APP_*` bootstrap config), plus the database backend,

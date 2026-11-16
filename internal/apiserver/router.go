@@ -92,7 +92,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	// group internal/rbac and internal/catalog mount, and every
 	// Role.Rules entry an operator authors, is "<group>.<domain>", so
 	// this must be resolved before either package registers a single
-	// route, and before oauth2broker (which relays it to `kayra-cli
+	// route, and before oauth2broker (which relays it to `infrapi-cli
 	// login` so the CLI never has to guess it either).
 	apiDomain := cfg.App.APIDomain
 	if apiDomain == "" {
@@ -120,7 +120,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 
 	oidc.RegisterRoutes(engine, manager, baseURL)
 	// /.well-known/kayra.json: the domain, built-in groups and endpoints
-	// apps built on infrapi/lib and kayra-cli discover instead of
+	// apps built on infrapi/lib and infrapi-cli discover instead of
 	// configuring them.
 	discovery.Register(engine, discovery.New(apiDomain, discovery.Groups{
 		System: catalog.SystemAPI, Catalog: catalog.CatalogAPI, Authorization: rbac.AuthorizationAPI,
@@ -131,7 +131,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		ac, ok := middleware.GetAuth(c)
 		if !ok {
 			httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, "apiserver.Userinfo", "no authenticated caller on this request").
-				WithSolution("send a bearer token: run `kayra-cli login`"))
+				WithSolution("send a bearer token: run `infrapi-cli login`"))
 			return
 		}
 		body := gin.H{

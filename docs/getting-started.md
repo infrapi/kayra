@@ -8,45 +8,40 @@ weight: 20
 
 A full walkthrough: install, run, bootstrap a token, and create a tenant
 all the way through to a running subscription — every command below is
-copy-pasteable `kayra-cli`, with its raw `curl` equivalent in the
+copy-pasteable `infrapi-cli`, with its raw `curl` equivalent in the
 block that follows it.
 
 ## 1. Install
 
-Both binaries are published on every
-[GitHub release](https://github.com/infrapi/kayra/releases), each as its
-own archive (`kayra_<version>_<os>_<arch>` and
-`kayra-cli_<version>_<os>_<arch>`). Install them with
+Two binaries: `kayra`, the server, published on every
+[Kayra release](https://github.com/infrapi/kayra/releases)
+(`kayra_<version>_<os>_<arch>`), and `infrapi-cli`, the client, on every
+[CLI release](https://github.com/infrapi/cli/releases). Install them with
 [bin](https://github.com/marcosnils/bin/), which picks the archive
 matching your OS/arch, extracts the binary onto your `PATH` and tracks
 it for later `bin update`:
 
 ```bash
-bin install github.com/infrapi/kayra ~/.local/bin/kayra          # pick the kayra_* archive when prompted
-bin install github.com/infrapi/kayra ~/.local/bin/kayra-cli      # pick the kayra-cli_* archive when prompted
+bin install github.com/infrapi/kayra ~/.local/bin/kayra
+bin install github.com/infrapi/cli ~/.local/bin/infrapi-cli
 
 bin list    # both tracked, so `bin update` upgrades them together
 ```
 
-Both come from the same repository, so `bin` asks which release asset
-to install — choose the matching archive each time (and, since each
-archive also ships `LICENSE`/`README.md`, the `kayra` or `kayra-cli`
-binary inside it). Giving each its own path keeps both tracked
-separately.
+See [infrapi-cli's docs](https://infrapi.github.io/cli/) for the client.
 
 ### Or the container image
 
 Every release also publishes an image, `ghcr.io/infrapi/kayra`, for
 `linux/amd64` and `linux/arm64`. It is tagged with the release's version
 (`<major>.<minor>.<patch>`), its minor (`<major>.<minor>`) and `latest`. Pin
-one of the first two in a deployment. It holds both binaries and no
+one of the first two in a deployment. It holds `kayra` and no
 configuration: mount yours at `/etc/kayra/kayra.yaml` (`KAYRA_CONFIG_FILE`).
 The entrypoint is `kayra`, and the default command `serve`:
 
 ```bash
 podman run --rm -v ./kayra.yaml:/etc/kayra/kayra.yaml:ro,z -p 8080:8080 ghcr.io/infrapi/kayra:latest
 podman run --rm -v ./kayra.yaml:/etc/kayra/kayra.yaml:ro,z ghcr.io/infrapi/kayra:latest reconciler
-podman run --rm --entrypoint kayra-cli ghcr.io/infrapi/kayra:latest --help
 ```
 
 It runs as an unprivileged user (uid 10001) and carries `curl` for a
@@ -57,12 +52,12 @@ healthcheck on `/apis/system.<domain>/v1/-/healthz`.
 
 ```bash
 go build -o kayra ./cmd/kayra
-go build -o kayra-cli ./cmd/cli
+go install github.com/infrapi/cli/cmd/infrapi-cli@latest
 ```
 
 </details>
 
-`kayra` runs the server and its background jobs. `kayra-cli` is the
+`kayra` runs the server and its background jobs. `infrapi-cli` is the
 separate, portable client an end user logs in with — it never reads
 `kayra.yaml` or touches local config at all (see [CLI](cli.md)).
 
@@ -134,23 +129,23 @@ exists:
 TOKEN=$(kayra --config kayra.yaml token mint \
   --provider self --group sandbox-core-sysadmin --ttl 1h)
 
-# save it as a kayra-cli context — every command below uses it
-kayra-cli context set bootstrap --server http://localhost:8080 --token "$TOKEN"
+# save it as a infrapi-cli context — every command below uses it
+infrapi-cli context set bootstrap --server http://localhost:8080 --token "$TOKEN"
 ```
 
 That token satisfies `sysadmin.groups` above, so it can call every
 cluster-bootstrap endpoint below. Past this point, a real deployment
-switches to real logins (`kayra-cli login`, see [CLI](cli.md)) and
+switches to real logins (`infrapi-cli login`, see [CLI](cli.md)) and
 mints this bootstrap token only when actually needed again.
 
 ## 5. Create a tenant
 
 A namespace *is* a tenant — one call creates both:
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli create system namespaces -d '{"name": "thetenant"}'
+infrapi-cli create system namespaces -d '{"name": "thetenant"}'
 # {"active": false, "name": "thetenant"}
 ```
 
@@ -171,18 +166,18 @@ that (see [Namespaces](architecture/namespaces.md)).
 Group → role → rolebinding, cluster-scoped, so this tenant's own
 admins can later manage its day-to-day RBAC themselves:
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli create authorization clustergroups -d '{"name": "thetenant-admins",
+infrapi-cli create authorization clustergroups -d '{"name": "thetenant-admins",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
        "groups": ["sandbox-core-sysadmin"]}'
 
-kayra-cli create authorization clusterroles -d '{"name": "thetenant-admin-role",
+infrapi-cli create authorization clusterroles -d '{"name": "thetenant-admin-role",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
        "rules": [{"apis": ["catalog.infrapi.io"], "resources": ["*"], "verbs": ["*"]}]}'
 
-kayra-cli create authorization clusterrolebindings -d '{"name": "thetenant-admin-binding",
+infrapi-cli create authorization clusterrolebindings -d '{"name": "thetenant-admin-binding",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
        "role": "thetenant-admin-role", "groups": ["thetenant-admins"]}'
 ```
@@ -219,14 +214,14 @@ and who owns it — Kayra never implements the API itself, only tracks
 it and notifies on changes. A `Subscription` links one namespace to
 one registration by name:
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli create catalog apiregistrations \
+infrapi-cli create catalog apiregistrations \
   -d '{"name": "vault.infrapi.io", "short_name": "vault", "owner": "sre"}'
 # sync_id is minted automatically — note it down, or just GET it back below
 
-kayra-cli create catalog -n thetenant subscriptions -d '{"api": "vault.infrapi.io"}'
+infrapi-cli create catalog -n thetenant subscriptions -d '{"api": "vault.infrapi.io"}'
 # {"api": "vault.infrapi.io", "active": false, "state": "init", ...}
 ```
 
@@ -253,12 +248,12 @@ instead.
 
 ## 8. Trigger a sync and check status
 
-**kayra-cli**
+**infrapi-cli**
 
 ```bash
-kayra-cli update catalog apiregistrations vault.infrapi.io/sync -d '{}'
+infrapi-cli update catalog apiregistrations vault.infrapi.io/sync -d '{}'
 
-kayra-cli get catalog apiregistrations vault.infrapi.io/status
+infrapi-cli get catalog apiregistrations vault.infrapi.io/status
 ```
 
 **curl**
@@ -280,7 +275,7 @@ full reconcile model.
 
 ## What's next
 
-- [CLI reference](cli.md) — `kayra-cli login`, contexts, personal
+- [CLI reference](cli.md) — `infrapi-cli login`, contexts, personal
   access tokens.
 - [Architecture](architecture/overview.md) — how every package fits
   together.

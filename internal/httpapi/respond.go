@@ -18,7 +18,7 @@ func Fail(c *gin.Context, err *liberrors.Error) {
 }
 
 // Write is Fail for a plain net/http handler (no gin context) — e.g.
-// kayra-cli's own loopback login listener, whose error responses a user
+// infrapi-cli's own loopback login listener, whose error responses a user
 // sees in their browser just like any API error.
 func Write(w http.ResponseWriter, err *liberrors.Error) {
 	w.Header().Set("Content-Type", liberrors.MediaType)

@@ -235,7 +235,7 @@ func TestCheckApiResource(t *testing.T) {
 	}{
 		{"served", api, "dashboards", "list", 0, ""},
 		{"action", api, "dashboards/refresh", "patch", 0, ""},
-		{"unknown resource", api, "panels", "list", http.StatusNotFound, "kayra-cli apis"},
+		{"unknown resource", api, "panels", "list", http.StatusNotFound, "infrapi-cli apis"},
 		{"singular typo", api, "dashboard", "list", http.StatusNotFound, `did you mean "dashboards"`},
 		{"cluster-scoped resource", api, "datasources", "list", http.StatusNotFound, "cluster-scoped"},
 		{"verb not supported", api, "dashboards", "delete", http.StatusMethodNotAllowed, "supported: get, list"},

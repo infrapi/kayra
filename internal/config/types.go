@@ -119,16 +119,16 @@ type RemoteAuthConfig struct {
 	// through a corporate egress proxy and another reachable directly
 	// is a real shape, not a hypothetical.
 	Proxy string `yaml:"proxy"`
-	// OAuth2, when set, lets `kayra-cli login` authenticate against
+	// OAuth2, when set, lets `infrapi-cli login` authenticate against
 	// this provider via a real browser-based Authorization Code + PKCE
 	// flow, brokered through this server (see internal/oauth2broker and
-	// internal/oauth2login) instead of a username/password bind — the
+	// infrapi-cli login) instead of a username/password bind — the
 	// same flow `oc login` runs against OpenShift's own /oauth/authorize.
 	OAuth2 *OAuth2LoginConfig `yaml:"oauth2"`
 }
 
 // OAuth2LoginConfig is a remote provider's own OAuth2 client
-// registration, used only to broker `kayra-cli login` (see
+// registration, used only to broker `infrapi-cli login` (see
 // internal/oauth2broker) — never by the API server's own token
 // verification, which only ever checks tokens already issued by the
 // provider, not requests them.
@@ -138,7 +138,7 @@ type OAuth2LoginConfig struct {
 	// client_secret, exactly like oc/kubectl's own OIDC plugins).
 	ClientID string `yaml:"client_id"`
 	// Scopes requested from the provider; empty defaults to
-	// oauth2login.DefaultScopes ("openid", "profile", "email").
+	// oauth2broker.DefaultScopes ("openid", "profile", "email").
 	Scopes []string `yaml:"scopes"`
 }
 

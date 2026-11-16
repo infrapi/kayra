@@ -57,11 +57,11 @@ than MkDocs-only admonitions, content tabs or snippet includes, so the
 same file renders on github.com, on this site and in the InfraPI
 developer portal.
 
-Every example of a call to Kayra's API is given twice: a `**kayra-cli**`
+Every example of a call to Kayra's API is given twice: a `**infrapi-cli**`
 paragraph followed by its code block, then a `**curl**` paragraph followed
 by the same requests. github.com shows them one after the other; the
 developer portal renders consecutive labelled code blocks as tabs. Things
-only one of them can do (`kayra token mint`, `kayra-cli context set`)
+only one of them can do (`kayra token mint`, `infrapi-cli context set`)
 stay a single block.
 
 `docs/index.md` is a real page — the docs entry point, with the "where to
@@ -81,17 +81,14 @@ absolute (`https://infrapi.github.io/<repo>/...`).
 
 ```text
 cmd/kayra          app management: serve, reconciler, cache clean — always reads kayra.yaml
-cmd/cli              the portable end-user client: login, context — never reads local config
 internal/config      kayra.yaml loading and validation
 internal/store       etcd/local key-value abstraction, Watch
 internal/crypto      PAT keypair, PAT encryption, self-signing keys, self-JWT
 internal/oidc        discovery/JWKS fetch+cache, Kayra's own discovery endpoint
-internal/discovery   /.well-known/kayra.json, what infrapi/lib and kayra-cli discover
+internal/discovery   /.well-known/kayra.json, what infrapi/lib and infrapi-cli discover
 internal/authn       bearer token verification, user id resolution
 internal/authz       LDAP/dev-local directory resolution, resolved-user cache
-internal/oauth2broker server-side relay for kayra-cli login's browser-based OAuth2 flow
-internal/oauth2login  the CLI-side half of that same flow (cmd/cli only)
-internal/clicontext  cmd/cli's own ~/.config/kayra/config (kubeconfig-style contexts)
+internal/oauth2broker server-side relay for infrapi-cli login's browser-based OAuth2 flow
 internal/middleware  gin Authenticator and SysadminGate
 internal/rbac        cluster/namespace groups, roles, rolebindings
 internal/catalog     api registrations, namespaces (tenants), subscriptions, Reconciler

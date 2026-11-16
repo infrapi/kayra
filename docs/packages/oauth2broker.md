@@ -1,6 +1,6 @@
 ---
 title: oauth2broker
-description: Server-side relay that lets kayra-cli login run a browser-based OAuth2 flow without local config.
+description: Server-side relay that lets infrapi-cli login run a browser-based OAuth2 flow without local config.
 weight: 90
 ---
 
@@ -10,7 +10,7 @@ weight: 90
 import "github.com/infrapi/kayra/internal/oauth2broker"
 ```
 
-Lets [`kayra-cli login`](../cli.md#login) (cmd/cli — the portable,
+Lets [`infrapi-cli login`](https://infrapi.github.io/cli/commands/#login) ([infrapi-cli](https://github.com/infrapi/cli) — the portable,
 end-user client, running on someone's laptop with no local config of
 its own) complete a browser-based OAuth2 Authorization Code + PKCE
 login against a provider that will never allowlist a loopback
@@ -33,7 +33,7 @@ The CLI never names a provider at all — see
 [Provider resolution](#provider-resolution) below — and never reads local
 config, so `/callback` additionally relays the chosen provider's own
 public `token_endpoint`/`client_id` back to it: everything
-[`oauth2login.LoginToServer`](oauth2login.md#logintoserver) needs to
+[`infrapi-cli login`](https://infrapi.github.io/cli/packages/#logintoserver) needs to
 finish the PKCE exchange itself, with zero prior knowledge of the
 provider. Kayra could never do that exchange on the CLI's behalf
 either way — the `code_verifier` backing `code_challenge` never leaves
@@ -75,7 +75,7 @@ flow, the same way `oidc.RegisterRoutes`' discovery endpoints are:
   under a freshly generated id, then `302`s the browser on to the
   provider's **real** `authorization_endpoint` with: the provider's own
   `client_id`/`scopes` (`authorizations.<name>.remote.oauth2`, scopes
-  falling back to [`oauth2login.DefaultScopes`](oauth2login.md)),
+  falling back to [`oauth2login.DefaultScopes`](https://infrapi.github.io/cli/packages/#oauth2login)),
   Kayra's own callback as `redirect_uri`, that fresh id as `state`,
   and the CLI's `code_challenge` passed through unchanged.
 - **`GET /oauth2/v1/callback`** — the provider's own redirect target.
@@ -84,8 +84,8 @@ flow, the same way `oidc.RegisterRoutes`' discovery endpoints are:
   local listener with the provider's `code` (or `error`/
   `error_description`), the CLI's own original `state`, and — only
   alongside a successful `code` — the stashed `token_endpoint`/
-  `client_id` too, since `oauth2login.LoginToServer` has no other way
-  to learn them. Otherwise indistinguishable, from `oauth2login`'s own
+  `client_id` too, since `infrapi-cli login` has no other way
+  to learn them. Otherwise indistinguishable, from infrapi-cli's own
   callback handler's perspective, from the provider having redirected
   there directly.
 
@@ -129,10 +129,10 @@ before the final redirect (defense in depth — nothing on that path
 should ever be able to redirect anywhere else).
 
 The one other accepted value is the exact string
-`urn:ietf:wg:oauth:2.0:oob` (`oauth2login.OOBRedirectURI`, sent by
-`kayra-cli login --no-browser`). It redirects nowhere, so it can't be
+`urn:ietf:wg:oauth:2.0:oob` (`OOBRedirectURI`, sent by
+`infrapi-cli login --no-browser`). It redirects nowhere, so it can't be
 abused as an open redirect: at `/callback` the broker instead renders the
-`oauth2login.LoginCode` the loopback redirect would have carried (code,
+login code (`loginCodeFields`) the loopback redirect would have carried (code,
 the CLI's own state, token endpoint, client ID), as one
 base64url string for the user to paste into their terminal. The page is
 sent `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. The
