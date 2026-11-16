@@ -277,3 +277,83 @@ func TestDiscoveryListsBuiltinGroups(t *testing.T) {
 		t.Fatalf("GET /apis without a token: status %d, want 401", w.Code)
 	}
 }
+
+// TestOperationalEndpointsPerGroup confirms infrapi/lib's own -/
+// endpoints are served under each of Kayra's groups, about that group's
+// routes, without a token, and no longer at the root.
+func TestOperationalEndpointsPerGroup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	engine, err := Build(testAppConfig(), testKayraConfig(t))
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	want := []string{"/apis/system.infrapi.io/v1", "/apis/catalog.infrapi.io/v1", "/apis/authorization.infrapi.io/v1"}
+	if got := Roots(); strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("Roots = %v, want %v", got, want)
+	}
+	get := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		return w
+	}
+	for _, root := range want {
+		for _, p := range []string{"/-/healthz", "/-/readyz", "/-/metrics", "/-/metadata", "/-/openapi.json", "/-/docs"} {
+			if w := get(root + p); w.Code != http.StatusOK {
+				t.Errorf("GET %s%s without a token: status %d, want 200", root, p, w.Code)
+			}
+		}
+	}
+	if w := get("/-/healthz"); w.Code != http.StatusNotFound {
+		t.Errorf("GET /-/healthz: status %d, want 404", w.Code)
+	}
+
+	// each group's specification describes its own routes
+	var spec struct {
+		Paths map[string]any `json:"paths"`
+	}
+	if err := json.Unmarshal(get("/apis/catalog.infrapi.io/v1/-/openapi.json").Body.Bytes(), &spec); err != nil {
+		t.Fatalf("catalog spec: %v", err)
+	}
+	for p := range spec.Paths {
+		if !strings.HasPrefix(p, "/apis/catalog.infrapi.io/v1/") {
+			t.Errorf("catalog spec lists %s", p)
+		}
+	}
+	if _, ok := spec.Paths["/apis/catalog.infrapi.io/v1/apiregistrations"]; !ok {
+		t.Errorf("catalog spec misses apiregistrations: %v", spec.Paths)
+	}
+}
+
+// TestAPIIndexListsKayraGroups confirms /.well-known/api.json lists
+// Kayra's three groups, system first, without a token.
+func TestAPIIndexListsKayraGroups(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	engine, err := Build(testAppConfig(), testKayraConfig(t))
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/.well-known/api.json", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d, body %s", w.Code, w.Body.String())
+	}
+	var idx struct {
+		Groups []struct {
+			Name, API, Version string
+			Primary            bool
+		} `json:"groups"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &idx); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	var got []string
+	for _, g := range idx.Groups {
+		got = append(got, g.Name+"="+g.API+"/"+g.Version)
+	}
+	want := "system=system.infrapi.io/v1 catalog=catalog.infrapi.io/v1 authorization=authorization.infrapi.io/v1"
+	if strings.Join(got, " ") != want || !idx.Groups[0].Primary {
+		t.Fatalf("groups = %v, want %s, system primary", got, want)
+	}
+}

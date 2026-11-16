@@ -25,6 +25,7 @@ import (
 type discoveryGroup struct {
 	Api        string              `json:"api"`
 	ShortName  string              `json:"short_name"`
+	Version    string              `json:"version"`
 	Owner      string              `json:"owner"`
 	Builtin    bool                `json:"builtin"`
 	SyncID     string              `json:"sync_id"`

@@ -34,7 +34,10 @@ In order:
    same `Authenticator`, plus `cfg.Sysadmin.Groups` — falling back to
    `middleware.SysadminGroupFor(appCfg.AppPlatform)` when left empty).
 5. Mounts, via [`infrapi/lib`'s `pkg/server`](https://infrapi.github.io/lib/packages/server/):
-   the discovery/metrics/docs endpoints, `oidc`'s own routes, `GET`/`POST
+   its own endpoints under each of Kayra's groups (`Roots()`: system, the
+   primary, then catalog and authorization), `/apis/<group>/v1/-/healthz`,
+   `-/readyz`, `-/metrics`, `-/metadata`, `-/openapi.json` and `-/docs`, each
+   about its group's routes and open without a token, `oidc`'s own routes, `GET`/`POST
    /oauth2/userinfo` (both, per OIDC Core §5.3.1: GET MUST be supported,
    POST MAY be — most real providers accept either),
    [oauth2broker](oauth2broker.md)'s three routes (`kayra-cli login`'s

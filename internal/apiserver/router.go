@@ -88,13 +88,6 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		DefaultTTL: DefaultUserCacheTTL,
 	}
 
-	engine, err := libserver.NewServerGin(appCfg)
-	if err != nil {
-		return nil, fmt.Errorf("apiserver: build gin engine: %w", err)
-	}
-
-	baseURL := appCfg.AppUrl
-
 	// Empty cfg.App.APIDomain falls back to "infrapi.io" — every API
 	// group internal/rbac and internal/catalog mount, and every
 	// Role.Rules entry an operator authors, is "<group>.<domain>", so
@@ -107,6 +100,17 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	}
 	rbac.SetAPIDomain(apiDomain)
 	catalog.SetAPIDomain(apiDomain)
+
+	// infrapi/lib serves its own endpoints (health, metrics, metadata,
+	// OpenAPI, docs) under each of Kayra's groups, about that group's
+	// routes: /apis/catalog.<domain>/v1/-/openapi.json. They answer
+	// without a token.
+	engine, err := libserver.NewServerGin(appCfg, Roots())
+	if err != nil {
+		return nil, fmt.Errorf("apiserver: build gin engine: %w", err)
+	}
+
+	baseURL := appCfg.AppUrl
 
 	// Unknown paths get the same problem+json body as every other error
 	// instead of gin's plain-text "404 page not found".
@@ -197,4 +201,16 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	tokenapi.RegisterRoutes(engine, authenticator.Middleware(), s, keys, &patKey.PublicKey, cfg)
 
 	return engine, nil
+}
+
+// Roots are the roots of Kayra's own groups, system first: the primary
+// root, whose metrics and specification also hold the routes under no
+// group (/oauth2/*, /apis, /.well-known/kayra.json). Valid once the API
+// domain is set (Build).
+func Roots() []string {
+	return []string{
+		"/apis/" + catalog.SystemAPI + "/v1",
+		"/apis/" + catalog.CatalogAPI + "/v1",
+		"/apis/" + rbac.AuthorizationAPI + "/v1",
+	}
 }

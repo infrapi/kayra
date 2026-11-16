@@ -603,7 +603,7 @@ func (r *Reconciler) ensureSpec(ctx context.Context, reg ApiRegistration, lockID
 	}
 	upToDate := func() bool {
 		spec, err := r.repo.GetApiSpec(reg.Platform, reg.Region, reg.Name)
-		return err == nil && spec.SyncID == reg.SyncID
+		return err == nil && spec.SyncID == reg.SyncID && spec.Version == reg.APIVersion()
 	}
 	if upToDate() {
 		return nil
@@ -616,7 +616,7 @@ func (r *Reconciler) ensureSpec(ctx context.Context, reg ApiRegistration, lockID
 			return
 		}
 		var spec ApiSpec
-		spec, err = FetchSpec(ctx, r.httpClient, r.gatewayURL, reg.Name)
+		spec, err = FetchSpec(ctx, r.httpClient, r.gatewayURL, reg.Name, reg.APIVersion())
 		if err != nil {
 			return
 		}

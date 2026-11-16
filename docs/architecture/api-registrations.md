@@ -19,7 +19,8 @@ backed by [store](../packages/store.md).
 
 ```go
 type ApiRegistration struct {
-	Name, Platform, Region       string
+	Name, ShortName, Version     string
+	Platform, Region             string
 	Active, Upstream, Downstream bool
 	Owner, Description           string
 	DependsOn                    []ApiRegistrationRef
@@ -66,6 +67,12 @@ only name anything else ever refers to it by: a subscription's
 label (`compute`), unique within this platform/region (`409` otherwise)
 — an alias for display and step templates (`{{ .Subscription.ShortName }}`)
 only: it never addresses the registration.
+
+`version` is the API version the app serves (`v1`, `v2beta1`), `v1` when
+left out; anything not like `v1` or `v2beta1` is refused (`400`). The app's
+routes are under `/apis/<name>/<version>/`, its own endpoints (health,
+metrics, OpenAPI, docs) under `/apis/<name>/<version>/-/`, which is where the
+[reconciler](#openapi-spec) reads its spec.
 
 Every route addresses a registration by **name alone** —
 `/apis/catalog.infrapi.io/v1/apiregistrations/compute.infrapi.io`, never
@@ -209,11 +216,16 @@ can't silently finish or restart one.
 
 Kayra knows nothing about the app behind a registration, so it learns what
 the app serves from the app itself. Every `infrapi/lib` app serves its route
-table as an OpenAPI document at `/-/openapi.json`. Whenever a registration's
-`sync_id` changes, `kayra reconciler` fetches it through the gateway
-(`<reconciler.gateway_url>/apis/<api>/-/openapi.json`, see
+table as an OpenAPI document under its group's root,
+`/apis/<api>/<version>/-/openapi.json`, beside its health, metrics and docs.
+`<version>` is the registration's `version`, `v1` unless set: a registration
+`{"name": "compute.infrapi.io", "version": "v2beta1"}` is read at
+`/apis/compute.infrapi.io/v2beta1/-/openapi.json`. Whenever a registration's
+`sync_id` or `version` changes, `kayra reconciler` fetches it through the gateway
+(`<reconciler.gateway_url>/apis/<api>/<version>/-/openapi.json`, see
 [config](../packages/config.md#reconciler)) and stores it in etcd with the
-`sync_id` it was fetched for and the resources derived from its paths. Only
+`sync_id` and version it was fetched for and the resources derived from its
+paths, the app's own `-/` endpoints left out. Only
 one fetch runs per registration and `sync_id`, however many subscriptions
 the sync fans out to.
 

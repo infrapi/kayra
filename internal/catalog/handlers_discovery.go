@@ -19,8 +19,11 @@ import (
 type DiscoveryGroup struct {
 	Api       string `json:"api"`
 	ShortName string `json:"short_name"`
-	Owner     string `json:"owner"`
-	Builtin   bool   `json:"builtin"`
+	// Version is the version the group is served at: its routes are
+	// under /apis/<api>/<version>/.
+	Version string `json:"version"`
+	Owner   string `json:"owner"`
+	Builtin bool   `json:"builtin"`
 	// SyncID is the registration's current sync_id; SpecSyncID the one
 	// its stored spec was fetched for. They differ while a sync is
 	// pending, and SpecSyncID is "" (no resources) until the first one.
@@ -59,7 +62,7 @@ func RegisterDiscoveryRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 			if reg.Platform != deploymentPlatform || reg.Region != deploymentRegion {
 				continue
 			}
-			g := DiscoveryGroup{Api: reg.Name, ShortName: reg.ShortName, Owner: reg.Owner, SyncID: reg.SyncID, Resources: []ApiResource{}}
+			g := DiscoveryGroup{Api: reg.Name, ShortName: reg.ShortName, Version: reg.APIVersion(), Owner: reg.Owner, SyncID: reg.SyncID, Resources: []ApiResource{}}
 			spec, err := repo.GetApiSpec(reg.Platform, reg.Region, reg.Name)
 			switch {
 			case err == nil:
@@ -98,8 +101,13 @@ func RegisterDiscoveryRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 	})
 }
 
+// builtinVersion is the version Kayra serves its own groups at.
+const builtinVersion = "v1"
+
 // builtinGroups derives Kayra's own api groups from its route table:
-// every /apis/<group>/v1/... route, grouped by <group>.
+// every /apis/<group>/v1/... route, grouped by <group>. Kayra serves
+// its own operational endpoints under the system group's root, and
+// DeriveResources leaves them out.
 func builtinGroups(routes []Route) []DiscoveryGroup {
 	byApi := map[string][]Route{}
 	for _, rt := range routes {
@@ -115,11 +123,11 @@ func builtinGroups(routes []Route) []DiscoveryGroup {
 	}
 	groups := make([]DiscoveryGroup, 0, len(byApi))
 	for api, rts := range byApi {
-		resources := DeriveResources(api, rts)
+		resources := DeriveResources(api, builtinVersion, rts)
 		if len(resources) == 0 {
 			continue
 		}
-		groups = append(groups, DiscoveryGroup{Api: api, Owner: builtinOwner, Builtin: true, Resources: resources})
+		groups = append(groups, DiscoveryGroup{Api: api, Version: builtinVersion, Owner: builtinOwner, Builtin: true, Resources: resources})
 	}
 	sort.Slice(groups, func(i, j int) bool { return groups[i].Api < groups[j].Api })
 	return groups

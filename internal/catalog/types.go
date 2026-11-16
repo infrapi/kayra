@@ -73,7 +73,12 @@ type ApiRegistration struct {
 	// unique within this platform/region, for display and templating
 	// only (see subscriptionTemplateData.ShortName): it never identifies
 	// the registration anywhere — a Subscription naming it is refused.
-	ShortName   string               `json:"short_name" yaml:"short_name"`
+	ShortName string `json:"short_name" yaml:"short_name"`
+	// Version is the API version the app serves, v1 unless set: its
+	// routes, OpenAPI spec included, are under /apis/<name>/<version>/,
+	// and the Reconciler fetches the spec from
+	// /apis/<name>/<version>/-/openapi.json (see FetchSpec).
+	Version     string               `json:"version" yaml:"version"`
 	Platform    string               `json:"platform" yaml:"platform"`
 	Region      string               `json:"region" yaml:"region"`
 	Active      bool                 `json:"active" yaml:"active"`
@@ -111,6 +116,18 @@ type ApiRegistration struct {
 	// Timestamps (created_at/updated_at) are server-owned — set by
 	// store.PutObject on every write, never read from a request.
 	store.Timestamps `yaml:",inline"`
+}
+
+// DefaultApiVersion is an ApiRegistration's Version when none is set.
+const DefaultApiVersion = "v1"
+
+// APIVersion is reg's Version, DefaultApiVersion when empty: a
+// registration stored before the field existed.
+func (reg ApiRegistration) APIVersion() string {
+	if reg.Version == "" {
+		return DefaultApiVersion
+	}
+	return reg.Version
 }
 
 // Subscription links a namespace to one ApiRegistration by its long

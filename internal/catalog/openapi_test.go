@@ -19,7 +19,7 @@ import (
 
 // testGatewayURL is a fake gateway every test Reconciler is pointed at
 // (the spec is mandatory, so no sync completes without one): it serves a
-// minimal valid spec for any /apis/<api>/-/openapi.json.
+// minimal valid spec for any /apis/<api>/<version>/-/openapi.json.
 var testGatewayURL string
 
 func TestMain(m *testing.M) {
@@ -28,8 +28,8 @@ func TestMain(m *testing.M) {
 			http.NotFound(w, r)
 			return
 		}
-		api := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/apis/"), "/-/openapi.json")
-		_, _ = w.Write([]byte(`{"openapi":"3.1.0","paths":{"/apis/` + api + `/v1/namespaces/{namespace}/things":{"get":{}}}}`))
+		root := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/apis/"), "/-/openapi.json") // <api>/<version>
+		_, _ = w.Write([]byte(`{"openapi":"3.1.0","paths":{"/apis/` + root + `/namespaces/{namespace}/things":{"get":{}}}}`))
 	}))
 	testGatewayURL = gw.URL
 	code := m.Run()
@@ -50,11 +50,15 @@ func TestDeriveResources(t *testing.T) {
 		{"PUT", "/apis/telemetry.infrapi.io/v1/datasources/:name"},
 		// "namespaces" itself is a cluster-scoped resource.
 		{"GET", "/apis/telemetry.infrapi.io/v1/namespaces/:namespace"},
-		// Not this api's: ignored.
+		// The app's own operational endpoints, under its root: ignored.
+		{"GET", "/apis/telemetry.infrapi.io/v1/-/healthz"},
+		{"GET", "/apis/telemetry.infrapi.io/v1/-/openapi/telemetry/v1.yaml"},
+		// Not this api's, or not this version's: ignored.
 		{"GET", "/apis/other.infrapi.io/v1/things"},
+		{"GET", "/apis/telemetry.infrapi.io/v2/widgets"},
 		{"GET", "/-/healthz"},
 	}
-	got := DeriveResources("telemetry.infrapi.io", routes)
+	got := DeriveResources("telemetry.infrapi.io", "v1", routes)
 	want := []ApiResource{
 		{Name: "dashboards", Namespaced: true, Verbs: []string{"create", "delete", "get", "list"}},
 		{Name: "dashboards/refresh", Namespaced: true, Verbs: []string{"patch"}},
@@ -70,7 +74,7 @@ func TestFetchSpec(t *testing.T) {
 	var body atomic.Value
 	var status atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/apis/compute.infrapi.io/-/openapi.json" {
+		if r.URL.Path != "/apis/compute.infrapi.io/v2beta1/-/openapi.json" {
 			http.NotFound(w, r)
 			return
 		}
@@ -81,12 +85,13 @@ func TestFetchSpec(t *testing.T) {
 	ctx := context.Background()
 
 	status.Store(200)
-	body.Store([]byte(`{"openapi": "3.1.0", "paths": {"/apis/compute.infrapi.io/v1/namespaces/{namespace}/vms": {"get": {}}}}`))
-	spec, err := FetchSpec(ctx, srv.Client(), srv.URL+"/", "compute.infrapi.io")
+	body.Store([]byte(`{"openapi": "3.1.0", "paths": {"/apis/compute.infrapi.io/v2beta1/namespaces/{namespace}/vms": {"get": {}}}}`))
+	spec, err := FetchSpec(ctx, srv.Client(), srv.URL+"/", "compute.infrapi.io", "v2beta1")
 	if err != nil {
 		t.Fatalf("FetchSpec: %v", err)
 	}
-	if spec.URL != srv.URL+"/apis/compute.infrapi.io/-/openapi.json" || len(spec.Resources) != 1 || spec.Resources[0].Name != "vms" {
+	if spec.URL != srv.URL+"/apis/compute.infrapi.io/v2beta1/-/openapi.json" || spec.Version != "v2beta1" ||
+		len(spec.Resources) != 1 || spec.Resources[0].Name != "vms" {
 		t.Fatalf("spec = %+v", spec)
 	}
 	if !json.Valid(spec.Spec) || strings.Contains(string(spec.Spec), " ") {
@@ -110,7 +115,7 @@ func TestFetchSpec(t *testing.T) {
 		if tc.gateway == "-" {
 			gw = ""
 		}
-		if _, err := FetchSpec(ctx, srv.Client(), gw, "compute.infrapi.io"); err == nil {
+		if _, err := FetchSpec(ctx, srv.Client(), gw, "compute.infrapi.io", "v2beta1"); err == nil {
 			t.Errorf("%s: FetchSpec succeeded, want an error", desc)
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	uuid "github.com/hashicorp/go-uuid"
 
 	"github.com/infrapi/kayra/internal/httpapi"
+	libapi "github.com/infrapi/lib/pkg/api"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
@@ -37,7 +38,7 @@ type apiRegistrationStatusResponse struct {
 }
 
 // validateApiRegistration checks that reg's name is a long api name
-// (IsLongApiName), that its optional short_name is a single label not
+// (IsLongApiName), that its version is like v1 or v2beta1, that its optional short_name is a single label not
 // already used by another registration here, and that every
 // entry in DependsOn resolves to an existing ApiRegistration — the
 // legacy Postgres model enforced neither (no real FK, no app-level
@@ -51,6 +52,9 @@ func validateApiRegistration(repo *Repository, reg ApiRegistration) *liberrors.E
 	}
 	if !IsLongApiName(reg.Name) {
 		return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "name %q must be the api's long name, a lowercase DNS name such as \"compute.infrapi.io\"", reg.Name)
+	}
+	if err := (libapi.Group{Name: reg.Name, Version: reg.Version}).Validate(); err != nil {
+		return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "version %q must be like v1 or v2beta1", reg.Version)
 	}
 	if reg.ShortName != "" {
 		if !IsShortApiName(reg.ShortName) {
@@ -100,6 +104,7 @@ func RegisterApiRegistrationRoutes(r gin.IRouter, repo *Repository, gate gin.Han
 			return
 		}
 		reg.Platform, reg.Region = deploymentPlatform, deploymentRegion
+		reg.Version = reg.APIVersion()
 		// A registration created with no explicit sync_id gets one
 		// minted here rather than kept empty: Reconciler never
 		// reconciles a registration whose SyncID is empty (see
@@ -208,6 +213,7 @@ func RegisterApiRegistrationRoutes(r gin.IRouter, repo *Repository, gate gin.Han
 			return
 		}
 		reg.Platform, reg.Region, reg.Name = deploymentPlatform, deploymentRegion, name
+		reg.Version = reg.APIVersion()
 		// CanaryNamespaces is pipeline state for an in-progress canary
 		// rollout (see ApiRegistration), not something this
 		// general-purpose update ever touches — only PUT .../sync
