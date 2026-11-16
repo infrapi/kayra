@@ -74,8 +74,8 @@ github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 h1:/Tnpcb2E0Pz/tN9s3bfEY2Q8ePC
 github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0/go.mod h1:zOBXOsUaBSjKgmH4OGzV1esUpR3oUSCPYVd2cUBjKYY=
 github.com/hashicorp/go-uuid v1.0.4 h1:ZrN80XjMzpRYk+2FxMDy2A2zz0d5QjJ7GMFSkZLj12A=
 github.com/hashicorp/go-uuid v1.0.4/go.mod h1:x2Ds7vSkQ2n/yQj8Synnxmt0zt1l26uCAjxIhChisLU=
-github.com/infrapi/lib v0.15.0 h1:dXdE5AeW1EUM9YEC1mEEFdjrbfQ70Jkac9TvmP/ddwk=
-github.com/infrapi/lib v0.15.0/go.mod h1:eBThs4Df4A1D74UK+Gu60L3ibC0ZQtK5vrVRp931NgQ=
+github.com/infrapi/lib v0.16.0 h1:K9DVkxFTsKIQ/VzK5hgTrw8B3KFWhdsYF2Qzq0fbE48=
+github.com/infrapi/lib v0.16.0/go.mod h1:eBThs4Df4A1D74UK+Gu60L3ibC0ZQtK5vrVRp931NgQ=
 github.com/jcmturner/aescts/v2 v2.0.0 h1:9YKLH6ey7H4eDBXW8khjYslgyqG2xZikXP0EQFKrle8=
 github.com/jcmturner/aescts/v2 v2.0.0/go.mod h1:AiaICIRyfYg35RUkr8yESTqvSy7csK90qZ5xfvvsoNs=
 github.com/jcmturner/dnsutils/v2 v2.0.0 h1:lltnkeZGL0wILNvrNiVCR6Ro5PGU/SeBvVO/8c/iPbo=
