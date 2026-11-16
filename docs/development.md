@@ -22,40 +22,40 @@ make all
 
 | Target | Command |
 |--------|---------|
-| `build` | `go build ./...` |
-| `vet` | `go vet ./...` |
+| `setup` | installs `golangci-lint`, `gosec` and `goreleaser` if missing |
+| `tidy` | `go mod tidy` |
 | `fmt` | `gofmt -w` on every tracked Go file |
+| `lint` | `golangci-lint run` |
+| `security` | `gosec -exclude-dir _local -quiet ./...` |
 | `test` | `go test` with coverage, writes `cover.out` and `coverage.html` |
-| `docs` | `mkdocs build` into `site/` |
-| `docs-serve` | `mkdocs serve`, live reload on `http://localhost:8000` |
+| `docs` | previews these pages in the InfraPI portal, see below |
 
 ## Documentation
 
-The site is MkDocs Material, same toolchain and theme as
-[infrapi/lib](https://infrapi.github.io/lib/). Install it once:
+These pages are published by the InfraPI developer portal,
+[infrapi/docs](https://github.com/infrapi/docs): a Hugo site that pulls
+`docs/` from every product at build time. There is no site to build in this
+repository. To preview a change, clone infrapi/docs next to this repository,
+then:
 
 ```bash
-pip install mkdocs mkdocs-material pymdown-extensions mkdocs-git-revision-date-localized-plugin
+make docs                  # make -C ../docs dev: links your checkouts, serves http://localhost:1313/docs/ with live reload
+make -C ../docs check      # builds as the portal's CI does: fails on any broken link or anchor
 ```
 
-Then:
+The portal needs Hugo v0.158 or later (`make -C ../docs install-hugo`
+installs it with `go install`).
 
-```bash
-make docs         # build into site/
-make docs-serve   # live reload on http://localhost:8000
-```
-
-Pages live in `docs/` and the navigation is declared in `mkdocs.yml`. A new
-page must be added to `nav:`, otherwise the CI build — which runs `mkdocs
-build --strict` — fails.
+There is no navigation file: the portal builds the menu from the folders,
+and orders the pages within a folder by their `weight`. A new page is a new
+file with its front matter.
 
 Every page is portable, GitHub-native Markdown: it starts with YAML front
 matter (`title`, `description`, `weight` — the page's order inside its
-folder, matching `nav:`), keeps its own H1, and uses GitHub alerts
+folder), keeps its own H1, and uses GitHub alerts
 (`> [!NOTE]`), `<details>` blocks and plain labelled code blocks rather
-than MkDocs-only admonitions, content tabs or snippet includes, so the
-same file renders on github.com, on this site and in the InfraPI
-developer portal.
+than site-specific shortcodes, admonitions or snippet includes, so the
+same file renders on github.com and in the portal.
 
 Every example of a call to Kayra's API is given twice: a `**infrapi-cli**`
 paragraph followed by its code block, then a `**curl**` paragraph followed
@@ -66,16 +66,16 @@ stay a single block.
 
 `docs/index.md` is a real page — the docs entry point, with the "where to
 start" table and the package table — not an include of the README.
-`README.md` is the repository's front door (what Kayra is, the two
-binaries, core concepts, license) and links into `docs/` with relative
+`README.md` is the repository's front door (what Kayra is, the binary
+and its client, core concepts, license) and links into `docs/` with relative
 paths (`docs/getting-started.md`, `docs/packages/config.md`, ...).
 Links between docs pages are relative `.md` paths too, with GitHub-style
 heading anchors. Links to another InfraPI repository's docs stay
 absolute (`https://infrapi.github.io/<repo>/...`).
 
-`.github/workflows/docs.yml` builds the site on every push and PR, and on
-`main` also publishes it through GitHub Pages (Settings > Pages > Source =
-"GitHub Actions"). There is no manual deploy step.
+A push to `main` that changes `docs/` runs `.github/workflows/notify-docs.yml`,
+which asks the portal to rebuild, and so does every release; the portal also
+rebuilds every night. There is no manual deploy step.
 
 ## Layout
 

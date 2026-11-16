@@ -84,6 +84,9 @@ same cluster `Role.Rules` [RBAC & auth](rbac-and-auth.md#who-can-manage-a-namesp
 describes, so an existing sysadmin role using `resources: ["*"]` already
 covers it.
 
+> [!TIP]
+> The commands below use `infrapi-cli`: [install it](https://infrapi.github.io/cli/getting-started/#1-install).
+
 **infrapi-cli**
 
 ```bash
@@ -148,6 +151,9 @@ None of the three are accepted from the request body, on create or update
 reconciler`.
 
 ## Reconciler
+
+> [!TIP]
+> The commands below use the `kayra` binary: [install it](../getting-started.md#1-install).
 
 ```bash
 kayra reconciler

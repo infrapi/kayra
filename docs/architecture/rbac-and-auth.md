@@ -76,6 +76,9 @@ an operator, whichever path resolves it: a real authorization backend's
 live lookup, or (for a claims-backed `authorizations.<name>`) straight out
 of the caller's own already-verified token/userinfo.
 
+> [!TIP]
+> The commands below use `infrapi-cli`: [install it](https://infrapi.github.io/cli/getting-started/#1-install).
+
 ```bash
 infrapi-cli login --server https://kayra.example.com
 ```

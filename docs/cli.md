@@ -33,6 +33,9 @@ user would ever run.
 Runs the HTTP API — every route [apiserver.Build](packages/apiserver.md)
 wires up.
 
+> [!TIP]
+> The commands below use the `kayra` binary: [install it](getting-started.md#1-install).
+
 ```bash
 kayra --config kayra.yaml serve
 ```

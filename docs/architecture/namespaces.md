@@ -27,6 +27,9 @@ separate `/tenant` child resource. Full CRUD at `/apis/system.infrapi.io/v1/name
 tier as [ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
 cluster `RoleBinding` scoped to a namespace that doesn't exist yet.
 
+> [!TIP]
+> The commands below use `infrapi-cli`: [install it](https://infrapi.github.io/cli/getting-started/#1-install).
+
 **infrapi-cli**
 
 ```bash

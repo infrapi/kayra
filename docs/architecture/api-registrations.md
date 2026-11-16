@@ -34,6 +34,9 @@ Full CRUD at `/apis/catalog.infrapi.io/v1/apiregistrations`, gated by
 [`SysadminGate`](rbac-and-auth.md#two-gates-two-trust-tiers) — same trust
 tier as the cluster RBAC objects.
 
+> [!TIP]
+> The commands below use `infrapi-cli`: [install it](https://infrapi.github.io/cli/getting-started/#1-install).
+
 **infrapi-cli**
 
 ```bash

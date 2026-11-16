@@ -81,6 +81,9 @@ manage what.
 Two independent invocations of the one binary, not one process doing both
 jobs:
 
+> [!TIP]
+> The commands below use the `kayra` binary: [install it](../getting-started.md#1-install).
+
 ```bash
 kayra serve      # the HTTP API
 kayra reconciler # the catalog reconcile controller
