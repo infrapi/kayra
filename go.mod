@@ -1,6 +1,6 @@
 module github.com/infrapi/kayra
 
-go 1.26.10
+go 1.27.3
 
 require (
 	github.com/gin-gonic/gin v1.12.0
@@ -10,7 +10,6 @@ require (
 	github.com/infrapi/lib v0.16.0
 	github.com/urfave/cli/v3 v3.14.0
 	go.etcd.io/etcd/client/v3 v3.7.3
-	golang.org/x/oauth2 v0.37.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
