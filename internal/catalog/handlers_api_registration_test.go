@@ -374,3 +374,46 @@ func TestApiRegistrationDeleteBlockedWhileSubscribedTo(t *testing.T) {
 		t.Fatalf("delete subscribed-to api registration: status %d, want 409, body %s", w.Code, w.Body.String())
 	}
 }
+
+func TestApiRegistrationVersion(t *testing.T) {
+	engine, _ := newTestEngine(t)
+	regs := "/apis/catalog.infrapi.io/v1/apiregistrations"
+
+	decode := func(body []byte) ApiRegistration {
+		t.Helper()
+		var reg ApiRegistration
+		if err := json.Unmarshal(body, &reg); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		return reg
+	}
+
+	w := doJSON(t, engine, http.MethodPost, regs, ApiRegistration{Name: "vault.infrapi.io"})
+	if w.Code != http.StatusCreated || decode(w.Body.Bytes()).Version != DefaultApiVersion {
+		t.Fatalf("create without version: status %d, body %s, want version %q", w.Code, w.Body.String(), DefaultApiVersion)
+	}
+	w = doJSON(t, engine, http.MethodPost, regs, ApiRegistration{Name: "compute.infrapi.io", Version: "v2beta1"})
+	if w.Code != http.StatusCreated || decode(w.Body.Bytes()).Version != "v2beta1" {
+		t.Fatalf("create v2beta1: status %d, body %s", w.Code, w.Body.String())
+	}
+	w = doJSON(t, engine, http.MethodPut, regs+"/compute.infrapi.io", ApiRegistration{})
+	if w.Code != http.StatusOK || decode(w.Body.Bytes()).Version != DefaultApiVersion {
+		t.Fatalf("update without version: status %d, body %s, want version %q", w.Code, w.Body.String(), DefaultApiVersion)
+	}
+
+	for _, version := range []string{"1", "v0", "V1", "v1.2", "latest"} {
+		w = doJSON(t, engine, http.MethodPost, regs, ApiRegistration{Name: "pki.infrapi.io", Version: version})
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("create version %q: status %d, want 400", version, w.Code)
+		}
+	}
+}
+
+func TestApiRegistrationAPIVersion(t *testing.T) {
+	if got := (ApiRegistration{}).APIVersion(); got != DefaultApiVersion {
+		t.Errorf("APIVersion of a registration stored without one = %q, want %q", got, DefaultApiVersion)
+	}
+	if got := (ApiRegistration{Version: "v3"}).APIVersion(); got != "v3" {
+		t.Errorf("APIVersion = %q, want v3", got)
+	}
+}

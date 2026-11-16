@@ -7,7 +7,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/hashicorp/go-uuid v1.0.4
-	github.com/infrapi/lib v0.14.0
+	github.com/infrapi/lib v0.15.0
 	github.com/urfave/cli/v3 v3.14.0
 	go.etcd.io/etcd/client/v3 v3.7.3
 	golang.org/x/oauth2 v0.37.0

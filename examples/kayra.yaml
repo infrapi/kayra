@@ -194,7 +194,7 @@ reconciler:
   max_concurrent_reconciles: 30
   default_mode: api
   # where every registered api is reachable, as <gateway_url>/apis/<api>/...;
-  # each api's OpenAPI spec is fetched from <gateway_url>/apis/<api>/-/openapi.json
+  # each api's OpenAPI spec is fetched from <gateway_url>/apis/<api>/<version>/-/openapi.json
   # on every sync. Mandatory: without it, no sync can complete.
   gateway_url: http://localhost:9080
 

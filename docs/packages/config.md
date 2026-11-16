@@ -305,7 +305,8 @@ reconciler:
 ```
 
 `gateway_url` is where the reconciler fetches each registered api's OpenAPI
-spec, from `<gateway_url>/apis/<api>/-/openapi.json`. The spec is
+spec, from `<gateway_url>/apis/<api>/<version>/-/openapi.json`, `<version>`
+being the registration's (`v1` unless set). The spec is
 mandatory: with `gateway_url` unset, no sync can complete. See
 [API registrations](../architecture/api-registrations.md#openapi-spec).
 

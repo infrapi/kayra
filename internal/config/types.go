@@ -321,8 +321,8 @@ type ReconcilerConfig struct {
 	Mode map[string][]ReconcileStep `yaml:"mode"`
 	// GatewayURL is where every registered api is reachable, as
 	// <GatewayURL>/apis/<api>/... — the Reconciler fetches each one's
-	// OpenAPI spec from <GatewayURL>/apis/<api>/-/openapi.json (served
-	// by infrapi/lib) whenever the registration's sync_id changes. The
+	// OpenAPI spec from <GatewayURL>/apis/<api>/<version>/-/openapi.json
+	// (served by infrapi/lib under the api's root) whenever the registration's sync_id changes. The
 	// spec is mandatory: with this unset, or an api whose spec can't be
 	// fetched, no sync to that sync_id can complete.
 	GatewayURL string `yaml:"gateway_url"`

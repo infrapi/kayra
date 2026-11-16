@@ -3,8 +3,8 @@ package catalog
 // OpenAPI specs of registered apis. Kayra knows nothing about the apps
 // behind its registrations, so it learns what each one serves from the
 // app itself: every infrapi/lib app serves its route table as an OpenAPI
-// document at /-/openapi.json, reachable through the gateway as
-// <gateway>/apis/<api>/-/openapi.json. The Reconciler fetches it on each
+// document under its group's root, reachable through the gateway as
+// <gateway>/apis/<api>/<version>/-/openapi.json. The Reconciler fetches it on each
 // sync (see Reconciler.ensureSpec) and stores it with the resources
 // derived from it; discovery (GET /apis) and
 // .../apiregistrations/{name}/openapi.json serve it from there.
@@ -30,6 +30,9 @@ const MaxSpecBytes = 1 << 20
 type ApiSpec struct {
 	// Api is the registration's name (its long name).
 	Api string `json:"api"`
+	// Version is the registration's version this spec was fetched for:
+	// a registration moved to another version refetches it.
+	Version string `json:"version"`
 	// SyncID is the registration's sync_id this spec was fetched for: a
 	// sync to a newer sync_id refetches it first.
 	SyncID string `json:"sync_id"`
@@ -63,14 +66,16 @@ type Route struct {
 }
 
 // DeriveResources turns api's routes into resources, following the
-// /apis/<api>/v1/[namespaces/{namespace}/]<resource>[/{name}[/<action>]]
+// /apis/<api>/<version>/[namespaces/{namespace}/]<resource>[/{name}[/<action>]]
 // convention every Kayra and infrapi/lib route uses. Verbs follow the
 // HTTP method, as infrapi/lib's auth maps them: GET is "list" on a
 // collection (no path parameter past the namespace) and "get" otherwise,
 // POST "create", PUT "update", PATCH "patch", DELETE "delete". Routes
-// outside /apis/<api>/v1/ are ignored.
-func DeriveResources(api string, routes []Route) []ApiResource {
-	prefix := "/apis/" + api + "/v1/"
+// outside /apis/<api>/<version>/ are ignored, and so are the app's own
+// operational endpoints under /apis/<api>/<version>/-/: health,
+// metrics, docs are not resources.
+func DeriveResources(api, version string, routes []Route) []ApiResource {
+	prefix := "/apis/" + api + "/" + version + "/"
 	type key struct {
 		name       string
 		namespaced bool
@@ -82,6 +87,9 @@ func DeriveResources(api string, routes []Route) []ApiResource {
 			continue
 		}
 		segs := strings.Split(strings.Trim(strings.TrimPrefix(rt.Path, prefix), "/"), "/")
+		if segs[0] == "-" {
+			continue
+		}
 		namespaced := false
 		if len(segs) >= 3 && segs[0] == "namespaces" && isPathParam(segs[1]) {
 			namespaced = true
@@ -150,20 +158,21 @@ func verbFor(method string, hasParam bool) string {
 	}
 }
 
-// specURL is where api's spec is served through the gateway.
-func specURL(gatewayURL, api string) string {
-	return strings.TrimRight(gatewayURL, "/") + "/apis/" + api + "/-/openapi.json"
+// specURL is where api's spec is served through the gateway: under its
+// group's root, as infrapi/lib's server serves it.
+func specURL(gatewayURL, api, version string) string {
+	return strings.TrimRight(gatewayURL, "/") + "/apis/" + api + "/" + version + "/-/openapi.json"
 }
 
 // FetchSpec downloads api's OpenAPI spec through gatewayURL and derives
 // its resources. It fails on anything but a 200 carrying a JSON object
 // with an "openapi" version and a "paths" object, or on a document over
 // MaxSpecBytes.
-func FetchSpec(ctx context.Context, client *http.Client, gatewayURL, api string) (ApiSpec, error) {
+func FetchSpec(ctx context.Context, client *http.Client, gatewayURL, api, version string) (ApiSpec, error) {
 	if gatewayURL == "" {
 		return ApiSpec{}, fmt.Errorf("reconciler.gateway_url is not configured: the openapi spec is mandatory, so api %q can't be synced", api)
 	}
-	url := specURL(gatewayURL, api)
+	url := specURL(gatewayURL, api, version)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return ApiSpec{}, fmt.Errorf("fetch openapi spec of %q: %w", api, err)
@@ -193,7 +202,7 @@ func FetchSpec(ctx context.Context, client *http.Client, gatewayURL, api string)
 	if err := json.Compact(&compact, body); err != nil {
 		return ApiSpec{}, fmt.Errorf("openapi spec of %q from %s: %w", api, url, err)
 	}
-	return ApiSpec{Api: api, URL: url, Resources: DeriveResources(api, routes), Spec: compact.Bytes()}, nil
+	return ApiSpec{Api: api, Version: version, URL: url, Resources: DeriveResources(api, version, routes), Spec: compact.Bytes()}, nil
 }
 
 // specRoutes validates an OpenAPI document and lists its operations.
