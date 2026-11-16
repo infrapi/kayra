@@ -34,6 +34,24 @@ archive also ships `LICENSE`/`README.md`, the `kayra` or `kayra-cli`
 binary inside it). Giving each its own path keeps both tracked
 separately.
 
+### Or the container image
+
+Every release also publishes an image, `ghcr.io/infrapi/kayra`, for
+`linux/amd64` and `linux/arm64`. It is tagged with the release's version
+(`<major>.<minor>.<patch>`), its minor (`<major>.<minor>`) and `latest`. Pin
+one of the first two in a deployment. It holds both binaries and no
+configuration: mount yours at `/etc/kayra/kayra.yaml` (`KAYRA_CONFIG_FILE`).
+The entrypoint is `kayra`, and the default command `serve`:
+
+```bash
+podman run --rm -v ./kayra.yaml:/etc/kayra/kayra.yaml:ro,z -p 8080:8080 ghcr.io/infrapi/kayra:latest
+podman run --rm -v ./kayra.yaml:/etc/kayra/kayra.yaml:ro,z ghcr.io/infrapi/kayra:latest reconciler
+podman run --rm --entrypoint kayra-cli ghcr.io/infrapi/kayra:latest --help
+```
+
+It runs as an unprivileged user (uid 10001) and carries `curl` for a
+healthcheck on `/apis/system.<domain>/v1/-/healthz`.
+
 <details>
 <summary>Building from source instead</summary>
 

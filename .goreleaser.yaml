@@ -53,6 +53,33 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# The container image, multi-platform, on every release: the binaries
+# above in the Dockerfile at the repository root. Tags: the version
+# (0.5.0), its minor (0.5) and latest, the last two only for a release
+# that is not a pre-release. The CI logs in to ghcr.io first.
+dockers_v2:
+  - id: kayra
+    ids: [kayra, kayra-cli]
+    dockerfile: Dockerfile
+    images:
+      - ghcr.io/infrapi/kayra
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}{{ .Major }}.{{ .Minor }}{{ end }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: kayra
+      org.opencontainers.image.description: Kayra, InfraPI's API catalog, RBAC and reconciler
+      org.opencontainers.image.source: https://github.com/infrapi/kayra
+      org.opencontainers.image.url: https://github.com/infrapi/kayra
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.licenses: MIT
+
 # go-semantic-release (see .github/workflows/ci.yml) already tags and
 # creates the GitHub release with its own generated notes before this
 # ever runs (see .github/workflows/release.yml, triggered by that same
