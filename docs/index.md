@@ -45,7 +45,7 @@ own types, storage and HTTP handlers together.
 | [`internal/rbac`](packages/rbac.md) | `Group`/`Role`/`RoleBinding`, cluster + namespace scoped |
 | `internal/catalog` | `ApiRegistration`/`Namespace`/`Subscription` + the reconciler (see [API registrations](architecture/api-registrations.md), [Namespaces](architecture/namespaces.md), [Subscriptions & reconciliation](architecture/subscriptions.md)) |
 | [`internal/tokenapi`](packages/tokenapi.md) | Personal access token issuance |
-| [`internal/oauth2broker`](packages/oauth2broker.md) | Server-side relay for `infrapi-cli login`'s browser-based OAuth2 flow |
+| [`internal/oauth2broker`](packages/oauth2broker.md) | Server-side relay for `infrapi-cli auth login`'s browser-based OAuth2 flow |
 | [`internal/httpapi`](packages/httpapi.md) | RFC 9457 error response helper |
 | [`internal/apiserver`](packages/apiserver.md) | Wires every package above onto one gin engine |
 

@@ -12,7 +12,7 @@ operates a Kayra instance: it always reads `kayra.yaml`.
 
 The end user's client is a separate binary, in its own repository:
 [`infrapi-cli`](https://github.com/infrapi/cli) logs in to a Kayra server
-and calls its API (`login`, `context`, `auth can-i`, `apis`, `get`,
+and calls its API (`auth login`, `auth context`, `auth can-i`, `apis`, `get`,
 `create`, `update`, `patch`, `delete`), knowing nothing but the server's
 URL. See [its docs](https://infrapi.github.io/cli/).
 

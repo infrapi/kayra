@@ -212,7 +212,7 @@ it resolves users against, and exactly one of:
     rejects an unparseable one.
   - `oauth2` — `client_id` (required if set) and `scopes` (defaults to
     `oauth2broker.DefaultScopes`: `openid`, `profile`, `email`) for
-    [`infrapi-cli login`](https://infrapi.github.io/cli/commands/#login): a real browser-based OAuth2
+    [`infrapi-cli auth login`](https://infrapi.github.io/cli/commands/#login): a real browser-based OAuth2
     Authorization Code + PKCE flow, saving the provider's own token into
     a context. The CLI's browser opens at *this Kayra instance's
     own* `/oauth2/v1/authorize`, never this provider's directly — most

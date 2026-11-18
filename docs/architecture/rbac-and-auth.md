@@ -80,7 +80,7 @@ of the caller's own already-verified token/userinfo.
 > The commands below use `infrapi-cli`: [install it](https://infrapi.github.io/cli/getting-started/#1-install).
 
 ```bash
-infrapi-cli login --server https://kayra.example.com
+infrapi-cli auth login --server https://kayra.example.com
 ```
 
 ## The RBAC model

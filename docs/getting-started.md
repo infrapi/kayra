@@ -135,7 +135,7 @@ infrapi-cli auth context set bootstrap --server http://localhost:8080 --token "$
 
 That token satisfies `sysadmin.groups` above, so it can call every
 cluster-bootstrap endpoint below. Past this point, a real deployment
-switches to real logins (`infrapi-cli login`, see [CLI](cli.md)) and
+switches to real logins (`infrapi-cli auth login`, see [CLI](cli.md)) and
 mints this bootstrap token only when actually needed again.
 
 ## 5. Create a tenant
@@ -275,7 +275,7 @@ full reconcile model.
 
 ## What's next
 
-- [CLI reference](cli.md) — `infrapi-cli login`, contexts, personal
+- [CLI reference](cli.md) — `infrapi-cli auth login`, contexts, personal
   access tokens.
 - [Architecture](architecture/overview.md) — how every package fits
   together.
