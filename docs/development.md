@@ -61,7 +61,7 @@ Every example of a call to Kayra's API is given twice: a `**infrapi-cli**`
 paragraph followed by its code block, then a `**curl**` paragraph followed
 by the same requests. github.com shows them one after the other; the
 developer portal renders consecutive labelled code blocks as tabs. Things
-only one of them can do (`kayra token mint`, `infrapi-cli context set`)
+only one of them can do (`kayra token mint`, `infrapi-cli auth context set`)
 stay a single block.
 
 `docs/index.md` is a real page — the docs entry point, with the "where to

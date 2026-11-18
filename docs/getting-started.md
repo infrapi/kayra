@@ -130,7 +130,7 @@ TOKEN=$(kayra --config kayra.yaml token mint \
   --provider self --group sandbox-core-sysadmin --ttl 1h)
 
 # save it as a infrapi-cli context — every command below uses it
-infrapi-cli context set bootstrap --server http://localhost:8080 --token "$TOKEN"
+infrapi-cli auth context set bootstrap --server http://localhost:8080 --token "$TOKEN"
 ```
 
 That token satisfies `sysadmin.groups` above, so it can call every
