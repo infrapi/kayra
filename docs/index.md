@@ -41,7 +41,7 @@ own types, storage and HTTP handlers together.
 | [`internal/discovery`](packages/discovery.md) | `/.well-known/kayra.json`: the API domain, built-in groups and endpoints clients discover |
 | [`internal/authn`](packages/authn.md) | Verifying a bearer token, resolving its user id |
 | [`internal/authz`](packages/authz.md) | Resolving a user id to groups/attributes (LDAP or fixture) |
-| [`internal/middleware`](packages/middleware.md) | The two gin auth middlewares (general + sysadmin) |
+| [`internal/middleware`](packages/middleware.md) | The gin auth middleware |
 | [`internal/rbac`](packages/rbac.md) | `Group`/`Role`/`RoleBinding`, cluster + namespace scoped |
 | `internal/catalog` | `ApiRegistration`/`Namespace`/`Subscription` + the reconciler (see [API registrations](architecture/api-registrations.md), [Namespaces](architecture/namespaces.md), [Subscriptions & reconciliation](architecture/subscriptions.md)) |
 | [`internal/tokenapi`](packages/tokenapi.md) | Personal access token issuance |

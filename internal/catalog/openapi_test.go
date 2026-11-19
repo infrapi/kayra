@@ -45,6 +45,9 @@ func TestDeriveResources(t *testing.T) {
 		{"GET", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards/{name}"},
 		{"DELETE", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards/{name}"},
 		{"PATCH", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards/{name}/refresh"},
+		// a collection under an item: listed, as infrapi/lib asks
+		{"GET", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards/{name}/panels"},
+		{"GET", "/apis/telemetry.infrapi.io/v1/namespaces/{namespace}/dashboards/{name}/panels/{panel}"},
 		// gin-style params, as Kayra's own route table has them.
 		{"GET", "/apis/telemetry.infrapi.io/v1/datasources"},
 		{"PUT", "/apis/telemetry.infrapi.io/v1/datasources/:name"},
@@ -61,6 +64,7 @@ func TestDeriveResources(t *testing.T) {
 	got := DeriveResources("telemetry.infrapi.io", "v1", routes)
 	want := []ApiResource{
 		{Name: "dashboards", Namespaced: true, Verbs: []string{"create", "delete", "get", "list"}},
+		{Name: "dashboards/panels", Namespaced: true, Verbs: []string{"get", "list"}},
 		{Name: "dashboards/refresh", Namespaced: true, Verbs: []string{"patch"}},
 		{Name: "datasources", Namespaced: false, Verbs: []string{"list", "update"}},
 		{Name: "namespaces", Namespaced: false, Verbs: []string{"get"}},

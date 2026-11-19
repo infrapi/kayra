@@ -12,7 +12,16 @@ import (
 type Repository struct {
 	store store.Store
 	keys  store.Keys
+	// sysadmin are the groups the built-in cluster binding grants every
+	// cluster-scoped resource: config's sysadmin.groups (SetSysadmin).
+	sysadmin []string
 }
+
+// SetSysadmin sets the groups of the built-in sysadmin binding: a cluster
+// role granting everything cluster-scoped, computed from the config,
+// never stored, so it can't be deleted or locked out. It grants nothing
+// in a namespace.
+func (r *Repository) SetSysadmin(groups []string) { r.sysadmin = groups }
 
 // NewRepository returns a Repository backed by s, addressed through keys.
 func NewRepository(s store.Store, keys store.Keys) *Repository {

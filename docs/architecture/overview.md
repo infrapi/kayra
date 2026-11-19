@@ -13,7 +13,7 @@ layer that doesn't own its own types, etcd persistence and HTTP handlers
 together:
 
 ```text
-request → middleware.Authenticator (or SysadminGate) → route handler
+request → middleware.Authenticator → rbac (cluster, namespace) → route handler
                      │                                       │
           authn + authz + oidc + crypto                rbac / catalog
                      │                                       │

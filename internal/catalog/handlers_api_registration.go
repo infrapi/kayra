@@ -82,8 +82,9 @@ func validateApiRegistration(repo *Repository, reg ApiRegistration) *liberrors.E
 // RegisterApiRegistrationRoutes mounts cluster-wide ApiRegistration CRUD
 // at /apis/catalog.infrapi.io/v1/apiregistrations (its own API group —
 // an ApiRegistration isn't one of internal/rbac's cluster RBAC objects,
-// it just happens to share the same trust tier) behind gate (normally
-// middleware.SysadminGate). Ported from the legacy Postgres "stacks"
+// it just happens to share the same trust tier) on r, behind gate:
+// normally a group already behind the authenticator and
+// rbac.RequireCluster, the cluster RBAC. Ported from the legacy Postgres "stacks"
 // table; DependsOn replaces that model's separate "dependencies" table
 // (see types.go). deploymentPlatform/deploymentRegion are this
 // instance's own INFRAPI_APP_PLATFORM/_REGION: every route here

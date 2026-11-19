@@ -79,17 +79,19 @@ groups/id are checked against this same `Group` regardless. A
 ## Routes
 
 ```go
-rbac.RegisterClusterRoutes(engine, repo, sysadminGate)
+repo.SetSysadmin(sysadminGroups) // the built-in sysadmin binding
+cluster := engine.Group("", authenticator.Middleware(), rbac.RequireCluster(repo))
+rbac.RegisterClusterRoutes(cluster, repo, pass, validateClusterRules)
 rbac.RegisterNamespaceRoutes(engine, repo, authenticator.Middleware(), validateRules) // validateRules may be nil
 rbac.RegisterAuthorizeRoute(engine, repo, authenticator.Middleware(), rbac.Prechecks{Namespace: ..., Api: ..., Resource: ...})
 ```
 
 - **Cluster** — full CRUD at
   `/apis/authorization.infrapi.io/v1/{clustergroups,clusterroles,
-  clusterrolebindings}`, gated by
-  [`middleware.SysadminGate`](middleware.md#sysadmingate): this is the
-  bootstrap tier, so it can't itself depend on any RBAC object already
-  existing.
+  clusterrolebindings}`, behind [`RequireCluster`](#requirecluster):
+  the cluster RBAC they define decides who manages them, the built-in
+  sysadmin binding first, which no stored object can lock out. Writes
+  follow the [anti-escalation rule](../architecture/rbac-and-auth.md#anti-escalation).
 - **Namespace** — full CRUD at
   `/apis/authorization.infrapi.io/v1/namespaces/:namespace/{groups,roles,rolebindings}`,
   gated by `authenticator.Middleware()` **plus**
@@ -179,3 +181,28 @@ A gin middleware wrapping `CanManageNamespaceRBAC` for one
 `api`/`resource`/`verb` triple, reading `:namespace` from the route and
 the caller's groups from the auth context a preceding gate set. Denies
 with `403` and the check's `reason` in `detail`.
+
+## RequireCluster
+
+`RequireCluster(repo)` gates a cluster-scoped route: its api, resource and
+verb are read from the request as infrapi/lib reads them
+(`ClusterRequest`), then decided by `AuthorizeCluster` — what `/check`
+answers for the same request.
+
+## AuthorizeCluster
+
+`AuthorizeCluster(userID, groups, api, resource, verb)` decides a
+cluster-scoped resource on `ClusterRules`: the built-in sysadmin binding's
+`*` (`SetSysadmin`), and the cluster roles of the global bindings
+(`metadata.namespace: ""`) of the global cluster groups the caller is a
+member of. A binding scoped to a namespace never counts here, and a global
+one never counts in a namespace.
+
+## Anti-escalation
+
+`Uncovered(have, want)` is the first permission `want` grants that `have`
+does not. A cluster role or binding write is checked against
+`ClusterRules`, a namespace one against `NamespaceRules` (the cluster
+bindings scoped to the namespace, and the caller's own rolebindings
+there), unless the caller holds `escalate` on the roles resource, or
+`bind` on the rolebindings one.

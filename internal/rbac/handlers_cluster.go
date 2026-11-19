@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/infrapi/kayra/internal/httpapi"
+	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
@@ -35,20 +36,49 @@ func validateClusterRoleBinding(repo *Repository, rb RoleBinding) *liberrors.Err
 	return nil
 }
 
-// RegisterClusterRoutes mounts full CRUD for the cluster bootstrap
-// resources at /apis/authorization.infrapi.io/v1/{clustergroups,
-// clusterroles,clusterrolebindings} — cluster-scoped siblings of this
-// package's own namespace-scoped groups/roles/rolebindings, same API
-// group, "cluster" folded into the resource name itself rather than a
-// separate path segment (mirroring how real k8s RBAC names ClusterRole/
-// ClusterRoleBinding) — behind gate (normally middleware.SysadminGate) —
-// the spec's "we need to configure 'cluster' levels rights which can't
-// use the mechanism we try to implement to auth." These routes carry no
-// RequireClusterRBAC check of their own: gate alone decides access, since
-// a cluster bootstrap resource can't depend on the cluster RBAC it itself
-// defines. The infra catalog (ApiRegistration) is registered
-// separately, by internal/catalog's own RegisterApiRegistrationRoutes.
-func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc) {
+// RegisterClusterRoutes mounts full CRUD for the cluster RBAC resources
+// at /apis/authorization.infrapi.io/v1/{clustergroups,clusterroles,
+// clusterrolebindings} — cluster-scoped siblings of this package's own
+// namespace-scoped groups/roles/rolebindings, "cluster" folded into the
+// resource name, as Kubernetes names ClusterRole/ClusterRoleBinding —
+// behind gate, normally the authenticator then RequireCluster: the
+// cluster RBAC they define decides who manages them, the built-in
+// sysadmin binding (Repository.SetSysadmin) first. A cluster object is
+// global when its metadata.namespace is "": it grants cluster-scoped
+// resources only; otherwise it is scoped to that namespace, and grants
+// managing it (CanManageNamespaceRBAC).
+//
+// Writes follow the anti-escalation rule: a cluster role, or a binding to
+// one, may grant only what its writer holds on the cluster
+// (ClusterRules), unless they hold escalate on clusterroles, or bind on
+// clusterrolebindings. validate checks a global cluster role's rules
+// against the apis' cluster-scoped resources.
+func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, validate func([]Rule) *liberrors.Error) {
+	// grant checks what a cluster role, or a binding to one, grants
+	// against what the caller holds on the cluster
+	grant := func(c *gin.Context, role Role, resource, verb, origin string) bool {
+		if role.Metadata.Namespace == "" && resource == "clusterroles" && validate != nil {
+			if err := validate(role.Rules); err != nil {
+				httpapi.Fail(c, err)
+				return false
+			}
+		}
+		ac, ok := middleware.GetAuth(c)
+		if !ok {
+			httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, origin, "not authenticated"))
+			return false
+		}
+		have, err := repo.ClusterRules(ac.UserID, ac.Groups)
+		if err != nil {
+			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
+			return false
+		}
+		if err := checkGrant(have, role.Rules, resource, verb, origin); err != nil {
+			httpapi.Fail(c, err)
+			return false
+		}
+		return true
+	}
 	group := r.Group("/apis/"+AuthorizationAPI+"/v1", gate)
 
 	// --- clustergroups ---
@@ -134,6 +164,9 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateClusterRole", "name is required"))
 			return
 		}
+		if !grant(c, role, "clusterroles", VerbEscalate, "rbac.CreateClusterRole") {
+			return
+		}
 		if err := repo.PutClusterRole(&role); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateClusterRole", ""))
 			return
@@ -172,6 +205,9 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 			return
 		}
 		role.Name = name
+		if !grant(c, role, "clusterroles", VerbEscalate, "rbac.UpdateClusterRole") {
+			return
+		}
 
 		if err := repo.PutClusterRole(&role); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateClusterRole", ""))
@@ -207,6 +243,9 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 		}
 		if err := validateClusterRoleBinding(repo, rb); err != nil {
 			httpapi.Fail(c, err)
+			return
+		}
+		if role, _ := repo.GetClusterRole(rb.Role); !grant(c, role, "clusterrolebindings", VerbBind, "rbac.CreateClusterRoleBinding") {
 			return
 		}
 		if err := repo.PutClusterRoleBinding(&rb); err != nil {
@@ -253,6 +292,9 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 		}
 		if err := validateClusterRoleBinding(repo, rb); err != nil {
 			httpapi.Fail(c, err)
+			return
+		}
+		if role, _ := repo.GetClusterRole(rb.Role); !grant(c, role, "clusterrolebindings", VerbBind, "rbac.UpdateClusterRoleBinding") {
 			return
 		}
 

@@ -132,6 +132,12 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, rbacRepo *rbac.Rep
 			httpapi.Fail(c, err)
 			return
 		}
+		if reg, err := repo.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, sub.ApiName); err == nil {
+			if err := reg.Allows(namespace); err != nil {
+				httpapi.Fail(c, err)
+				return
+			}
+		}
 
 		if err := repo.PutNamespaceSubscription(namespace, &sub); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.CreateSubscription", ""))

@@ -74,7 +74,8 @@ func (r *Repository) CheckNamespace(namespace string) *liberrors.Error {
 func (r *Repository) CheckApiSubscription(namespace, api, deploymentPlatform, deploymentRegion string) *liberrors.Error {
 	const origin = "catalog.CheckApiSubscription"
 
-	if _, err := r.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, api); err != nil {
+	reg, err := r.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, api)
+	if err != nil {
 		lerr := notFoundOrInternal(err, origin, "api %q is not registered in %s/%s", api, deploymentPlatform, deploymentRegion)
 		if lerr.Code == http.StatusNotFound {
 			if reg, found, ferr := r.findByShortName(deploymentPlatform, deploymentRegion, api); ferr == nil && found {
@@ -82,6 +83,9 @@ func (r *Repository) CheckApiSubscription(namespace, api, deploymentPlatform, de
 			}
 		}
 		return lerr
+	}
+	if err := reg.Allows(namespace); err != nil {
+		return err
 	}
 
 	sub, err := r.GetNamespaceSubscription(namespace, api)
@@ -139,6 +143,36 @@ func (r *Repository) CheckApiResource(api, resource, verb, deploymentPlatform, d
 	return nil
 }
 
+// CheckApiClusterResource is a cluster-scoped /check's precheck: api is
+// registered here (404), its spec serves resource cluster-scoped (404),
+// and verb on it (405).
+func (r *Repository) CheckApiClusterResource(api, resource, verb, deploymentPlatform, deploymentRegion string) *liberrors.Error {
+	const origin = "catalog.CheckApiClusterResource"
+	if _, err := r.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, api); err != nil {
+		return notFoundOrInternal(err, origin, "api %q is not registered in %s/%s", api, deploymentPlatform, deploymentRegion)
+	}
+	spec, err := r.GetApiSpec(deploymentPlatform, deploymentRegion, api)
+	if err != nil {
+		if err == store.ErrNotFound {
+			return liberrors.New(http.StatusServiceUnavailable, origin, "no openapi spec stored for api %q, so its resources can't be checked", api).
+				WithRetryable(true).WithSolution("the spec is fetched from the app at each sync: register the api again")
+		}
+		return liberrors.Wrap(err, http.StatusInternalServerError, origin, "read openapi spec of api %q", api)
+	}
+	res, found := findResource(spec.Resources, resource, false)
+	if !found {
+		if _, ns := findResource(spec.Resources, resource, true); ns {
+			return liberrors.New(http.StatusNotFound, origin, "resource %q of api %q is namespaced: it is addressed in a namespace", resource, api)
+		}
+		return liberrors.New(http.StatusNotFound, origin, "api %q has no cluster-scoped resource %q", api, resource).
+			WithSolution("list its resources with `infrapi-cli apis --api-group %s`", api)
+	}
+	if !containsString(res.Verbs, verb) {
+		return liberrors.New(http.StatusMethodNotAllowed, origin, "resource %q of api %q doesn't support %q (supported: %s)", resource, api, verb, strings.Join(res.Verbs, ", "))
+	}
+	return nil
+}
+
 func findResource(resources []ApiResource, name string, namespaced bool) (ApiResource, bool) {
 	for _, r := range resources {
 		if r.Name == name && r.Namespaced == namespaced {
@@ -171,7 +205,21 @@ func closeResource(resources []ApiResource, name string) string {
 // no spec yet (never synced) can't be checked, so its resources and
 // verbs are accepted as-is.
 func (r *Repository) ValidateRoleRules(rules []rbac.Rule, deploymentPlatform, deploymentRegion string) *liberrors.Error {
+	return r.validateRules(rules, true, deploymentPlatform, deploymentRegion)
+}
+
+// ValidateClusterRoleRules is ValidateRoleRules for a global cluster role:
+// an app's resources it names must be ones its spec serves cluster-scoped.
+func (r *Repository) ValidateClusterRoleRules(rules []rbac.Rule, deploymentPlatform, deploymentRegion string) *liberrors.Error {
+	return r.validateRules(rules, false, deploymentPlatform, deploymentRegion)
+}
+
+func (r *Repository) validateRules(rules []rbac.Rule, namespaced bool, deploymentPlatform, deploymentRegion string) *liberrors.Error {
 	const origin = "catalog.ValidateRoleRules"
+	scope := "namespaced"
+	if !namespaced {
+		scope = "cluster-scoped"
+	}
 	builtin := map[string]bool{CatalogAPI: true, SystemAPI: true, rbac.AuthorizationAPI: true}
 
 	for i, rule := range rules {
@@ -198,7 +246,7 @@ func (r *Repository) ValidateRoleRules(rules []rbac.Rule, deploymentPlatform, de
 			for _, name := range rule.Resources {
 				if name == "*" {
 					for _, res := range spec.Resources {
-						if res.Namespaced {
+						if res.Namespaced == namespaced {
 							for _, v := range res.Verbs {
 								verbs[v] = true
 							}
@@ -206,9 +254,9 @@ func (r *Repository) ValidateRoleRules(rules []rbac.Rule, deploymentPlatform, de
 					}
 					continue
 				}
-				res, ok := findResource(spec.Resources, name, true)
+				res, ok := findResource(spec.Resources, name, namespaced)
 				if !ok {
-					lerr := liberrors.New(http.StatusBadRequest, origin, "rules[%d]: api %q has no namespaced resource %q", i, api, name)
+					lerr := liberrors.New(http.StatusBadRequest, origin, "rules[%d]: api %q has no %s resource %q", i, api, scope, name)
 					if guess := closeResource(spec.Resources, name); guess != "" {
 						return lerr.WithSolution("did you mean %q? List its resources with `infrapi-cli apis --api-group %s`", guess, api)
 					}

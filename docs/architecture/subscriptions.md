@@ -77,7 +77,7 @@ so a sync that keeps failing never loops.
 ## Managing one
 
 Full CRUD at `/apis/catalog.infrapi.io/v1/namespaces/:namespace/subscriptions{,/:api}`,
-gated by [`Authenticator`](rbac-and-auth.md#two-gates-two-trust-tiers) plus
+gated by [`Authenticator`](rbac-and-auth.md#who-decides) plus
 [`rbac.RequireClusterRBAC(repo, "subscriptions", verb)`](../packages/rbac.md#requireclusterrbac)
 — "subscriptions" is just another `resource` value checked against the
 same cluster `Role.Rules` [RBAC & auth](rbac-and-auth.md#who-can-manage-a-namespaces-rbac-objects)
@@ -90,7 +90,7 @@ covers it.
 **infrapi-cli**
 
 ```bash
-infrapi-cli create catalog -n core subscriptions -d '{"api": "compute.infrapi.io"}'
+infrapi-cli create subscriptions -n core -d '{"api": "compute.infrapi.io"}'
 ```
 
 **curl**
@@ -115,7 +115,7 @@ there's nothing left in the body a caller could legitimately change.
 **infrapi-cli**
 
 ```bash
-infrapi-cli update catalog -n sre subscriptions dev.infrapi.io/sync -d '{}'
+infrapi-cli update subscriptions -n sre dev.infrapi.io/sync -d '{}'
 ```
 
 **curl**

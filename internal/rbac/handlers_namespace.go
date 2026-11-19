@@ -82,6 +82,28 @@ func RequireClusterRBAC(repo *Repository, api, resource, verb string) gin.Handle
 	}
 }
 
+// grantNamespace refuses a namespace role, or a binding to one, granting
+// what the caller does not hold in namespace (NamespaceRules), unless
+// they hold escalate on roles, or bind on rolebindings: the
+// anti-escalation rule, in a namespace.
+func grantNamespace(c *gin.Context, repo *Repository, namespace string, rules []Rule, resource, verb, origin string) bool {
+	ac, ok := middleware.GetAuth(c)
+	if !ok {
+		httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, origin, "not authenticated"))
+		return false
+	}
+	have, err := repo.NamespaceRules(ac.UserID, ac.Groups, namespace)
+	if err != nil {
+		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
+		return false
+	}
+	if err := checkGrant(have, rules, resource, verb, origin); err != nil {
+		httpapi.Fail(c, err)
+		return false
+	}
+	return true
+}
+
 // RegisterNamespaceRoutes mounts full CRUD for the per-namespace default
 // groups/roles/rolebindings resources at
 // /apis/authorization.infrapi.io/v1/namespaces/:namespace/{groups,
@@ -215,6 +237,9 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 				return
 			}
 		}
+		if !grantNamespace(c, repo, namespace, role.Rules, "roles", VerbEscalate, "rbac.CreateNamespaceRole") {
+			return
+		}
 
 		if err := repo.PutNamespaceRole(namespace, &role); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateNamespaceRole", ""))
@@ -265,6 +290,9 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 				return
 			}
 		}
+		if !grantNamespace(c, repo, namespace, role.Rules, "roles", VerbEscalate, "rbac.UpdateNamespaceRole") {
+			return
+		}
 
 		if err := repo.PutNamespaceRole(namespace, &role); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateNamespaceRole", ""))
@@ -306,6 +334,9 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 		}
 		if err := validateNamespaceRoleBinding(repo, namespace, rb); err != nil {
 			httpapi.Fail(c, err)
+			return
+		}
+		if role, _ := repo.GetNamespaceRole(namespace, rb.Role); !grantNamespace(c, repo, namespace, role.Rules, "rolebindings", VerbBind, "rbac.CreateNamespaceRoleBinding") {
 			return
 		}
 
@@ -358,6 +389,9 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 		}
 		if err := validateNamespaceRoleBinding(repo, namespace, rb); err != nil {
 			httpapi.Fail(c, err)
+			return
+		}
+		if role, _ := repo.GetNamespaceRole(namespace, rb.Role); !grantNamespace(c, repo, namespace, role.Rules, "rolebindings", VerbBind, "rbac.UpdateNamespaceRoleBinding") {
 			return
 		}
 

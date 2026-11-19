@@ -1,7 +1,6 @@
-// Package middleware wires authn/authz/crypto together into the two gin
-// middlewares Kayra's HTTP API uses: general bearer auth (any configured
-// provider, PAT included) and the privileged sysadmin gate for the cluster
-// bootstrap endpoints.
+// Package middleware wires authn/authz/crypto together into the gin
+// middleware Kayra's HTTP API uses: bearer auth, any configured provider,
+// PAT included. What a caller may do is internal/rbac's.
 package middleware
 
 import (
@@ -49,7 +48,7 @@ func GetAuth(c *gin.Context) (*AuthContext, bool) {
 }
 
 // SetAuth stores ac as the request's AuthContext, exactly as
-// Authenticator.Middleware and SysadminGate do. Exported so other
+// Authenticator.Middleware does. Exported so other
 // packages' tests can build a fixed-identity gate without reaching into
 // this package's internals.
 func SetAuth(c *gin.Context, ac *AuthContext) {

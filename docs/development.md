@@ -89,7 +89,7 @@ internal/discovery   /.well-known/kayra.json, what infrapi/lib and infrapi-cli d
 internal/authn       bearer token verification, user id resolution
 internal/authz       LDAP/dev-local directory resolution, resolved-user cache
 internal/oauth2broker server-side relay for infrapi-cli auth login's browser-based OAuth2 flow
-internal/middleware  gin Authenticator and SysadminGate
+internal/middleware  gin Authenticator
 internal/rbac        cluster/namespace groups, roles, rolebindings
 internal/catalog     api registrations, namespaces (tenants), subscriptions, Reconciler
 internal/tokenapi    personal access token issuance

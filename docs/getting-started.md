@@ -133,8 +133,10 @@ TOKEN=$(kayra --config kayra.yaml token mint \
 infrapi-cli auth context set bootstrap --server http://localhost:8080 --token "$TOKEN"
 ```
 
-That token satisfies `sysadmin.groups` above, so it can call every
-cluster-bootstrap endpoint below. Past this point, a real deployment
+That token's group is in `sysadmin.groups` above, so the built-in
+sysadmin binding grants it every cluster-scoped resource: namespaces, api
+registrations, the cluster RBAC. It grants nothing in a namespace: step 6
+adds its group to the tenant's admins, explicitly. Past this point, a real deployment
 switches to real logins (`infrapi-cli auth login`, see [CLI](cli.md)) and
 mints this bootstrap token only when actually needed again.
 
@@ -145,7 +147,7 @@ A namespace *is* a tenant — one call creates both:
 **infrapi-cli**
 
 ```bash
-infrapi-cli create system namespaces -d '{"name": "thetenant"}'
+infrapi-cli create namespaces -d '{"name": "thetenant"}'
 # {"active": false, "name": "thetenant"}
 ```
 
@@ -169,15 +171,15 @@ admins can later manage its day-to-day RBAC themselves:
 **infrapi-cli**
 
 ```bash
-infrapi-cli create authorization clustergroups -d '{"name": "thetenant-admins",
+infrapi-cli create clustergroups -d '{"name": "thetenant-admins",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
        "groups": ["sandbox-core-sysadmin"]}'
 
-infrapi-cli create authorization clusterroles -d '{"name": "thetenant-admin-role",
+infrapi-cli create clusterroles -d '{"name": "thetenant-admin-role",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
        "rules": [{"apis": ["catalog.infrapi.io"], "resources": ["*"], "verbs": ["*"]}]}'
 
-infrapi-cli create authorization clusterrolebindings -d '{"name": "thetenant-admin-binding",
+infrapi-cli create clusterrolebindings -d '{"name": "thetenant-admin-binding",
        "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
        "role": "thetenant-admin-role", "groups": ["thetenant-admins"]}'
 ```
@@ -217,11 +219,11 @@ one registration by name:
 **infrapi-cli**
 
 ```bash
-infrapi-cli create catalog apiregistrations \
+infrapi-cli create apiregistrations \
   -d '{"name": "vault.infrapi.io", "short_name": "vault", "owner": "sre"}'
 # sync_id is minted automatically — note it down, or just GET it back below
 
-infrapi-cli create catalog -n thetenant subscriptions -d '{"api": "vault.infrapi.io"}'
+infrapi-cli create subscriptions -n thetenant -d '{"api": "vault.infrapi.io"}'
 # {"api": "vault.infrapi.io", "active": false, "state": "init", ...}
 ```
 
@@ -251,9 +253,9 @@ instead.
 **infrapi-cli**
 
 ```bash
-infrapi-cli update catalog apiregistrations vault.infrapi.io/sync -d '{}'
+infrapi-cli update apiregistrations vault.infrapi.io/sync -d '{}'
 
-infrapi-cli get catalog apiregistrations vault.infrapi.io/status
+infrapi-cli get apiregistrations vault.infrapi.io/status
 ```
 
 **curl**
@@ -277,6 +279,9 @@ full reconcile model.
 
 - [CLI reference](cli.md) — `infrapi-cli auth login`, contexts, personal
   access tokens.
+- [RBAC & auth](architecture/rbac-and-auth.md#cluster-scoped-resources-and-delegation)
+  — delegate part of the cluster with a global binding, instead of the
+  sysadmin token.
 - [Architecture](architecture/overview.md) — how every package fits
   together.
 - [Config reference](packages/config.md) — every YAML key.

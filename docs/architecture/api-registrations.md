@@ -30,9 +30,14 @@ type ApiRegistration struct {
 
 ## Managing one
 
-Full CRUD at `/apis/catalog.infrapi.io/v1/apiregistrations`, gated by
-[`SysadminGate`](rbac-and-auth.md#two-gates-two-trust-tiers) — same trust
-tier as the cluster RBAC objects.
+Full CRUD at `/apis/catalog.infrapi.io/v1/apiregistrations`, decided on the
+[cluster RBAC](rbac-and-auth.md#who-decides): the sysadmin binding, or a
+global binding granting `apiregistrations` on `catalog.infrapi.io`.
+
+`allowed_namespaces` restricts who may subscribe to it, and use it: every
+namespace when empty. A namespace left out is refused at subscription,
+and at its next `/check` when it is taken out later (`403`, naming the
+api's owner).
 
 > [!TIP]
 > The commands below use `infrapi-cli`: [install it](https://infrapi.github.io/cli/getting-started/#1-install).
@@ -40,7 +45,7 @@ tier as the cluster RBAC objects.
 **infrapi-cli**
 
 ```bash
-infrapi-cli create catalog apiregistrations -d '{
+infrapi-cli create apiregistrations -d '{
     "name": "compute.infrapi.io",
     "short_name": "compute",
     "active": true,
@@ -88,9 +93,9 @@ in that same scope.
 **infrapi-cli**
 
 ```bash
-infrapi-cli get catalog apiregistrations compute.infrapi.io
-infrapi-cli update catalog apiregistrations compute.infrapi.io -d '{"name": "compute.infrapi.io", "owner": "sre-b"}'
-infrapi-cli delete catalog apiregistrations compute.infrapi.io
+infrapi-cli get apiregistrations compute.infrapi.io
+infrapi-cli update apiregistrations compute.infrapi.io -d '{"name": "compute.infrapi.io", "owner": "sre-b"}'
+infrapi-cli delete apiregistrations compute.infrapi.io
 ```
 
 **curl**
@@ -139,7 +144,7 @@ The shorthand:
 **infrapi-cli**
 
 ```bash
-infrapi-cli update catalog apiregistrations compute.infrapi.io/sync -d '{}'
+infrapi-cli update apiregistrations compute.infrapi.io/sync -d '{}'
 ```
 
 **curl**
@@ -168,7 +173,7 @@ To try a new target against one tenant first:
 **infrapi-cli**
 
 ```bash
-infrapi-cli update catalog apiregistrations compute.infrapi.io/sync -d '{"canary_namespaces": ["sre"]}'
+infrapi-cli update apiregistrations compute.infrapi.io/sync -d '{"canary_namespaces": ["sre"]}'
 ```
 
 **curl**
@@ -192,7 +197,7 @@ Once satisfied, release the same build to everyone else:
 **infrapi-cli**
 
 ```bash
-infrapi-cli update catalog apiregistrations compute.infrapi.io/sync -d '{}'
+infrapi-cli update apiregistrations compute.infrapi.io/sync -d '{}'
 ```
 
 **curl**
@@ -272,7 +277,7 @@ report for one yet.
 **infrapi-cli**
 
 ```bash
-infrapi-cli get catalog apiregistrations compute.infrapi.io/status
+infrapi-cli get apiregistrations compute.infrapi.io/status
 ```
 
 **curl**

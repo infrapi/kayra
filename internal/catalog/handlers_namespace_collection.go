@@ -29,7 +29,8 @@ func namespaceResponse(n Namespace) gin.H {
 // RegisterNamespaceCollectionRoutes mounts the namespace resource itself
 // — the legacy model's "Tenant": a namespace and a tenant
 // are the same thing, so there is no separate /tenant child resource —
-// on r, gated by gate (normally middleware.SysadminGate). Creating,
+// on r, gated by gate: normally a group already behind the authenticator
+// and rbac.RequireCluster, the cluster RBAC. Creating,
 // renaming or deleting a namespace is a cluster-wide administrative
 // action, same trust tier as an ApiRegistration, not something that can be
 // bootstrapped via per-namespace RBAC (there is nothing to check RBAC

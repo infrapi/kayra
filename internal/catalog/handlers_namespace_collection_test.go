@@ -84,11 +84,11 @@ func TestNamespaceCreateRequiresName(t *testing.T) {
 	}
 }
 
-func TestNamespaceCollectionRequiresSysadminGate(t *testing.T) {
+func TestNamespaceCollectionRequiresItsGate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := newTestRepo(t)
 	engine := gin.New()
-	// a gate that always rejects, standing in for SysadminGate denying
+	// a gate that always rejects, standing in for RequireCluster denying
 	// a caller with no $platform-core-sysadmin claim.
 	rejectGate := func(c *gin.Context) { c.AbortWithStatus(http.StatusForbidden) }
 	RegisterNamespaceCollectionRoutes(engine, repo, rejectGate)

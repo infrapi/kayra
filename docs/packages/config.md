@@ -279,11 +279,12 @@ sysadmin:
     - sandbox-platform-admins
 ```
 
-The group(s) [`middleware.SysadminGate`](middleware.md#sysadmingate)
-requires a caller's resolved groups to intersect, to reach the cluster
-bootstrap endpoints. Authored directly here as real LDAP/IdP group names
-— never derived from a template the operator has no way to override.
-Left empty (the default), `SysadminGate` falls back to a single group,
+The group(s) of the built-in sysadmin binding: a caller whose resolved
+groups intersect them holds every cluster-scoped resource (see
+[the sysadmin binding](../architecture/rbac-and-auth.md#the-sysadmin-binding)),
+and nothing in a namespace. Authored directly here as real LDAP/IdP group
+names — never derived from a template the operator has no way to
+override. Left empty (the default), a single group,
 `middleware.SysadminGroupFor(platform)` (`"<platform>-core-sysadmin"`).
 
 ## Reconciler

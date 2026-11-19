@@ -29,10 +29,11 @@ In order:
 3. Builds the [oidc.Manager](oidc.md#manager), one
    [authz.Cached](authz.md#cached) per `authorizations.<name>`, and the
    [PAT keypair](crypto.md#pat-keypair).
-4. Builds [`middleware.Authenticator`](middleware.md#authenticator) and
-   [`middleware.SysadminGate`](middleware.md#sysadmingate) (wrapping that
-   same `Authenticator`, plus `cfg.Sysadmin.Groups` — falling back to
-   `middleware.SysadminGroupFor(appCfg.AppPlatform)` when left empty).
+4. Builds [`middleware.Authenticator`](middleware.md#authenticator), and the
+   built-in sysadmin binding from `cfg.Sysadmin.Groups` (falling back to
+   `middleware.SysadminGroupFor(appCfg.AppPlatform)` when left empty); the
+   cluster-scoped routes go behind the authenticator and
+   [`rbac.RequireCluster`](rbac.md#requirecluster).
 5. Mounts, via [`infrapi/lib`'s `pkg/server`](https://infrapi.github.io/lib/packages/server/):
    its own endpoints under each of Kayra's groups (`Roots()`: system, the
    primary, then catalog and authorization), `/apis/<group>/v1/-/healthz`,

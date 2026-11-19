@@ -69,7 +69,8 @@ type Route struct {
 // /apis/<api>/<version>/[namespaces/{namespace}/]<resource>[/{name}[/<action>]]
 // convention every Kayra and infrapi/lib route uses. Verbs follow the
 // HTTP method, as infrapi/lib's auth maps them: GET is "list" on a
-// collection (no path parameter past the namespace) and "get" otherwise,
+// collection (the path ends on a name, .../environments/{environment}/modules
+// included) and "get" on an item (it ends on a parameter),
 // POST "create", PUT "update", PATCH "patch", DELETE "delete". Routes
 // outside /apis/<api>/<version>/ are ignored, and so are the app's own
 // operational endpoints under /apis/<api>/<version>/-/: health,
@@ -96,16 +97,14 @@ func DeriveResources(api, version string, routes []Route) []ApiResource {
 			segs = segs[2:]
 		}
 		var names []string
-		hasParam := false
 		for _, s := range segs {
-			if isPathParam(s) {
-				hasParam = true
-				continue
-			}
-			if s != "" {
+			if s != "" && !isPathParam(s) {
 				names = append(names, s)
 			}
 		}
+		// an item when the path ends on a parameter, as infrapi/lib's
+		// auth.ParseResource tells them apart: the verb it asks Kayra for
+		hasParam := isPathParam(segs[len(segs)-1])
 		if len(names) == 0 {
 			continue
 		}

@@ -22,9 +22,9 @@ type Namespace struct {
 
 `POST /apis/system.infrapi.io/v1/namespaces` (body `{name}`) creates it directly — no
 separate `/tenant` child resource. Full CRUD at `/apis/system.infrapi.io/v1/namespaces`
-(collection) and `/apis/system.infrapi.io/v1/namespaces/:namespace` (one), gated by
-[`SysadminGate`](rbac-and-auth.md#two-gates-two-trust-tiers) — same trust
-tier as [ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
+(collection) and `/apis/system.infrapi.io/v1/namespaces/:namespace` (one), decided on the
+[cluster RBAC](rbac-and-auth.md#who-decides) — same as
+[ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
 cluster `RoleBinding` scoped to a namespace that doesn't exist yet.
 
 > [!TIP]
@@ -33,7 +33,7 @@ cluster `RoleBinding` scoped to a namespace that doesn't exist yet.
 **infrapi-cli**
 
 ```bash
-infrapi-cli create system namespaces -d '{"name": "core"}'
+infrapi-cli create namespaces -d '{"name": "core"}'
 ```
 
 **curl**

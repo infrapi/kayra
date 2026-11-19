@@ -157,11 +157,19 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	if len(sysadminGroups) == 0 {
 		sysadminGroups = []string{middleware.SysadminGroupFor(appCfg.AppPlatform)}
 	}
-	sysadminGate := middleware.SysadminGate(authenticator, sysadminGroups)
-
 	rbacRepo := rbac.NewRepository(s, keys)
-	rbac.RegisterClusterRoutes(engine, rbacRepo, sysadminGate)
+	rbacRepo.SetSysadmin(sysadminGroups)
 	catalogRepo := catalog.NewRepository(s, keys)
+
+	// Kayra's own cluster-scoped resources (namespaces, apiregistrations,
+	// the cluster RBAC): authenticated, then decided on the cluster RBAC,
+	// the built-in sysadmin binding first, as /check decides any app's
+	// cluster-scoped resource
+	cluster := engine.Group("", authenticator.Middleware(), rbac.RequireCluster(rbacRepo))
+	pass := func(c *gin.Context) { c.Next() }
+	rbac.RegisterClusterRoutes(cluster, rbacRepo, pass, func(rules []rbac.Rule) *liberrors.Error {
+		return catalogRepo.ValidateClusterRoleRules(rules, appCfg.AppPlatform, appCfg.AppRegion)
+	})
 	rbac.RegisterNamespaceRoutes(engine, rbacRepo, authenticator.Middleware(), func(rules []rbac.Rule) *liberrors.Error {
 		return catalogRepo.ValidateRoleRules(rules, appCfg.AppPlatform, appCfg.AppRegion)
 	})
@@ -182,10 +190,16 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		Resource: func(api, resource, verb string) *liberrors.Error {
 			return catalogRepo.CheckApiResource(api, resource, verb, appCfg.AppPlatform, appCfg.AppRegion)
 		},
+		ClusterResource: func(api, resource, verb string) *liberrors.Error {
+			return catalogRepo.CheckApiClusterResource(api, resource, verb, appCfg.AppPlatform, appCfg.AppRegion)
+		},
+		Builtin: func(api string) bool {
+			return api == catalog.SystemAPI || api == catalog.CatalogAPI || api == rbac.AuthorizationAPI
+		},
 	})
-	catalog.RegisterApiRegistrationRoutes(engine, catalogRepo, sysadminGate, appCfg.AppPlatform, appCfg.AppRegion)
+	catalog.RegisterApiRegistrationRoutes(cluster, catalogRepo, pass, appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, authenticator.Middleware(), appCfg.AppPlatform, appCfg.AppRegion)
-	catalog.RegisterNamespaceCollectionRoutes(engine, catalogRepo, sysadminGate)
+	catalog.RegisterNamespaceCollectionRoutes(cluster, catalogRepo, pass)
 	// Discovery (GET /apis) and each registration's stored openapi spec:
 	// any authenticated caller. Kayra's own groups are read from the
 	// live route table, so they always match what this server serves.

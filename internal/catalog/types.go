@@ -13,19 +13,23 @@
 // never the other way.
 package catalog
 
-import "github.com/infrapi/kayra/internal/store"
+import (
+	"net/http"
+	"slices"
+
+	"github.com/infrapi/kayra/internal/store"
+	liberrors "github.com/infrapi/lib/pkg/errors"
+)
 
 // CatalogAPI and SystemAPI name this package's two API groups,
 // laid out exactly like rbac.AuthorizationAPI: CatalogAPI's
-// cluster-scoped resource (apiregistrations) is gated by
-// middleware.SysadminGate alone, never checked against a stored Rule
-// (see RegisterApiRegistrationRoutes), while its namespace-scoped one
-// (subscriptions) is checked against CatalogAPI via
-// rbac.RequireClusterRBAC (see RegisterNamespaceRoutes) — so a Rule
-// granting CatalogAPI "*" covers subscriptions only, just as one granting
-// AuthorizationAPI "*" never covers cluster roles. SystemAPI
-// (namespaces, the base every other group is scoped by) is
-// SysadminGate-only too (see
+// cluster-scoped resource (apiregistrations) is decided on the cluster
+// RBAC, rbac.RequireCluster (see RegisterApiRegistrationRoutes), while its
+// namespace-scoped one (subscriptions) is checked against CatalogAPI via
+// rbac.RequireClusterRBAC (see RegisterNamespaceRoutes) — so a cluster
+// role scoped to a namespace granting CatalogAPI "*" covers its
+// subscriptions only, never apiregistrations. SystemAPI (namespaces, the
+// base every other group is scoped by) is cluster-scoped too (see
 // RegisterNamespaceCollectionRoutes). "infrapi.io" is a placeholder:
 // SetAPIDomain rebuilds both from a deployment's own domain
 // (config.AppConfig.APIDomain) — call it once, before any Register
@@ -87,6 +91,10 @@ type ApiRegistration struct {
 	Owner       string               `json:"owner" yaml:"owner"`
 	Description string               `json:"description" yaml:"description"`
 	DependsOn   []ApiRegistrationRef `json:"depends_on" yaml:"depends_on"`
+	// AllowedNamespaces are the namespaces that may subscribe to it, and
+	// use it: every one when empty. A namespace taken out of it is
+	// refused at its next /check, its subscription kept.
+	AllowedNamespaces []string `json:"allowed_namespaces" yaml:"allowed_namespaces"`
 	// SyncID is the registration owner's reconcile trigger: bumping it
 	// (to any new value, e.g. a timestamp or a release id) is what
 	// tells every subscription already active against it to reconcile
@@ -209,4 +217,13 @@ type Namespace struct {
 	// Timestamps (created_at/updated_at) are server-owned — set by
 	// store.PutObject on every write, never read from a request.
 	store.Timestamps
+}
+
+// Allows refuses a namespace reg's AllowedNamespaces leaves out.
+func (reg ApiRegistration) Allows(namespace string) *liberrors.Error {
+	if len(reg.AllowedNamespaces) == 0 || slices.Contains(reg.AllowedNamespaces, namespace) {
+		return nil
+	}
+	return liberrors.New(http.StatusForbidden, "catalog.ApiRegistration", "api %q is not open to namespace %q", reg.Name, namespace).
+		WithSolution("ask the owner of api %q, %s, to add %q to its allowed_namespaces", reg.Name, reg.Owner, namespace)
 }

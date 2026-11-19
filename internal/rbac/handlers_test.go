@@ -17,6 +17,17 @@ import (
 
 func noopGate(c *gin.Context) {}
 
+// testSysadminGroup is the built-in sysadmin binding's group in tests.
+const testSysadminGroup = "sandbox-core-sysadmin"
+
+// sysadminGate makes repo's built-in sysadmin binding testSysadminGroup's
+// and authenticates every request as a sysadmin: the cluster routes'
+// gate, as the authenticator and RequireCluster would let a sysadmin in.
+func sysadminGate(repo *Repository) gin.HandlerFunc {
+	repo.SetSysadmin([]string{testSysadminGroup})
+	return fakeAuthGate("root", testSysadminGroup)
+}
+
 func containsGroupNamed(groups []Group, name string) bool {
 	for _, g := range groups {
 		if g.Name == name {
@@ -89,7 +100,7 @@ func newTestEngine(t *testing.T) (*gin.Engine, *Repository) {
 	seedClusterRBAC(t, repo, testAdminGroup, testNamespace)
 
 	engine := gin.New()
-	RegisterClusterRoutes(engine, repo, noopGate)
+	RegisterClusterRoutes(engine, repo, sysadminGate(repo), nil)
 	RegisterNamespaceRoutes(engine, repo, fakeAuthGate(testAdmin, testAdminGroup), nil)
 	return engine, repo
 }
@@ -318,7 +329,7 @@ func TestNamespaceWriteDeniedWithoutClusterRBAC(t *testing.T) {
 	// no seedClusterRBAC: "nobody" has no cluster group membership at all.
 
 	engine := gin.New()
-	RegisterClusterRoutes(engine, repo, noopGate)
+	RegisterClusterRoutes(engine, repo, sysadminGate(repo), nil)
 	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("nobody"), nil)
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/myns/groups", Group{Name: "g1"})
@@ -348,7 +359,7 @@ func TestNamespaceWriteGrantedEndToEndViaHTTPBootstrap(t *testing.T) {
 	repo := newTestRepo(t)
 
 	engine := gin.New()
-	RegisterClusterRoutes(engine, repo, noopGate)
+	RegisterClusterRoutes(engine, repo, sysadminGate(repo), nil)
 	// jdoe's resolved groups (what /oauth2/userinfo would have returned
 	// from their real memberOf, post member_regex) — no sync step needed.
 	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("jdoe", "sandbox-thetenant-sysadmin"), nil)
@@ -405,7 +416,7 @@ func TestNamespaceWriteGrantedEndToEndViaDirectUserBootstrap(t *testing.T) {
 	repo := newTestRepo(t)
 
 	engine := gin.New()
-	RegisterClusterRoutes(engine, repo, noopGate)
+	RegisterClusterRoutes(engine, repo, sysadminGate(repo), nil)
 	// jdoe authenticates with no groups at all — this grant has to come
 	// from the direct user source, not from any LDAP group.
 	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("jdoe"), nil)

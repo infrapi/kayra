@@ -51,7 +51,8 @@ func testKayraConfig(t *testing.T) *gconfig.Config {
 	secret := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}))
 
 	usersPath := filepath.Join(t.TempDir(), "users.yaml")
-	fixture := "users:\n  - id: bootstrap\n    groups: [sandbox-core-sysadmin]\n    attributes:\n      email: bootstrap@example.com\n"
+	fixture := "users:\n  - id: bootstrap\n    groups: [sandbox-core-sysadmin]\n    attributes:\n      email: bootstrap@example.com\n" +
+		"  - id: nobody\n    groups: [sandbox-nobody]\n"
 	if err := os.WriteFile(usersPath, []byte(fixture), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -76,7 +77,7 @@ func testKayraConfig(t *testing.T) *gconfig.Config {
 
 // mintSysadminToken signs a self-JWT off cfg's "self" provider via
 // gcrypto.MintSelfJWT, so the test can call the cluster endpoints
-// Build wires up behind middleware.SysadminGate.
+// Build wires up behind the built-in sysadmin binding.
 func mintSysadminToken(t *testing.T, cfg *gconfig.Config) string {
 	t.Helper()
 
@@ -355,5 +356,38 @@ func TestAPIIndexListsKayraGroups(t *testing.T) {
 	want := "system=system.infrapi.io/v1 catalog=catalog.infrapi.io/v1 authorization=authorization.infrapi.io/v1"
 	if strings.Join(got, " ") != want || !idx.Groups[0].Primary {
 		t.Fatalf("groups = %v, want %s, system primary", got, want)
+	}
+}
+
+// The cluster routes are decided on the cluster RBAC: the bootstrap
+// token, a sysadmin's, creates a namespace; a token whose groups no
+// binding names is refused.
+func TestBuildClusterRoutesAreClusterRBAC(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := testKayraConfig(t)
+	engine, err := Build(testAppConfig(), cfg)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	keys, err := gcrypto.LoadSigningKeys(cfg.Authentifications["self"].Local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nobody, err := gcrypto.MintSelfJWT(keys[0], "nobody", []string{"sandbox-nobody"}, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		token  string
+		status int
+	}{{nobody, http.StatusForbidden}, {mintSysadminToken(t, cfg), http.StatusCreated}} {
+		req := httptest.NewRequest(http.MethodPost, "/apis/system.infrapi.io/v1/namespaces", bytes.NewReader([]byte(`{"name":"thetenant"}`)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+c.token)
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		if w.Code != c.status {
+			t.Errorf("status %d, body %s, want %d", w.Code, w.Body.String(), c.status)
+		}
 	}
 }

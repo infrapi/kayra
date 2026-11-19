@@ -19,8 +19,11 @@ import (
 // Kayra-specific knowledge to apply. Api is the calling app's own full
 // API group URN (e.g. "compute.infrapi.io"), matching how it's
 // actually reachable — never the bare app name.
+//
+// Namespace is "" for a cluster-scoped resource: decided on the cluster
+// RBAC (Repository.AuthorizeCluster), never a namespace's.
 type AuthorizeRequest struct {
-	Namespace string `json:"namespace" binding:"required"`
+	Namespace string `json:"namespace"`
 	Api       string `json:"api" binding:"required"`
 	Resource  string `json:"resource" binding:"required"`
 	Verb      string `json:"verb" binding:"required"`
@@ -49,6 +52,14 @@ type Prechecks struct {
 	// Resource is steps 6–7: the api's OpenAPI spec serves resource
 	// (404), and verb on it (405).
 	Resource func(api, resource, verb string) *liberrors.Error
+	// ClusterResource is a cluster-scoped request's steps: the api is
+	// registered, its spec serves resource cluster-scoped (404), and verb
+	// on it (405).
+	ClusterResource func(api, resource, verb string) *liberrors.Error
+	// Builtin tells Kayra's own apis (system, catalog, authorization):
+	// their resources are its routes', not a spec's, and in a namespace
+	// they are decided as their routes are (CanManageNamespaceRBAC).
+	Builtin func(api string) bool
 }
 
 // RegisterAuthorizeRoute mounts the one route other apps built on
@@ -65,6 +76,13 @@ type Prechecks struct {
 // RBAC grant of its own: a caller can always ask "can I do X", since
 // the answer never reveals more than the caller's own already-resolved
 // identity already could.
+//
+// A cluster-scoped request (Namespace "") is decided on the cluster RBAC
+// alone: the api registered and its spec serving resource cluster-scoped
+// (prechecks.ClusterResource), then AuthorizeCluster, the built-in
+// sysadmin binding and the global cluster role bindings. Kayra's own apis
+// in a namespace are decided as their routes are, CanManageNamespaceRBAC.
+// Any other request, an app's in a namespace, goes through these steps.
 //
 // Each step runs in this order and the first failure is the answer, so
 // the reason a caller gets is the one that actually blocks them:
@@ -101,12 +119,41 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin, ""))
 			return
 		}
+		builtin := prechecks.Builtin != nil && prechecks.Builtin(req.Api)
+
+		// a cluster-scoped resource: the cluster RBAC
+		if req.Namespace == "" {
+			if !builtin && prechecks.ClusterResource != nil {
+				if perr := prechecks.ClusterResource(req.Api, req.Resource, req.Verb); perr != nil {
+					httpapi.Fail(c, perr)
+					return
+				}
+			}
+			allowed, reason, err := repo.AuthorizeCluster(ac.UserID, ac.Groups, req.Api, req.Resource, req.Verb)
+			if err != nil {
+				httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeCluster", ""))
+				return
+			}
+			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason})
+			return
+		}
 
 		if prechecks.Namespace != nil {
 			if perr := prechecks.Namespace(req.Namespace); perr != nil {
 				httpapi.Fail(c, perr)
 				return
 			}
+		}
+
+		// Kayra's own apis in a namespace: as their routes decide them
+		if builtin {
+			allowed, reason, err := repo.CanManageNamespaceRBAC(ac.UserID, ac.Groups, req.Namespace, req.Api, req.Resource, req.Verb)
+			if err != nil {
+				httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".CanManageNamespaceRBAC", ""))
+				return
+			}
+			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason})
+			return
 		}
 
 		memberGroups, reason, err := repo.NamespaceMembership(req.Namespace, ac.UserID, ac.Groups)

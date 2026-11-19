@@ -328,15 +328,17 @@ type ReconcilerConfig struct {
 	GatewayURL string `yaml:"gateway_url"`
 }
 
-// SysadminConfig configures middleware.SysadminGate — the privileged
-// group(s) a caller's resolved groups must intersect to reach the
-// cluster-bootstrap endpoints (rbac's cluster routes, catalog's api
-// registration and namespace-collection routes). Authored directly in config rather
+// SysadminConfig configures the built-in sysadmin binding
+// (rbac.Repository.SetSysadmin): a cluster role granting every
+// cluster-scoped resource (Kayra's namespaces, apiregistrations and
+// cluster RBAC, and any app's cluster-scoped resources) to callers whose
+// resolved groups intersect these, never stored, so it can't be deleted
+// or locked out. It grants nothing in a namespace. Authored directly in config rather
 // than derived from a template, so a deployment can name real
 // LDAP/IdP groups it already has instead of being locked into a
 // single "$platform-core-sysadmin" convention.
 type SysadminConfig struct {
-	// Groups is the list of group names SysadminGate accepts — a
+	// Groups is the list of group names the sysadmin binding binds — a
 	// caller passes if their resolved Groups contains any one of
 	// these. Empty (the typical case, and the default before this was
 	// configurable) falls back to a single group:

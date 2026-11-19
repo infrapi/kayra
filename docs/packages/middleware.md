@@ -75,29 +75,10 @@ request time, never a snapshot taken when the token was minted. For a
 id, so `resolvePAT` reads `SnapshotGroups`/`SnapshotAttributes` instead
 — whatever [tokenapi](tokenapi.md) captured when the PAT was minted.
 
-## SysadminGate
+## The sysadmin group
 
-```go
-gate := middleware.SysadminGate(authenticator, requiredGroups)
-cluster := engine.Group("/apis/authorization.infrapi.io/v1", gate)
-```
-
-Not a separate trust path — a privilege check layered on top of the exact
-same authentication `Authenticator.Middleware()` runs for every other
-endpoint. `authenticator` is the same `*Authenticator` built above;
-`SysadminGate` calls its own `resolveJWT`/`resolvePAT` directly, so a
-self-signed local JWT, a remote provider's token (Okta, say), or a PAT are
-all equally capable of satisfying it, resolved the identical way (live
-`authz.Cached.ResolveUser` lookup, or straight from an already-verified
-token for a [claims-backed](config.md#claims-no-directory-at-all) entry) —
-never a bespoke JWT parse of its own.
-
-What makes it stricter is `requiredGroups`: the resolved `AuthContext.Groups`
-must intersect it, or the request is `403` (a genuinely authenticated caller,
-just not a privileged one — a bad/unverifiable token still fails
-upstream, in `resolveJWT`/`resolvePAT` itself, with `401`). `requiredGroups`
-is `cfg.Sysadmin.Groups` ([config](config.md)) — authored directly, real
-group names a deployment already has — falling back to a single group,
-`SysadminGroupFor(platform)` (`"<platform>-core-sysadmin"`, this instance's
-own `INFRAPI_APP_PLATFORM` rendered into the spec's template), only when
-`Groups` is left empty.
+`SysadminGroupFor(platform)` is `"<platform>-core-sysadmin"`, the default
+group of the built-in sysadmin binding when `sysadmin.groups` is empty
+([config](config.md)). There is no sysadmin middleware: what a caller may
+do on a cluster-scoped resource is [rbac](rbac.md#requirecluster)'s
+cluster RBAC, the sysadmin binding first.
