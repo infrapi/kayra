@@ -22,7 +22,7 @@ func newTestServer(t *testing.T, o config.OAuth2ServerConfig) *Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	return &Server{cfg: o, store: s, prefix: "test/oauth2", issuer: "https://kayra.example.com", docs: map[string]cachedDoc{},
+	return &Server{cfg: o, store: s, prefix: "/test/oauth2", issuer: "https://kayra.example.com", docs: map[string]cachedDoc{},
 		HTTPClient: &http.Client{Timeout: time.Second}}
 }
 

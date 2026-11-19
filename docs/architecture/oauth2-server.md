@@ -94,15 +94,49 @@ it sends the user back to, the resource and the user.
 
 - **The access token** is a JWT of the signer's key (`typ: at+jwt`): `iss`
   Kayra, `sub` the user, `aud` the resource (RFC 8707), `client_id`,
-  `groups`, `jti`, 15 minutes. Kayra checks it as any token of its own.
+  `groups`, `jti`, `sid` its session, 15 minutes. Kayra checks it as any
+  token of its own, and refuses it once its session is revoked.
 - **The refresh token** is opaque, stored hashed. Each use rotates it; a
   refresh token used twice — stolen, or a client's stale copy — revokes its
   whole login. Each refresh resolves the user again in the directory: one
-  gone gets no new token.
+  gone gets no new token. Two uses of one refresh token at once, on two
+  replicas, are taken one after the other (an etcd lock): the second is a
+  reuse.
+
+## Sessions
+
+A session is a login: its refresh tokens, renewed one by one, and the
+access tokens issued with them. A user lists theirs and revokes one, or all.
+A revoked session's refresh token is refused, and its access tokens at once:
+an app's routes ask Kayra's `/check`, which refuses them. Another user's
+sessions take the cluster RBAC's `list` or `delete` on `sessions` of
+`authorization.infrapi.io`, which the sysadmin has.
+
+**infrapi-cli**
+
+```bash
+infrapi-cli auth sessions                        # yours, the current one marked *
+infrapi-cli auth sessions revoke 1JkInLdoa2qUukggiHendg
+infrapi-cli auth sessions revoke --all --user jdoe   # every one of jdoe's
+```
+
+**curl**
+
+```bash
+curl -s https://kayra.example.com/oauth2/sessions -H "Authorization: Bearer $TOKEN"
+# [{"id":"1JkInLdoa2qUukggiHendg","user_id":"jdoe","client_id":"infrapi-cli",
+#   "created_at":"…","last_used_at":"…","expires_at":"…"}]
+curl -s -X DELETE https://kayra.example.com/oauth2/sessions/1JkInLdoa2qUukggiHendg -H "Authorization: Bearer $TOKEN"
+curl -s -X DELETE "https://kayra.example.com/oauth2/sessions?user=jdoe" -H "Authorization: Bearer $TOKEN"
+# {"revoked":2}
+```
+
+A session's `expires_at` is the earlier of `refresh_token_ttl` after its
+login and `refresh_token_idle` after its last use.
 
 ## Endpoints
 
-Every endpoint is unauthenticated: they are the login.
+Every endpoint but the sessions' is unauthenticated: they are the login.
 
 | Method | Path | |
 |---|---|---|
@@ -114,6 +148,8 @@ Every endpoint is unauthenticated: they are the login.
 | POST | `/oauth2/token` | `grant_type=authorization_code` or `refresh_token` |
 | POST | `/oauth2/revoke` | RFC 7009: a refresh token revokes its login, an access token its `jti` |
 | POST | `/oauth2/register` | RFC 7591, when enabled |
+| GET | `/oauth2/sessions` | a bearer token: the caller's sessions, `?user=` another's |
+| DELETE | `/oauth2/sessions[/{id}]` | a bearer token: one session, or every one of the caller's, `?user=`'s |
 
 Until the client and its redirect URI are known good, an error is shown,
 never redirected to. After, the client gets it at its redirect URI, with
@@ -121,13 +157,16 @@ never redirected to. After, the client gets it at its redirect URI, with
 
 ## Use it
 
-`infrapi-cli auth login` moves to this flow next. Until then, by hand, a
-client's token exchange and its renewal:
+`infrapi-cli auth login` runs this flow, renews the token before it
+expires, and `auth logout` revokes its session. By hand, a client's token
+exchange and its renewal:
 
 **infrapi-cli**
 
 ```bash
-infrapi-cli auth whoami    # once auth login uses it: the user the token is for
+infrapi-cli auth login --server https://kayra.example.com
+infrapi-cli auth whoami    # the user the token is for
+infrapi-cli auth logout
 ```
 
 **curl**

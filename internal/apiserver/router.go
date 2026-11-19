@@ -126,15 +126,6 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	discovery.Register(engine, discovery.New(baseURL, apiDomain, discovery.Groups{
 		System: catalog.SystemAPI, Catalog: catalog.CatalogAPI, Authorization: rbac.AuthorizationAPI,
 	}, "/oauth2/userinfo", "/oauth2/discovery/keys", "/apis"))
-	// Kayra's authorization server: tokens of its own, for infrapi-cli and
-	// MCP clients, renewed and revoked
-	if cfg.OAuth2.Enabled {
-		as, err := oauth2server.New(cfg, authenticator, s, keys, baseURL)
-		if err != nil {
-			return nil, err
-		}
-		as.RegisterRoutes(engine)
-	}
 
 	// Empty cfg.Sysadmin.Groups falls back to the single
 	// "$platform-core-sysadmin" group the spec names — a deployment that
@@ -144,6 +135,20 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		sysadminGroups = []string{middleware.SysadminGroupFor(appCfg.AppPlatform)}
 	}
 	rbacRepo := rbac.NewRepository(s, keys)
+	// Kayra's authorization server: tokens of its own, for infrapi-cli and
+	// MCP clients, renewed and revoked
+	if cfg.OAuth2.Enabled {
+		as, err := oauth2server.New(cfg, authenticator, s, keys, baseURL)
+		if err != nil {
+			return nil, err
+		}
+		// another user's sessions: the cluster RBAC's, the sysadmin first
+		as.CanManageSessions = func(ac *middleware.AuthContext, verb string) bool {
+			ok, _, err := rbacRepo.AuthorizeCluster(ac.UserID, ac.Groups, rbac.AuthorizationAPI, "sessions", verb)
+			return ok && err == nil
+		}
+		as.RegisterRoutes(engine)
+	}
 	rbacRepo.SetSysadmin(sysadminGroups)
 	catalogRepo := catalog.NewRepository(s, keys)
 

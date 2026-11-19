@@ -59,7 +59,7 @@ func (s *Server) fromCode(c *gin.Context) {
 	}
 	fam := random(16)
 	now := s.now()
-	if err := s.put("families", fam, family{Client: code.Client, UserID: code.UserID, Created: now}, s.ttl.Refresh); err != nil {
+	if err := s.put("families", fam, family{Client: code.Client, UserID: code.UserID, Created: now, LastUsed: now}, s.ttl.Refresh); err != nil {
 		tokenError(c, http.StatusInternalServerError, "server_error", err.Error())
 		return
 	}
@@ -67,9 +67,15 @@ func (s *Server) fromCode(c *gin.Context) {
 }
 
 func (s *Server) fromRefresh(c *gin.Context) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	h := hash(c.PostForm("refresh_token"))
+	// one use at a time, across replicas too: a second one sees the
+	// token used, a replay, and revokes its session
+	release, err := s.lock(c.Request.Context(), h)
+	if err != nil {
+		tokenError(c, http.StatusServiceUnavailable, "temporarily_unavailable", err.Error())
+		return
+	}
+	defer release()
 	var rt refreshToken
 	ok, err := s.get("refresh", h, &rt)
 	if err != nil {
@@ -114,6 +120,11 @@ func (s *Server) fromRefresh(c *gin.Context) {
 		rt.Groups = info.Groups
 	}
 	rt.Used = true
+	fam.LastUsed = s.now()
+	if err := s.put("families", rt.Family, fam, fam.Created.Add(s.ttl.Refresh).Sub(s.now())); err != nil {
+		tokenError(c, http.StatusInternalServerError, "server_error", err.Error())
+		return
+	}
 	if err := s.put("refresh", h, rt, fam.Created.Add(s.ttl.Refresh).Sub(s.now())); err != nil {
 		tokenError(c, http.StatusInternalServerError, "server_error", err.Error())
 		return
@@ -167,6 +178,7 @@ func (s *Server) sign(rt refreshToken, now time.Time) (string, error) {
 		"jti":       random(16),
 		"client_id": rt.Client,
 		"groups":    rt.Groups,
+		"sid":       rt.Family, // its session: revoked with it
 	}
 	if rt.Scope != "" {
 		claims["scope"] = rt.Scope

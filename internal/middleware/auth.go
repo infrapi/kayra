@@ -73,8 +73,9 @@ type Authenticator struct {
 	PatKey     *rsa.PrivateKey
 	DefaultTTL time.Duration
 	// Revoked tells whether a token of a local provider, Kayra's own, was
-	// revoked, by its jti (internal/oauth2server): none is when nil.
-	Revoked func(jti string) (bool, error)
+	// revoked (internal/oauth2server): its jti, or its session (sid). None
+	// is when nil.
+	Revoked func(claims map[string]any) (bool, error)
 }
 
 // Resolve authenticates token as Middleware does: a PAT, or a JWT of a
@@ -120,13 +121,13 @@ func (a *Authenticator) resolveJWT(token string) (*AuthContext, error) {
 	if !ok {
 		return nil, fmt.Errorf("middleware: unknown provider %q", v.Provider)
 	}
-	if jti, _ := v.Claims["jti"].(string); jti != "" && len(provider.Local) > 0 && a.Revoked != nil {
-		revoked, err := a.Revoked(jti)
+	if len(provider.Local) > 0 && a.Revoked != nil {
+		revoked, err := a.Revoked(v.Claims)
 		if err != nil {
 			return nil, err
 		}
 		if revoked {
-			return nil, fmt.Errorf("middleware: token %s is revoked", jti)
+			return nil, fmt.Errorf("middleware: the token is revoked")
 		}
 	}
 

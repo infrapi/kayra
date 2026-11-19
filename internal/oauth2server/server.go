@@ -78,6 +78,9 @@ type Server struct {
 	HTTPClient *http.Client
 	// Now is the clock: time.Now when nil.
 	Now func() time.Time
+	// CanManageSessions tells whether the cluster RBAC grants the caller
+	// verb on another user's sessions: only their own when nil.
+	CanManageSessions func(ac *middleware.AuthContext, verb string) bool
 
 	mu       sync.Mutex // refresh rotation, in this process
 	docs     map[string]cachedDoc
@@ -143,6 +146,11 @@ func (s *Server) RegisterRoutes(r gin.IRouter) {
 	r.POST("/oauth2/consent", s.consent)
 	r.POST("/oauth2/token", s.token)
 	r.POST("/oauth2/revoke", s.revoke)
+	// a user's logins, the authenticator's caller's
+	sessions := r.Group("/oauth2/sessions", s.auth.Middleware())
+	sessions.GET("", s.listSessions)
+	sessions.DELETE("", s.revokeSessions)
+	sessions.DELETE("/:id", s.revokeSession)
 	if s.cfg.DynamicRegistration.Enabled {
 		r.POST("/oauth2/register", s.register)
 	}
@@ -221,10 +229,11 @@ type refreshToken struct {
 
 // family is a login's refresh tokens: revoked together.
 type family struct {
-	Client  string    `json:"client"`
-	UserID  string    `json:"user_id"`
-	Created time.Time `json:"created"`
-	Revoked bool      `json:"revoked"`
+	Client   string    `json:"client"`
+	UserID   string    `json:"user_id"`
+	Created  time.Time `json:"created"`
+	LastUsed time.Time `json:"last_used"`
+	Revoked  bool      `json:"revoked"`
 }
 
 func (s *Server) key(kind, id string) string { return s.prefix + "/" + kind + "/" + id }
@@ -258,10 +267,21 @@ func (s *Server) take(kind, id string, v any) (bool, error) {
 	return ok, err
 }
 
-// Revoked tells whether an access token's jti was revoked.
-func (s *Server) Revoked(jti string) (bool, error) {
-	var v struct{}
-	return s.get("revoked", jti, &v)
+// Revoked tells whether an access token was revoked: its jti, or its
+// session (sid), the login it is of.
+func (s *Server) Revoked(claims map[string]any) (bool, error) {
+	if jti, _ := claims["jti"].(string); jti != "" {
+		var v struct{}
+		if ok, err := s.get("revoked", jti, &v); ok || err != nil {
+			return ok, err
+		}
+	}
+	if sid, _ := claims["sid"].(string); sid != "" {
+		var fam family
+		ok, err := s.get("families", sid, &fam)
+		return ok && fam.Revoked, err
+	}
+	return false, nil
 }
 
 // --- helpers ---
