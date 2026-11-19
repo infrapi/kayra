@@ -155,3 +155,36 @@ func TestResolveUserIDFromTokenWithFilter(t *testing.T) {
 		t.Fatalf("ResolveUserID = %q, want jdoe", id)
 	}
 }
+
+// exp is required; a local key declaring audiences requires one of them.
+func TestVerifyRequiresExpAndKeyAudience(t *testing.T) {
+	m, priv, kid := newTestManager(t)
+	now := time.Now()
+	if _, err := Verify(m, signTestToken(t, priv, kid, jwt.MapClaims{"sub": "x", "iat": now.Unix()})); err == nil {
+		t.Error("a token never expiring: accepted")
+	}
+
+	m2, priv2, kid2 := newTestManager(t)
+	_ = m2
+	cfg := &config.Config{Authentifications: map[string]config.AuthProvider{"self": {
+		Authorization: "dev",
+		Local:         []config.LocalSigningKey{{Enabled: true, Algorithm: "RS256", Kid: kid2, Issuer: true, Secret: pemEncodeRSAPrivateKey(priv2), Audiences: []string{"infrapi"}}},
+	}}}
+	s, err := store.NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	m3, err := oidc.NewManager(s, store.NewKeys(""), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := jwt.MapClaims{"sub": "x", "iat": now.Unix(), "exp": now.Add(time.Hour).Unix()}
+	if _, err := Verify(m3, signTestToken(t, priv2, kid2, base)); err == nil {
+		t.Error("no aud, the key declaring one: accepted")
+	}
+	base["aud"] = "infrapi"
+	if _, err := Verify(m3, signTestToken(t, priv2, kid2, base)); err != nil {
+		t.Errorf("its aud: %v", err)
+	}
+}

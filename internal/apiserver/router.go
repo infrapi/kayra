@@ -52,6 +52,8 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		return nil, fmt.Errorf("apiserver: open store: %w", err)
 	}
 
+	// $region and $platform, this instance's, in what tokens must carry
+	cfg.RenderClaims(appCfg.AppRegion, appCfg.AppPlatform)
 	manager, err := oidc.NewManager(s, keys, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("apiserver: build oidc manager: %w", err)

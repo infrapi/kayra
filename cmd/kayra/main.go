@@ -327,6 +327,12 @@ func runTokenMint(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	appCfg, err := libconfig.NewConfigFromMap(cfg.App.ToVariables(), cmd.String("config")).GetAppConfig()
+	if err != nil {
+		return fmt.Errorf("token mint: resolve app: config: %w", err)
+	}
+	cfg.RenderClaims(appCfg.AppRegion, appCfg.AppPlatform) // the aud it signs, as serve checks it
+
 	name := cmd.String("provider")
 	provider, ok := cfg.Authentifications[name]
 	if !ok {

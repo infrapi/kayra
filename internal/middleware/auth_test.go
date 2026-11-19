@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +77,7 @@ func newClaimsTestAuthenticator(t *testing.T, srv *httptest.Server) (*Authentica
 				Remote: &config.RemoteAuthConfig{
 					Enabled: true,
 					URL:     srv.URL + "/.well-known/openid-configuration",
+					Claims:  map[string]config.ClaimValues{"iss": {srv.URL}, "aud": {"api://infrapi"}},
 					UserID:  config.UserIDConfig{From: "token", Field: "sub"},
 				},
 			},
@@ -145,6 +147,8 @@ func TestAuthenticatorResolvesGroupsFromClaimsNoLDAP(t *testing.T) {
 		"sub":      "jdoe",
 		"email":    "jdoe@example.com",
 		"MemberOf": []string{"sandbox-core-sysadmin", "sandbox-sre-sysadmin"},
+		"iss":      srv.URL,
+		"aud":      []string{"api://infrapi"},
 		"iat":      now.Unix(),
 		"exp":      now.Add(time.Hour).Unix(),
 	})
@@ -218,5 +222,76 @@ func TestAuthenticatorPATUsesSnapshotForClaimsBackend(t *testing.T) {
 	}
 	if ac.Attributes["email"] != "jdoe@example.com" {
 		t.Fatalf(`Attributes["email"] = %q, want the PAT's own snapshot`, ac.Attributes["email"])
+	}
+}
+
+// A remote provider's token must carry its claims (here iss and aud, a
+// list aud one of its elements), and expire: a token the provider issued
+// for another application, or never expiring, is refused.
+func TestAuthenticatorChecksIssuerAudienceExpiry(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	srv := startFakeOktaProvider(t, "test-kid", &priv.PublicKey)
+	auth, _, _, _ := newClaimsTestAuthenticator(t, srv)
+	now := time.Now()
+	good := jwt.MapClaims{"sub": "jdoe", "MemberOf": []string{"sandbox-acme-devs"}, "iss": srv.URL, "aud": "api://infrapi", "iat": now.Unix(), "exp": now.Add(time.Hour).Unix()}
+	with := func(k string, v any) jwt.MapClaims {
+		c := jwt.MapClaims{}
+		for kk, vv := range good {
+			c[kk] = vv
+		}
+		if v == nil {
+			delete(c, k)
+		} else {
+			c[k] = v
+		}
+		return c
+	}
+	for name, c := range map[string]struct {
+		claims jwt.MapClaims
+		ok     bool
+		detail string
+	}{
+		"good":                 {good, true, ""},
+		"another application":  {with("aud", "api://reporting"), false, "token aud api://reporting is none of provider okta's"},
+		"an audience list":     {with("aud", []string{"x", "api://infrapi"}), true, ""},
+		"no audience":          {with("aud", nil), false, "token has no aud"},
+		"another issuer":       {with("iss", "https://evil.example.com"), false, "token iss https://evil.example.com is none"},
+		"no issuer":            {with("iss", nil), false, "token has no iss"},
+		"never expiring":       {with("exp", nil), false, "exp claim is required"},
+		"issued in the future": {with("iat", now.Add(time.Hour).Unix()), false, "used before issued"},
+	} {
+		c := c
+		ctx, w := newAuthTestGinContext(t, "Bearer "+signClaimsTestToken(t, priv, "test-kid", c.claims))
+		auth.Middleware()(ctx)
+		if ctx.IsAborted() == c.ok || !c.ok && !strings.Contains(w.Body.String(), c.detail) {
+			t.Errorf("%s: aborted %v, body %s", name, ctx.IsAborted(), w.Body.String())
+		}
+	}
+}
+
+// Okta's org authorization server: every app's tokens name the org in
+// aud; cid tells the kayra app's apart.
+func TestAuthenticatorChecksOktaClient(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	srv := startFakeOktaProvider(t, "test-kid", &priv.PublicKey)
+	auth, _, _, _ := newClaimsTestAuthenticator(t, srv)
+	auth.Config.Authentifications["okta"].Remote.Claims = map[string]config.ClaimValues{"cid": {"0oakayra"}}
+	now := time.Now()
+	for cid, ok := range map[string]bool{"0oakayra": true, "0oaanother": false} {
+		tok := signClaimsTestToken(t, priv, "test-kid", jwt.MapClaims{
+			"sub": "jdoe", "MemberOf": []string{"sandbox-acme-devs"}, "aud": srv.URL, "cid": cid,
+			"iat": now.Unix(), "exp": now.Add(time.Hour).Unix(),
+		})
+		ctx, w := newAuthTestGinContext(t, "Bearer "+tok)
+		auth.Middleware()(ctx)
+		if ctx.IsAborted() == ok {
+			t.Errorf("cid %s: aborted %v, body %s", cid, ctx.IsAborted(), w.Body.String())
+		}
 	}
 }

@@ -176,3 +176,32 @@ func findKid(keys []JWK, kid string) (JWK, bool) {
 	}
 	return JWK{}, false
 }
+
+// Required is what a token of provider, signed by its key kid, must carry:
+// each claim one of its values, or for a list (aud, say) one of its
+// elements. A remote provider's are its claims setting; a local key's,
+// aud among its audiences when it declares any. Nothing else is assumed:
+// which claim tells a provider's tokens for InfraPI apart (aud, cid, azp,
+// iss...) is the configuration's choice.
+func (m *Manager) Required(provider, kid string) (map[string][]string, error) {
+	if keys, ok := m.local[provider]; ok {
+		for _, k := range keys {
+			if k.Kid == kid {
+				if len(k.Audiences) == 0 {
+					return nil, nil
+				}
+				return map[string][]string{"aud": k.Audiences}, nil
+			}
+		}
+		return nil, fmt.Errorf("oidc: provider %s has no key %q", provider, kid)
+	}
+	p, ok := m.cfg.Authentifications[provider]
+	if !ok || p.Remote == nil {
+		return nil, fmt.Errorf("oidc: unknown provider %q", provider)
+	}
+	out := make(map[string][]string, len(p.Remote.Claims))
+	for k, v := range p.Remote.Claims {
+		out[k] = v
+	}
+	return out, nil
+}

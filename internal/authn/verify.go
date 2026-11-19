@@ -5,6 +5,8 @@ package authn
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -31,13 +33,16 @@ type Verified struct {
 // Verify parses tokenString as a JWT, locates the provider owning its kid
 // via m.FindKey, checks its signature, and enforces iat not in the future
 // and exp not in the past — the spec's "obviously then token must contain
-// 'iat' and can't be in future, and 'exp' can't be expired."
+// 'iat' and can't be in future, and 'exp' can't be expired." exp is
+// required. Then each claim the provider requires (oidc.Manager.Required:
+// its claims setting, cid for Okta's org tokens, aud for another) must be
+// one of its values.
 func Verify(m *oidc.Manager, tokenString string) (*Verified, error) {
-	var provider string
+	var provider, kid string
 
 	claims := jwt.MapClaims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
-		kid, _ := t.Header["kid"].(string)
+		kid, _ = t.Header["kid"].(string)
 		if kid == "" {
 			return nil, fmt.Errorf("authn: token has no kid header")
 		}
@@ -49,7 +54,7 @@ func Verify(m *oidc.Manager, tokenString string) (*Verified, error) {
 		provider = name
 
 		return jwk.PublicKey()
-	}, jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}))
+	}, jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}), jwt.WithExpirationRequired(), jwt.WithIssuedAt())
 	if err != nil {
 		return nil, fmt.Errorf("authn: verify token: %w", err)
 	}
@@ -62,6 +67,19 @@ func Verify(m *oidc.Manager, tokenString string) (*Verified, error) {
 	}
 	if exp, err := claims.GetExpirationTime(); err == nil && exp != nil && exp.Before(time.Now()) {
 		return nil, fmt.Errorf("authn: token exp %s is in the past", exp.Time)
+	}
+
+	required, err := m.Required(provider, kid)
+	if err != nil {
+		return nil, fmt.Errorf("authn: verify token: %w", err)
+	}
+	for _, name := range slices.Sorted(maps.Keys(required)) {
+		if _, ok := claims[name]; !ok {
+			return nil, fmt.Errorf("authn: token has no %s, which provider %s requires: one of %v", name, provider, required[name])
+		}
+		if !claimIsOneOf(claims[name], required[name]) {
+			return nil, fmt.Errorf("authn: token %s %v is none of provider %s's %v", name, claims[name], provider, required[name])
+		}
 	}
 
 	return &Verified{Provider: provider, Claims: claims, Token: tokenString}, nil
@@ -105,4 +123,20 @@ func (v *Verified) ExpiresIn(fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+// claimIsOneOf tells whether claim, a string or a list of them (aud), is,
+// or has an element that is, one of values.
+func claimIsOneOf(claim any, values []string) bool {
+	switch c := claim.(type) {
+	case string:
+		return slices.Contains(values, c)
+	case []any:
+		for _, e := range c {
+			if s, ok := e.(string); ok && slices.Contains(values, s) {
+				return true
+			}
+		}
+	}
+	return false
 }

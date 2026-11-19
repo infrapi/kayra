@@ -4,6 +4,7 @@ import (
 	"fmt"
 	neturl "net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -155,6 +156,14 @@ func (p AuthProvider) validate(name string, authz map[string]AuthorizationBacken
 	case p.Remote != nil:
 		if p.Remote.URL == "" {
 			return fmt.Errorf("authentifications.%s.remote: url is required", name)
+		}
+		if len(p.Remote.Claims) == 0 {
+			return fmt.Errorf("authentifications.%s.remote: claims is required: what its tokens for InfraPI carry, cid: <client id> for Okta's org authorization server, aud: <audience> for another", name)
+		}
+		for claim, values := range p.Remote.Claims {
+			if strings.TrimSpace(claim) == "" || len(values) == 0 || slices.Contains(values, "") {
+				return fmt.Errorf("authentifications.%s.remote.claims.%s: a claim and one value at least, none empty", name, claim)
+			}
 		}
 		switch p.Remote.UserID.From {
 		case "token", "userinfo_endpoint":

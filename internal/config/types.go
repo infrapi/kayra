@@ -119,6 +119,14 @@ type RemoteAuthConfig struct {
 	// through a corporate egress proxy and another reachable directly
 	// is a real shape, not a hypothetical.
 	Proxy string `yaml:"proxy"`
+	// Claims are what a token of this provider must carry, at least one:
+	// each claim one of its values (a value alone, or a list), or for a
+	// list claim (aud) one of its elements. Which claim tells the
+	// provider's tokens for InfraPI apart is the deployment's choice: cid
+	// for Okta's org authorization server, aud for another, iss... $region
+	// and $platform, this instance's (INFRAPI_APP_REGION,
+	// INFRAPI_APP_PLATFORM), are rendered in the values (RenderClaims).
+	Claims map[string]ClaimValues `yaml:"claims"`
 	// OAuth2, when set, lets `infrapi-cli login` authenticate against
 	// this provider via a real browser-based Authorization Code + PKCE
 	// flow, brokered through this server (see internal/oauth2broker and

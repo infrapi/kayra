@@ -28,6 +28,7 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi}
       user_id:
         from: token
         field: sub
@@ -179,6 +180,7 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi}
       user_id:
         from: token
         field: sub
@@ -209,6 +211,7 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi}
       user_id:
         from: token
         field: sub
@@ -241,6 +244,7 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi}
       user_id:
         from: token
         field: sub
@@ -515,6 +519,7 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi}
       user_id:
         from: userinfo_endpoint
         field: sub
@@ -560,6 +565,7 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi}
       user_id:
         from: userinfo_endpoint
         field: sub
@@ -586,6 +592,7 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi}
       user_id:
         from: userinfo_endpoint
         field: sub
@@ -613,6 +620,7 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi}
       user_id:
         from: userinfo_endpoint
         field: sub
@@ -641,6 +649,7 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi}
       user_id:
         from: userinfo_endpoint
         field: sub

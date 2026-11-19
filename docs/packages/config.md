@@ -201,7 +201,16 @@ it resolves users against, and exactly one of:
   ...): `url` to the discovery document, and `user_id` saying where the
   user id comes from (`from: token` reads a claim, `from:
   userinfo_endpoint` calls the provider's userinfo endpoint), optionally
-  narrowed by a regex `filter`. Two more fields are optional:
+  narrowed by a regex `filter`; and `claims`, required: what its tokens
+  for InfraPI carry, each claim one of its values (a value, or a list),
+  or for a list claim such as `aud` one of its elements. Which claim tells
+  them apart from the provider's tokens for any other application is the
+  deployment's choice: `cid: <the app's client id>` for Okta's org
+  authorization server (its `aud` is the org, every app's),
+  `aud: <audience>` for another, `iss` too. `$region` and `$platform`,
+  this instance's (`INFRAPI_APP_REGION`, `INFRAPI_APP_PLATFORM`), are
+  rendered in the values. A token's `exp` is required. Two more fields are
+  optional:
   - `proxy` — an HTTP(S) proxy URL every outbound call *this* provider
     makes (discovery, JWKS, userinfo, and `oauth2`'s own authorize/token
     calls below) is routed through, via
@@ -228,7 +237,9 @@ it resolves users against, and exactly one of:
 - `local` — one or more RSA signing keys this instance trusts for
   self-issued tokens (the `self` provider the spec's bootstrap flow uses):
   `kid`, `algorithm`, whether it can `issuer` (sign, not just verify), and
-  the PEM-encoded `secret`.
+  the PEM-encoded `secret`; `audiences`, optional (`$region` and
+  `$platform` rendered): the `aud` it signs into its tokens, which a token
+  of that key must then name one of.
 
 ```yaml
 authentifications:
@@ -237,6 +248,8 @@ authentifications:
     remote:
       enabled: true
       url: https://example.okta.com/.well-known/openid-configuration
+      claims:
+        cid: 0oa1example   # the kayra app of this platform/region
       user_id: {from: token, field: sub, filter: '^([^@]+)@'}
       proxy: http://proxy.corp.example:8080
       oauth2:

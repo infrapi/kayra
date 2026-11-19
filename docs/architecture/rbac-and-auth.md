@@ -43,7 +43,9 @@ Authorization: Bearer <token>
                  │                                      │
         read kid header, oidc.Manager.FindKey(kid)      │
                  │                                      │
-        verify signature, iat not future, exp not past  │
+        verify signature, iat not future, exp required  │
+        and not past; the provider's claims (cid, aud,  │
+        iss...: its config's), a local key's aud        │
                  │                                      │
         resolve user id (claim, or call userinfo_endpoint)
                  │                                      │

@@ -49,6 +49,8 @@ authentifications:
     remote:
       enabled: true
       url: https://example-admin.okta-emea.com/.well-known/openid-configuration
+      claims:
+        cid: 0oa1example   # Okta's org authorization server: aud is the org, cid the app
       user_id:
         from: token
         field: sub
@@ -67,6 +69,7 @@ authentifications:
     remote:
       enabled: true
       url: https://gitlab.example.com/.well-known/openid-configuration
+      claims: {aud: api://infrapi-$region-$platform}   # a CI job's id_tokens ask for it
       user_id:
         from: token
         field: user_login
