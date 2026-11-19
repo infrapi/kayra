@@ -314,24 +314,63 @@ func (s *Server) errorPage(c *gin.Context, status int, title, detail string) {
 	c.String(status, errorPage, html.EscapeString(title), html.EscapeString(title), html.EscapeString(detail))
 }
 
-const pageStyle = `<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;color:#1a1a1a}
-h1{font-size:1.3rem}dl{display:grid;grid-template-columns:auto 1fr;gap:.4rem 1rem}dt{color:#666}dd{margin:0;word-break:break-all}
-button{font-size:1rem;padding:.5rem 1.2rem;margin-right:.5rem;border-radius:.4rem;border:1px solid #888;background:#fff;cursor:pointer}
-button[value=allow]{background:#1a56db;color:#fff;border-color:#1a56db}</style>`
+// pageHead is every page's head: the InfraPI portal's look, dark surfaces,
+// hairline edges, its blue accent, Geist when installed; nothing fetched,
+// the pages' Content-Security-Policy allowing no font or image. Its percent
+// signs are doubled: every page is a format.
+const pageHead = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">
+<style>
+:root{--bg:#050506;--card:#121215;--hover:#18181c;--edge:#222227;--text:#ededef;--text-2:#a1a1ab;--muted:#6e6e78;
+--accent:#1a8cff;--accent-2:#00d8ff;--accent-dim:#0075fd;--warning:#f59e0b;--danger:#ef4444;--code-bg:#12151c;--code-edge:#262a33;
+--font:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"Geist Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;font-family:var(--font);
+background:radial-gradient(60rem 30rem at 50%% -10%%,color-mix(in srgb,var(--accent) 14%%,transparent),transparent),var(--bg);color:var(--text)}
+.card{width:100%%;max-width:28rem;background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:2rem 2.2rem;
+box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.brand{font-weight:700;letter-spacing:-.01em;font-size:.95rem;margin-bottom:1.4rem;color:var(--text-2)}
+.brand b{background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+h1{font-size:1.2rem;font-weight:600;margin:0 0 1rem;line-height:1.4}
+p{color:var(--text-2);font-size:.9rem;line-height:1.55;margin:.9rem 0}
+p.warn{color:var(--warning)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:.45rem 1rem;margin:1.2rem 0;font-size:.9rem}
+dt{color:var(--muted)}dd{margin:0;word-break:break-all}
+strong{color:var(--text)}
+.actions{display:flex;gap:.6rem;margin-top:1.5rem}
+button,a.choice{font:inherit;font-weight:600;font-size:.95rem;border-radius:9px;padding:.65rem 1.3rem;cursor:pointer;text-decoration:none;
+border:1px solid var(--edge);background:transparent;color:var(--text)}
+button:hover,a.choice:hover{background:var(--hover)}
+button.primary,a.choice{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover,a.choice:hover{background:var(--accent-dim)}
+a.choice{display:block;text-align:center;margin:.6rem 0}
+code.code{display:block;font-family:var(--mono);font-size:.95rem;background:var(--code-bg);border:1px solid var(--code-edge);
+border-radius:9px;padding:.8rem 1rem;word-break:break-all;margin:1rem 0}
+</style>`
 
-const consentPage = `<!doctype html><html><head><meta charset="utf-8"><title>Authorize %[1]s</title>` + pageStyle + `</head><body>
+const consentPage = pageHead + `<title>Authorize %[1]s</title></head><body><main class="card">
+<div class="brand"><b>InfraPI</b> · Kayra</div>
 <h1>%[1]s wants to act on your behalf</h1>
 <dl><dt>It sends you back to</dt><dd><strong>%[2]s</strong></dd><dt>On</dt><dd>%[3]s</dd><dt>As</dt><dd>%[4]s</dd></dl>
 <p>It gets what your roles grant you there, until you revoke it. Allow it only if you started this from %[2]s.</p>
 <form method="post" action="/oauth2/consent"><input type="hidden" name="consent" value="%[5]s">
-<button name="decision" value="allow">Allow</button><button name="decision" value="deny">Deny</button></form></body></html>`
+<div class="actions"><button class="primary" name="decision" value="allow">Allow</button><button name="decision" value="deny">Deny</button></div>
+</form></main></body></html>`
 
-const codePage = `<!doctype html><html><head><meta charset="utf-8"><title>Login code</title>` + pageStyle + `</head><body>
-<h1>Logged in</h1><p>Paste this code in your terminal, where infrapi-cli asks for it:</p>
-<p><code style="font-size:1.1rem;word-break:break-all;user-select:all">%s</code></p><p>It works once, within a minute.</p></body></html>`
+const codePage = pageHead + `<title>Login code</title></head><body><main class="card">
+<div class="brand"><b>InfraPI</b> · Kayra</div>
+<h1>Paste this code into your terminal</h1>
+<code class="code" id="code" style="user-select:all">%s</code>
+<div class="actions"><button class="primary" type="button" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('code').textContent);this.textContent='Copied'">Copy</button></div>
+<p>Paste it at the <code>infrapi-cli auth login --no-browser</code> prompt. It works once, within a minute.</p>
+<p class="warn">Only paste it into a terminal where you started this login yourself. Never send it to anyone.</p>
+</main></body></html>`
 
-const choicePage = `<!doctype html><html><head><meta charset="utf-8"><title>Log in</title>` + pageStyle + `
-<style>.choice{display:block;padding:.7rem 1rem;margin:.5rem 0;border:1px solid #888;border-radius:.4rem;color:inherit;text-decoration:none}</style></head><body>
-<h1>Log in to %s with</h1>%s</body></html>`
+const choicePage = pageHead + `<title>Log in</title></head><body><main class="card">
+<div class="brand"><b>InfraPI</b> · Kayra</div>
+<h1>Log in to %s with</h1>%s
+<p>You will be redirected there to sign in.</p></main></body></html>`
 
-const errorPage = `<!doctype html><html><head><meta charset="utf-8"><title>%s</title>` + pageStyle + `</head><body><h1>%s</h1><p>%s</p></body></html>`
+const errorPage = pageHead + `<title>%s</title></head><body><main class="card">
+<div class="brand"><b>InfraPI</b> · Kayra</div>
+<h1>%s</h1><p>%s</p></main></body></html>`

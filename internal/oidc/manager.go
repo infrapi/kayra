@@ -3,6 +3,8 @@ package oidc
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/infrapi/kayra/internal/config"
 	"github.com/infrapi/kayra/internal/crypto"
@@ -125,47 +127,49 @@ func (m *Manager) AllKeys() []JWK {
 	return all
 }
 
-// FindKey locates the public key identified by kid across every provider.
-// Local (self-signed) providers are checked first since that needs no I/O.
-// Remote providers are checked against their cache; only if no provider's
-// cache holds kid are all remote caches refreshed once and rechecked — the
-// spec's "absent from cache -> refresh, otherwise don't" rule.
-func (m *Manager) FindKey(kid string) (provider string, jwk JWK, err error) {
+// ProviderKey is a key, and the provider holding it.
+type ProviderKey struct {
+	Provider string
+	Key      JWK
+}
+
+// FindKeys are every provider's key identified by kid, by provider name:
+// two providers may hold the same key (two entries for one Okta org, say),
+// their tokens then told apart by their claims (authn.Verify). Local
+// (self-signed) providers' keys need no I/O; remote ones are read from
+// their caches, and only when no cache holds kid are all remote caches
+// refreshed once and read again — the spec's "absent from cache ->
+// refresh, otherwise don't" rule.
+func (m *Manager) FindKeys(kid string) ([]ProviderKey, error) {
+	var out []ProviderKey
 	for name, keys := range m.local {
 		for _, k := range keys {
 			if k.Kid == kid {
-				return name, NewJWK(name, k.Kid, k.Algorithm, k.Public), nil
+				out = append(out, ProviderKey{name, NewJWK(name, k.Kid, k.Algorithm, k.Public)})
 			}
 		}
 	}
-
-	for name, p := range m.cfg.Authentifications {
-		if p.Remote == nil || !p.Remote.Enabled {
-			continue
-		}
-		keys, err := m.cachedKeys(name)
-		if err != nil {
-			continue
-		}
-		if k, ok := findKid(keys, kid); ok {
-			return name, k, nil
-		}
-	}
-
-	for name, p := range m.cfg.Authentifications {
-		if p.Remote == nil || !p.Remote.Enabled {
-			continue
-		}
-		keys, err := m.RefreshRemote(name)
-		if err != nil {
-			continue
-		}
-		if k, ok := findKid(keys, kid); ok {
-			return name, k, nil
+	collect := func(read func(string) ([]JWK, error)) {
+		for name, p := range m.cfg.Authentifications {
+			if p.Remote == nil || !p.Remote.Enabled {
+				continue
+			}
+			if keys, err := read(name); err == nil {
+				if k, ok := findKid(keys, kid); ok {
+					out = append(out, ProviderKey{name, k})
+				}
+			}
 		}
 	}
-
-	return "", JWK{}, fmt.Errorf("oidc: no provider holds kid %q", kid)
+	collect(m.cachedKeys)
+	if len(out) == 0 {
+		collect(m.RefreshRemote)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("oidc: no provider holds kid %q", kid)
+	}
+	slices.SortFunc(out, func(a, b ProviderKey) int { return strings.Compare(a.Provider, b.Provider) })
+	return out, nil
 }
 
 func findKid(keys []JWK, kid string) (JWK, bool) {

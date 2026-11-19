@@ -31,13 +31,16 @@ type Verified struct {
 }
 ```
 
-Parses the token, reads its `kid` header, and locates the owning provider
-and public key via [`oidc.Manager.FindKey`](oidc.md#manager) — so a bad or
-unknown `kid` fails before any signature check runs. Only `RS256`/`RS384`/
-`RS512` are accepted. Beyond signature validity, two checks the JWT library
-doesn't do on its own: `iat` must not be in the future, `exp` (if present)
-must not be in the past — the spec's "obviously then token must contain
-'iat' and can't be in future, and 'exp' can't be expired."
+Parses the token, reads its `kid` header, and locates every provider holding
+that key via [`oidc.Manager.FindKeys`](oidc.md#manager) — so a bad or
+unknown `kid` fails before any signature check runs. It tries each, by name,
+until one accepts the token, its signature then its claims: two providers
+sharing a key tell their tokens apart by their claims (a `cid`, an `aud`).
+When none does, the error gives each one's reason. Only `RS256`/`RS384`/
+`RS512` are accepted. Beyond signature validity: `exp` is required and must
+not be in the past, `iat` must not be in the future — the spec's "obviously
+then token must contain 'iat' and can't be in future, and 'exp' can't be
+expired." — and the provider's claims must be there.
 
 ```go
 ttl := v.ExpiresIn(fallback)

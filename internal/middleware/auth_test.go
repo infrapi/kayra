@@ -295,3 +295,41 @@ func TestAuthenticatorChecksOktaClient(t *testing.T) {
 		}
 	}
 }
+
+// Two providers holding the same key, one Okta org's two entries: a token
+// is the provider's whose claims it carries, whichever the map gives
+// first; one carrying neither's is refused, with each one's reason.
+func TestAuthenticatorSharedKeys(t *testing.T) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	srv := startFakeOktaProvider(t, "test-kid", &priv.PublicKey)
+	auth, _, _, _ := newClaimsTestAuthenticator(t, srv)
+	auth.Config.Authentifications["okta"].Remote.Claims = map[string]config.ClaimValues{"cid": {"0oakayra"}}
+	auth.Config.Authentifications["ci"] = config.AuthProvider{Authorization: "okta", Remote: &config.RemoteAuthConfig{
+		Enabled: true, URL: srv.URL + "/.well-known/openid-configuration",
+		Claims: map[string]config.ClaimValues{"aud": {"api://infrapi"}},
+		UserID: config.UserIDConfig{From: "token", Field: "sub"},
+	}}
+	now := time.Now()
+	sign := func(extra jwt.MapClaims) string {
+		c := jwt.MapClaims{"sub": "jdoe", "MemberOf": []string{"sandbox-acme-devs"}, "iat": now.Unix(), "exp": now.Add(time.Hour).Unix()}
+		for k, v := range extra {
+			c[k] = v
+		}
+		return signClaimsTestToken(t, priv, "test-kid", c)
+	}
+	for i := 0; i < 20; i++ { // the map's order varies: the answer does not
+		for want, tok := range map[string]string{"okta": sign(jwt.MapClaims{"cid": "0oakayra"}), "ci": sign(jwt.MapClaims{"aud": "api://infrapi"})} {
+			ac, err := auth.Resolve(tok)
+			if err != nil || ac.Provider != want {
+				t.Fatalf("%s's token: %+v %v", want, ac, err)
+			}
+		}
+	}
+	_, err = auth.Resolve(sign(jwt.MapClaims{"cid": "0oaanother"}))
+	if err == nil || !strings.Contains(err.Error(), "provider ci requires") || !strings.Contains(err.Error(), "provider okta's") {
+		t.Fatalf("neither's: %v", err)
+	}
+}

@@ -30,14 +30,15 @@ manager.LocalKeys(provider)       // []crypto.SigningKey for a local: provider
 manager.KeysFor(provider)         // []JWK — cached if remote, decoded if local
 manager.RefreshRemote(provider)   // re-fetch discovery + JWKS, replace the cache
 manager.AllKeys()                 // every enabled provider's keys, aggregated
-manager.FindKey(kid)              // locate (provider, JWK) by kid, across every provider
+manager.FindKeys(kid)             // every (provider, JWK) holding kid, by provider name
 ```
 
-`FindKey` checks local providers first (no I/O), then every remote
-provider's **cache**, and only refreshes a remote provider's JWKS (once,
+`FindKeys` checks local providers first (no I/O), then every remote
+provider's **cache**, and only refreshes the remote providers' JWKS (once,
 each) if no cache held the `kid` — the spec's "absent from cache ->
-refresh, otherwise don't" rule. [authn.Verify](authn.md) is `FindKey`'s one
-caller.
+refresh, otherwise don't" rule. Two providers may hold the same key, two
+entries for one Okta org say: it answers both, and
+[authn.Verify](authn.md) tries each.
 
 Cached JWKS live at `keys.AuthCache(provider)` in the store — see
 [`kayra cache clean --scope auth`](../cli.md#cache-clean).

@@ -44,7 +44,8 @@ Authorization: Bearer <token>
         │                                              │
         └─ otherwise, parse as JWT                     │
                  │                                      │
-        read kid header, oidc.Manager.FindKey(kid)      │
+        read kid header, oidc.Manager.FindKeys(kid)     │
+        (each provider holding it, until one accepts)   │
                  │                                      │
         verify signature, iat not future, exp required  │
         and not past; the provider's claims (cid, aud,  │

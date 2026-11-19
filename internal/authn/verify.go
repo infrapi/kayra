@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -30,30 +31,47 @@ type Verified struct {
 	userinfo map[string]any
 }
 
-// Verify parses tokenString as a JWT, locates the provider owning its kid
-// via m.FindKey, checks its signature, and enforces iat not in the future
+// Verify parses tokenString as a JWT, locates the providers holding its kid
+// via m.FindKeys and tries each, until one accepts it: its signature, and enforces iat not in the future
 // and exp not in the past — the spec's "obviously then token must contain
 // 'iat' and can't be in future, and 'exp' can't be expired." exp is
 // required. Then each claim the provider requires (oidc.Manager.Required:
 // its claims setting, cid for Okta's org tokens, aud for another) must be
 // one of its values.
 func Verify(m *oidc.Manager, tokenString string) (*Verified, error) {
-	var provider, kid string
-
-	claims := jwt.MapClaims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
-		kid, _ = t.Header["kid"].(string)
-		if kid == "" {
-			return nil, fmt.Errorf("authn: token has no kid header")
+	header, _, err := jwt.NewParser().ParseUnverified(tokenString, jwt.MapClaims{})
+	if err != nil {
+		return nil, fmt.Errorf("authn: verify token: %w", err)
+	}
+	kid, _ := header.Header["kid"].(string)
+	if kid == "" {
+		return nil, fmt.Errorf("authn: token has no kid header")
+	}
+	candidates, err := m.FindKeys(kid)
+	if err != nil {
+		return nil, fmt.Errorf("authn: verify token: %w", err)
+	}
+	// every provider holding the key, until one accepts the token: its
+	// signature, then its claims
+	var refusals []string
+	for _, c := range candidates {
+		v, err := verifyWith(m, tokenString, kid, c)
+		if err == nil {
+			return v, nil
 		}
-
-		name, jwk, err := m.FindKey(kid)
-		if err != nil {
+		if len(candidates) == 1 {
 			return nil, err
 		}
-		provider = name
+		refusals = append(refusals, err.Error())
+	}
+	return nil, fmt.Errorf("authn: no provider holding key %s accepts the token: %s", kid, strings.Join(refusals, "; "))
+}
 
-		return jwk.PublicKey()
+// verifyWith verifies tokenString as a token of c.Provider, signed by c.Key.
+func verifyWith(m *oidc.Manager, tokenString, kid string, c oidc.ProviderKey) (*Verified, error) {
+	claims := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(*jwt.Token) (any, error) {
+		return c.Key.PublicKey()
 	}, jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}), jwt.WithExpirationRequired(), jwt.WithIssuedAt())
 	if err != nil {
 		return nil, fmt.Errorf("authn: verify token: %w", err)
@@ -69,6 +87,7 @@ func Verify(m *oidc.Manager, tokenString string) (*Verified, error) {
 		return nil, fmt.Errorf("authn: token exp %s is in the past", exp.Time)
 	}
 
+	provider := c.Provider
 	required, err := m.Required(provider, kid)
 	if err != nil {
 		return nil, fmt.Errorf("authn: verify token: %w", err)

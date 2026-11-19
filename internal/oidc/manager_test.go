@@ -79,7 +79,12 @@ func TestManagerRefreshAndFindKey(t *testing.T) {
 	}
 
 	// Not cached yet: FindKey must trigger a refresh and succeed.
-	provider, jwk, err := m.FindKey("test-kid")
+	found, err := m.FindKeys("test-kid")
+	var provider string
+	var jwk JWK
+	if err == nil {
+		provider, jwk = found[0].Provider, found[0].Key
+	}
 	if err != nil {
 		t.Fatalf("FindKey: %v", err)
 	}
@@ -91,7 +96,7 @@ func TestManagerRefreshAndFindKey(t *testing.T) {
 	}
 
 	// Unknown kid even after refresh must error.
-	if _, _, err := m.FindKey("does-not-exist"); err == nil {
+	if _, err := m.FindKeys("does-not-exist"); err == nil {
 		t.Fatalf("FindKey: want error for unknown kid")
 	}
 }
