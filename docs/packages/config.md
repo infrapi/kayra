@@ -221,10 +221,12 @@ it resolves users against, and exactly one of:
     rejects an unparseable one.
   - `oauth2` — `client_id` (required if set) and `scopes` (`openid`,
     `profile`, `email` when empty): Kayra's own client registration at
-    this provider, a public one (PKCE, no secret), for its
-    [authorization server](../architecture/oauth2-server.md) to log a
-    human in (`oauth2.login`). Its redirect URI is
-    `<app.url>/oauth2/callback`.
+    this provider, a public one (PKCE, no secret): the
+    [authorization server](../architecture/oauth2-server.md) offers it to
+    log a human in, and checks its ID token; `user_id`, optional, where
+    the user id is at a login, the provider's `user_id` by default. Its
+    redirect URI is `<app.url>/oauth2/callback`. A provider without
+    `oauth2` is never offered as a login.
 - `local` — one or more RSA signing keys this instance trusts for
   self-issued tokens (the `self` provider the spec's bootstrap flow uses):
   `kid`, `algorithm`, whether it can `issuer` (sign, not just verify), and
@@ -257,7 +259,7 @@ authentifications:
 
 `oauth2:` turns on Kayra's [authorization server](../architecture/oauth2-server.md):
 tokens of its own for infrapi-cli and MCP clients, renewed and revoked.
-`login` names the provider a human logs in with, `clients` the clients
+A human logs in with a provider that has `remote.oauth2`, `clients` are the clients
 declared, `metadata_document_hosts` the hosts whose Client ID Metadata
 Documents are trusted, `resources` what a token may be for. See the
 [authorization server](../architecture/oauth2-server.md) for every key.

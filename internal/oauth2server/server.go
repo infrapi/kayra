@@ -4,7 +4,8 @@
 //
 //	GET  /.well-known/oauth-authorization-server   RFC 8414 metadata
 //	GET  /oauth2/authorize                          authorization code + PKCE S256, resource (RFC 8707)
-//	GET  /oauth2/callback                           the login provider's redirect
+//	GET  /oauth2/login                              the provider chosen, when there are several
+//	GET  /oauth2/callback                           the provider's redirect
 //	POST /oauth2/consent                            the human's consent
 //	POST /oauth2/token                              authorization_code, refresh_token (rotated)
 //	POST /oauth2/revoke                             RFC 7009
@@ -66,7 +67,7 @@ const (
 type Server struct {
 	cfg    config.OAuth2ServerConfig
 	ttl    config.OAuth2Durations
-	login  config.AuthProvider // the login provider
+	cfgAll *config.Config // the providers a human logs in with: those with remote.oauth2
 	auth   *middleware.Authenticator
 	store  store.Store
 	prefix string // the store's
@@ -114,7 +115,7 @@ func New(cfg *config.Config, auth *middleware.Authenticator, s store.Store, keys
 		})
 	}
 	srv := &Server{
-		cfg: o, ttl: ttl, login: cfg.Authentifications[o.Login], auth: auth, store: s, prefix: keys.Prefix + "/oauth2",
+		cfg: o, ttl: ttl, cfgAll: cfg, auth: auth, store: s, prefix: keys.Prefix + "/oauth2",
 		issuer: strings.TrimRight(baseURL, "/"), signer: signer, docs: map[string]cachedDoc{},
 		HTTPClient: &http.Client{
 			Timeout:       5 * time.Second,
@@ -137,6 +138,7 @@ func (s *Server) now() time.Time {
 func (s *Server) RegisterRoutes(r gin.IRouter) {
 	r.GET("/.well-known/oauth-authorization-server", s.metadata)
 	r.GET("/oauth2/authorize", s.authorize)
+	r.GET("/oauth2/login", s.chosen)
 	r.GET("/oauth2/callback", s.callback)
 	r.POST("/oauth2/consent", s.consent)
 	r.POST("/oauth2/token", s.token)
@@ -191,7 +193,9 @@ type identity struct {
 
 type pendingLogin struct {
 	request
-	Verifier string `json:"verifier"` // Kayra's own, at the login provider
+	Provider string `json:"provider"` // the authentifications.<name> logged in at
+	Verifier string `json:"verifier"` // Kayra's own PKCE, at the provider
+	Nonce    string `json:"nonce"`    // its ID token's
 }
 
 type pendingConsent struct {

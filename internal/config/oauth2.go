@@ -11,15 +11,14 @@ import (
 // OAuth2ServerConfig is Kayra's authorization server (internal/oauth2server):
 // clients such as infrapi-cli, or an MCP client, get tokens of Kayra's own
 // (the signer's, a local provider), renewed and revoked here. A human logs
-// in at the login provider; Kayra never sees a password.
+// in at a provider of theirs: an authentifications.<name> with remote.oauth2,
+// chosen on a page when there are several (LoginProviders). A provider
+// without remote.oauth2 is never offered: its tokens are only checked when
+// presented to an API (a CI job's, say). Kayra never sees a password.
 type OAuth2ServerConfig struct {
 	// Enabled mounts it: /.well-known/oauth-authorization-server,
 	// /oauth2/{authorize,callback,consent,token,revoke,register}.
 	Enabled bool `yaml:"enabled"`
-	// Login is the authentifications.<name> a human logs in with: a remote
-	// provider with oauth2 (its client_id, Kayra's /oauth2/callback among
-	// its redirect URIs). Its token is checked as any of its tokens is.
-	Login string `yaml:"login"`
 	// Signer is the local provider whose issuer key signs the tokens:
 	// self when empty.
 	Signer string `yaml:"signer"`
@@ -97,9 +96,8 @@ func (o OAuth2ServerConfig) validate(c *Config) error {
 	if !o.Enabled {
 		return nil
 	}
-	login, ok := c.Authentifications[o.Login]
-	if !ok || login.Remote == nil || login.Remote.OAuth2 == nil {
-		return fmt.Errorf("oauth2.login: %q is no authentifications.<name> with remote.oauth2", o.Login)
+	if len(c.LoginProviders()) == 0 {
+		return fmt.Errorf("oauth2: no authentifications.<name> has remote.oauth2: a human has nowhere to log in")
 	}
 	signer := o.Signer
 	if signer == "" {
@@ -154,4 +152,18 @@ func CheckRedirectURI(raw string) error {
 // IsLoopback tells a loopback host: localhost, 127.0.0.1, ::1.
 func IsLoopback(host string) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
+// LoginProviders are the providers a human may log in with at the
+// authorization server: every enabled remote one with oauth2, by name. A
+// provider without oauth2 is not one.
+func (c *Config) LoginProviders() []string {
+	var out []string
+	for name, p := range c.Authentifications {
+		if p.Remote != nil && p.Remote.Enabled && p.Remote.OAuth2 != nil {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out
 }

@@ -7,10 +7,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/infrapi/kayra/internal/authn"
 	"github.com/infrapi/kayra/internal/oidc"
 )
 
@@ -51,35 +54,82 @@ func (s *Server) authorize(c *gin.Context) {
 		return
 	}
 
-	// the login provider, with a PKCE of Kayra's own
-	doc, err := oidc.FetchDiscovery(s.login.Remote.URL, s.login.Remote.Proxy)
-	if err != nil || doc.AuthorizationEndpoint == "" {
-		s.redirectError(c, req, "temporarily_unavailable", fmt.Sprintf("the login provider: %v", err))
+	providers := s.cfgAll.LoginProviders()
+	if len(providers) == 1 {
+		s.startLogin(c, req, providers[0])
 		return
 	}
-	verifier, state := random(32), random(24)
-	if err := s.put("logins", hash(state), pendingLogin{request: req, Verifier: verifier}, loginTTL); err != nil {
+	// several: the human chooses
+	choice := random(24)
+	if err := s.put("choices", hash(choice), req, loginTTL); err != nil {
 		s.redirectError(c, req, "server_error", err.Error())
 		return
 	}
-	scopes := s.login.Remote.OAuth2.Scopes
+	var links strings.Builder
+	for _, p := range providers {
+		href := "/oauth2/login?" + url.Values{"choice": {choice}, "provider": {p}}.Encode()
+		fmt.Fprintf(&links, `<a class="choice" href="%s">%s</a>`, html.EscapeString(href), html.EscapeString(p))
+	}
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	c.Header("Cache-Control", "no-store")
+	c.Header("X-Frame-Options", "DENY")
+	c.String(http.StatusOK, choicePage, html.EscapeString(req.ClientName), links.String())
+}
+
+// chosen is the provider the human chose on the page: the login goes on
+// there.
+func (s *Server) chosen(c *gin.Context) {
+	var req request
+	ok, err := s.take("choices", hash(c.Query("choice")), &req)
+	if err != nil || !ok {
+		s.errorPage(c, http.StatusBadRequest, "Login expired", "this login is unknown, or took too long: start it again from your application")
+		return
+	}
+	provider := c.Query("provider")
+	if !slices.Contains(s.cfgAll.LoginProviders(), provider) {
+		s.redirectError(c, req, "invalid_request", fmt.Sprintf("%q is no provider to log in with", provider))
+		return
+	}
+	s.startLogin(c, req, provider)
+}
+
+// startLogin sends the human to provider's authorization endpoint, with a
+// PKCE and a nonce of Kayra's own, openid among the scopes.
+func (s *Server) startLogin(c *gin.Context, req request, provider string) {
+	p := s.cfgAll.Authentifications[provider]
+	doc, err := oidc.FetchDiscovery(p.Remote.URL, p.Remote.Proxy)
+	if err != nil || doc.AuthorizationEndpoint == "" {
+		s.redirectError(c, req, "temporarily_unavailable", fmt.Sprintf("provider %s: %v", provider, err))
+		return
+	}
+	verifier, state, nonce := random(32), random(24), random(24)
+	if err := s.put("logins", hash(state), pendingLogin{request: req, Provider: provider, Verifier: verifier, Nonce: nonce}, loginTTL); err != nil {
+		s.redirectError(c, req, "server_error", err.Error())
+		return
+	}
+	scopes := p.Remote.OAuth2.Scopes
 	if len(scopes) == 0 {
 		scopes = []string{"openid", "profile", "email"}
 	}
+	if !slices.Contains(scopes, "openid") {
+		scopes = append([]string{"openid"}, scopes...)
+	}
 	to := doc.AuthorizationEndpoint + "?" + url.Values{
 		"response_type":         {"code"},
-		"client_id":             {s.login.Remote.OAuth2.ClientID},
+		"client_id":             {p.Remote.OAuth2.ClientID},
 		"redirect_uri":          {s.issuer + "/oauth2/callback"},
 		"scope":                 {strings.Join(scopes, " ")},
 		"state":                 {state},
+		"nonce":                 {nonce},
 		"code_challenge":        {challengeOf(verifier)},
 		"code_challenge_method": {"S256"},
 	}.Encode()
 	c.Redirect(http.StatusFound, to)
 }
 
-// callback is the login provider's redirect: Kayra redeems its code, and
-// checks its token as any of the provider's tokens is checked.
+// callback is the provider's redirect: Kayra redeems its code, checks the
+// provider's ID token (OIDC: Kayra is the client), then resolves the user
+// as any token of that provider resolves.
 func (s *Server) callback(c *gin.Context) {
 	q := c.Request.URL.Query()
 	var p pendingLogin
@@ -89,21 +139,17 @@ func (s *Server) callback(c *gin.Context) {
 		return
 	}
 	if e := q.Get("error"); e != "" {
-		s.redirectError(c, p.request, "access_denied", "the login provider: "+e+" "+q.Get("error_description"))
+		s.redirectError(c, p.request, "access_denied", "provider "+p.Provider+": "+e+" "+q.Get("error_description"))
 		return
 	}
-	token, err := s.redeem(q.Get("code"), p.Verifier)
+	v, err := s.redeem(p, q.Get("code"))
 	if err != nil {
-		s.redirectError(c, p.request, "server_error", err.Error())
+		s.redirectError(c, p.request, "access_denied", err.Error())
 		return
 	}
-	ac, err := s.auth.Resolve(token)
+	ac, err := s.auth.ResolveVerified(v, s.cfgAll.Authentifications[p.Provider].Remote.OAuth2.UserID)
 	if err != nil {
-		s.redirectError(c, p.request, "access_denied", "the login provider's token: "+err.Error())
-		return
-	}
-	if ac.Provider != s.cfg.Login {
-		s.redirectError(c, p.request, "access_denied", fmt.Sprintf("a token of provider %s, not %s", ac.Provider, s.cfg.Login))
+		s.redirectError(c, p.request, "access_denied", "the user: "+err.Error())
 		return
 	}
 	who := identity{UserID: ac.UserID, Provider: ac.Provider, Authorization: ac.Authorization, Groups: ac.Groups}
@@ -126,42 +172,74 @@ func (s *Server) callback(c *gin.Context) {
 	c.String(http.StatusOK, consentPage, e(p.ClientName), e(redirectHost(p.RedirectURI)), e(p.Resource), e(who.UserID), e(id))
 }
 
-// redeem exchanges the login provider's code for its access token.
-func (s *Server) redeem(code, verifier string) (string, error) {
-	doc, err := oidc.FetchDiscovery(s.login.Remote.URL, s.login.Remote.Proxy)
+// redeem exchanges the provider's code, with Kayra's PKCE verifier, and
+// checks the ID token it answers: signed by the provider's key, its iss the
+// provider's issuer, its aud Kayra's client_id there, its nonce the
+// login's, not expired. Its access token comes along, for a user_id read
+// at the provider's userinfo.
+func (s *Server) redeem(p pendingLogin, code string) (*authn.Verified, error) {
+	prov := s.cfgAll.Authentifications[p.Provider]
+	doc, err := oidc.FetchDiscovery(prov.Remote.URL, prov.Remote.Proxy)
 	if err != nil {
-		return "", fmt.Errorf("the login provider: %w", err)
+		return nil, fmt.Errorf("provider %s: %w", p.Provider, err)
 	}
 	if doc.TokenEndpoint == "" {
-		return "", fmt.Errorf("the login provider has no token_endpoint")
+		return nil, fmt.Errorf("provider %s has no token_endpoint", p.Provider)
 	}
-	hc, err := oidc.ClientFor(s.login.Remote.Proxy)
+	hc, err := oidc.ClientFor(prov.Remote.Proxy)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	resp, err := hc.PostForm(doc.TokenEndpoint, url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"redirect_uri":  {s.issuer + "/oauth2/callback"},
-		"client_id":     {s.login.Remote.OAuth2.ClientID},
-		"code_verifier": {verifier},
+		"client_id":     {prov.Remote.OAuth2.ClientID},
+		"code_verifier": {p.Verifier},
 	})
 	if err != nil {
-		return "", fmt.Errorf("the login provider's token endpoint: %w", err)
+		return nil, fmt.Errorf("provider %s's token endpoint: %w", p.Provider, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var out struct {
 		AccessToken string `json:"access_token"`
+		IDToken     string `json:"id_token"`
 		Error       string `json:"error"`
 		Description string `json:"error_description"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out); err != nil {
-		return "", fmt.Errorf("the login provider's token endpoint answered %d: %w", resp.StatusCode, err)
+		return nil, fmt.Errorf("provider %s's token endpoint answered %d: %w", p.Provider, resp.StatusCode, err)
 	}
-	if resp.StatusCode != http.StatusOK || out.AccessToken == "" {
-		return "", fmt.Errorf("the login provider's token endpoint answered %d: %s %s", resp.StatusCode, out.Error, out.Description)
+	if resp.StatusCode != http.StatusOK || out.IDToken == "" {
+		return nil, fmt.Errorf("provider %s's token endpoint answered %d, no ID token: %s %s", p.Provider, resp.StatusCode, out.Error, out.Description)
 	}
-	return out.AccessToken, nil
+	claims := jwt.MapClaims{}
+	_, err = jwt.ParseWithClaims(out.IDToken, claims, func(t *jwt.Token) (any, error) {
+		// the provider's own keys, refreshed once when the kid is new: two
+		// providers may share an issuer and its keys
+		kid, _ := t.Header["kid"].(string)
+		keys, err := s.auth.Manager.KeysFor(p.Provider)
+		if err == nil && !slices.ContainsFunc(keys, func(k oidc.JWK) bool { return k.Kid == kid }) {
+			keys, err = s.auth.Manager.RefreshRemote(p.Provider)
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, k := range keys {
+			if k.Kid == kid {
+				return k.PublicKey()
+			}
+		}
+		return nil, fmt.Errorf("provider %s has no key %q", p.Provider, kid)
+	}, jwt.WithValidMethods([]string{"RS256", "RS384", "RS512"}), jwt.WithExpirationRequired(), jwt.WithIssuedAt(),
+		jwt.WithIssuer(doc.Issuer), jwt.WithAudience(prov.Remote.OAuth2.ClientID))
+	if err != nil {
+		return nil, fmt.Errorf("provider %s's ID token: %w", p.Provider, err)
+	}
+	if nonce, _ := claims["nonce"].(string); nonce != p.Nonce {
+		return nil, fmt.Errorf("provider %s's ID token: its nonce is not this login's", p.Provider)
+	}
+	return &authn.Verified{Provider: p.Provider, Claims: claims, Token: out.AccessToken}, nil
 }
 
 // consent is the human's answer on the consent page: the form's id must be
@@ -251,5 +329,9 @@ const consentPage = `<!doctype html><html><head><meta charset="utf-8"><title>Aut
 const codePage = `<!doctype html><html><head><meta charset="utf-8"><title>Login code</title>` + pageStyle + `</head><body>
 <h1>Logged in</h1><p>Paste this code in your terminal, where infrapi-cli asks for it:</p>
 <p><code style="font-size:1.1rem;word-break:break-all;user-select:all">%s</code></p><p>It works once, within a minute.</p></body></html>`
+
+const choicePage = `<!doctype html><html><head><meta charset="utf-8"><title>Log in</title>` + pageStyle + `
+<style>.choice{display:block;padding:.7rem 1rem;margin:.5rem 0;border:1px solid #888;border-radius:.4rem;color:inherit;text-decoration:none}</style></head><body>
+<h1>Log in to %s with</h1>%s</body></html>`
 
 const errorPage = `<!doctype html><html><head><meta charset="utf-8"><title>%s</title>` + pageStyle + `</head><body><h1>%s</h1><p>%s</p></body></html>`

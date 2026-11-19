@@ -141,8 +141,14 @@ type OAuth2LoginConfig struct {
 	// ClientID is Kayra's client_id in the provider's application.
 	ClientID string `yaml:"client_id"`
 	// Scopes requested from the provider: openid, profile, email when
-	// empty.
+	// empty; openid always.
 	Scopes []string `yaml:"scopes"`
+	// UserID is where the user id is at a login, in the provider's ID
+	// token (or userinfo): the provider's user_id when unset. A provider
+	// may name the user differently in an ID token and in the tokens it
+	// issues for an API (GitLab: a login's nickname, a CI job's
+	// user_login).
+	UserID *UserIDConfig `yaml:"user_id"`
 }
 
 // UserIDConfig says how to pull the user id out of a validated token.

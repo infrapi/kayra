@@ -26,11 +26,16 @@ import (
 // fakeOkta is Okta's org authorization server, as Kayra sees it: its
 // access tokens name the org in aud, the app in cid.
 type fakeOkta struct {
-	srv  *httptest.Server
-	key  *rsa.PrivateKey
-	cid  string // the cid its tokens carry
-	mu   sync.Mutex
-	pkce map[string]string // code -> challenge
+	srv      *httptest.Server
+	key      *rsa.PrivateKey
+	kid      string
+	clientID string // Kayra's client_id there: its ID tokens' aud
+	aud      string // the aud its ID tokens carry: clientID when ""
+	nonce    string // the nonce its ID tokens carry: the login's when ""
+	sub      string // its ID tokens' sub: jdoe@example.com when ""
+	mu       sync.Mutex
+	pkce     map[string]string // code -> challenge
+	nonces   map[string]string // code -> the login's nonce
 }
 
 func newFakeOkta(t *testing.T) *fakeOkta {
@@ -39,7 +44,7 @@ func newFakeOkta(t *testing.T) *fakeOkta {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fakeOkta{key: key, cid: "0oakayra", pkce: map[string]string{}}
+	f := &fakeOkta{key: key, kid: "okta-kid", clientID: "0oakayra", pkce: map[string]string{}, nonces: map[string]string{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -53,7 +58,7 @@ func (f *fakeOkta) serve(w http.ResponseWriter, r *http.Request) {
 			"authorization_endpoint": base + "/authorize", "token_endpoint": base + "/token", "userinfo_endpoint": base + "/userinfo"})
 	case "/keys":
 		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{
-			"kty": "RSA", "kid": "okta-kid", "use": "sig", "alg": "RS256",
+			"kty": "RSA", "kid": f.kid, "use": "sig", "alg": "RS256",
 			"n": base64.RawURLEncoding.EncodeToString(f.key.N.Bytes()),
 			"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(f.key.E)).Bytes()),
 		}}})
@@ -62,30 +67,46 @@ func (f *fakeOkta) serve(w http.ResponseWriter, r *http.Request) {
 		code := "okta-" + q.Get("state")
 		f.mu.Lock()
 		f.pkce[code] = q.Get("code_challenge")
+		f.nonces[code] = q.Get("nonce")
 		f.mu.Unlock()
 		http.Redirect(w, r, q.Get("redirect_uri")+"?"+url.Values{"code": {code}, "state": {q.Get("state")}}.Encode(), http.StatusFound)
 	case "/token":
 		_ = r.ParseForm()
 		f.mu.Lock()
 		challenge, ok := f.pkce[r.PostForm.Get("code")]
+		nonce := f.nonces[r.PostForm.Get("code")]
 		f.mu.Unlock()
 		sum := sha256.Sum256([]byte(r.PostForm.Get("code_verifier")))
-		if !ok || base64.RawURLEncoding.EncodeToString(sum[:]) != challenge || r.PostForm.Get("client_id") != "0oakayra" {
+		if !ok || base64.RawURLEncoding.EncodeToString(sum[:]) != challenge || r.PostForm.Get("client_id") != f.clientID {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
 			return
 		}
 		now := time.Now()
+		aud := f.aud
+		if aud == "" {
+			aud = f.clientID
+		}
+		if f.nonce != "" {
+			nonce = f.nonce
+		}
+		sub := f.sub
+		if sub == "" {
+			sub = "jdoe@example.com"
+		}
 		t := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-			"iss": base, "aud": base, "cid": f.cid, "sub": "jdoe@example.com", "iat": now.Unix(), "exp": now.Add(time.Hour).Unix(),
+			"iss": base, "aud": aud, "nonce": nonce, "sub": sub, "preferred_username": "jdoe@example.com",
+			"iat": now.Unix(), "exp": now.Add(time.Hour).Unix(),
 		})
-		t.Header["kid"] = "okta-kid"
-		signed, _ := t.SignedString(f.key)
-		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": signed, "token_type": "Bearer", "expires_in": 3600})
+		t.Header["kid"] = f.kid
+		idToken, _ := t.SignedString(f.key)
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "opaque-" + code(), "id_token": idToken, "token_type": "Bearer", "expires_in": 3600})
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
 }
+
+func code() string { return strings.Repeat("x", 8) }
 
 // oauth2Rig is Kayra served over HTTP, its authorization server on, Okta
 // its login provider.
@@ -93,13 +114,16 @@ type oauth2Rig struct {
 	t      *testing.T
 	kayra  string
 	okta   *fakeOkta
+	gitlab *fakeOkta    // a second provider, with oauth2: a choice
 	client *http.Client // follows no redirect
 }
 
-func newOAuth2Rig(t *testing.T) *oauth2Rig {
+func newOAuth2Rig(t *testing.T, withGitlab ...bool) *oauth2Rig {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	okta := newFakeOkta(t)
+	okta.sub = "00u2u0ebcbkQyFOBz0i7" // Okta's: its ID token's sub is its user id
+	var gitlab *fakeOkta
 	cfg := testKayraConfig(t)
 	users := cfg.Authorizations["dev"].Local.Path
 	f, err := os.OpenFile(users, os.O_APPEND|os.O_WRONLY, 0o600)
@@ -112,10 +136,26 @@ func newOAuth2Rig(t *testing.T) *oauth2Rig {
 		Enabled: true, URL: okta.srv.URL + "/.well-known/openid-configuration",
 		Claims: map[string]gconfig.ClaimValues{"cid": {"0oakayra"}},
 		UserID: gconfig.UserIDConfig{From: "token", Field: "sub", Filter: "^([^@]+)@"},
-		OAuth2: &gconfig.OAuth2LoginConfig{ClientID: "0oakayra"},
+		// the login is the ID token's preferred_username
+		OAuth2: &gconfig.OAuth2LoginConfig{ClientID: "0oakayra", UserID: &gconfig.UserIDConfig{From: "token", Field: "preferred_username", Filter: "^([^@]+)@"}},
 	}}
+	// a provider whose tokens a CI job presents: never a login
+	cfg.Authentifications["ci"] = gconfig.AuthProvider{Authorization: "dev", Remote: &gconfig.RemoteAuthConfig{
+		Enabled: true, URL: okta.srv.URL + "/.well-known/openid-configuration",
+		Claims: map[string]gconfig.ClaimValues{"aud": {"api://infrapi"}}, UserID: gconfig.UserIDConfig{From: "token", Field: "sub"},
+	}}
+	if len(withGitlab) > 0 {
+		gitlab = newFakeOkta(t)
+		gitlab.kid, gitlab.clientID = "gitlab-kid", "gl-kayra"
+		cfg.Authentifications["gitlab"] = gconfig.AuthProvider{Authorization: "dev", Remote: &gconfig.RemoteAuthConfig{
+			Enabled: true, URL: gitlab.srv.URL + "/.well-known/openid-configuration",
+			Claims: map[string]gconfig.ClaimValues{"aud": {"api://infrapi"}},
+			UserID: gconfig.UserIDConfig{From: "token", Field: "user_login"},
+			OAuth2: &gconfig.OAuth2LoginConfig{ClientID: "gl-kayra", UserID: &gconfig.UserIDConfig{From: "token", Field: "sub", Filter: "^([^@]+)@"}},
+		}}
+	}
 	// infrapi-cli is built in
-	cfg.OAuth2 = gconfig.OAuth2ServerConfig{Enabled: true, Login: "okta", Clients: []gconfig.OAuth2Client{
+	cfg.OAuth2 = gconfig.OAuth2ServerConfig{Enabled: true, Clients: []gconfig.OAuth2Client{
 		{ID: "tool", Name: "A tool", RedirectURIs: []string{"https://tool.example.com/cb"}},
 	}}
 	if err := cfg.Validate(); err != nil {
@@ -131,7 +171,7 @@ func newOAuth2Rig(t *testing.T) *oauth2Rig {
 	srv.Config.Handler = engine
 	srv.Start()
 	t.Cleanup(srv.Close)
-	return &oauth2Rig{t: t, kayra: srv.URL, okta: okta,
+	return &oauth2Rig{t: t, kayra: srv.URL, okta: okta, gitlab: gitlab,
 		client: &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 
@@ -356,18 +396,20 @@ func TestOAuth2ServerRefusals(t *testing.T) {
 		}
 	}
 
-	// a token of another Okta app: refused at the callback
-	r.okta.cid = "0oaanother"
-	cb := r.authorize(cliParams(challenge, r.kayra))
-	loc, _ := url.Parse(cb.Header.Get("Location"))
-	if loc.Query().Get("error") != "access_denied" || !strings.Contains(loc.Query().Get("error_description"), "cid") {
-		t.Fatalf("another app's token: %s", cb.Header.Get("Location"))
+	// an ID token for another app, or another login's: refused at the callback
+	for name, set := range map[string]func(){"another aud": func() { r.okta.aud = "0oaanother" }, "another nonce": func() { r.okta.nonce = "replayed" }} {
+		set()
+		cb := r.authorize(cliParams(challenge, r.kayra))
+		loc, _ := url.Parse(cb.Header.Get("Location"))
+		if loc.Query().Get("error") != "access_denied" || !strings.Contains(loc.Query().Get("error_description"), "ID token") {
+			t.Fatalf("%s: %s", name, cb.Header.Get("Location"))
+		}
+		r.okta.aud, r.okta.nonce = "", ""
 	}
-	r.okta.cid = "0oakayra"
 
 	// a wrong verifier
-	cb = r.authorize(cliParams(challenge, r.kayra))
-	loc, _ = url.Parse(cb.Header.Get("Location"))
+	cb := r.authorize(cliParams(challenge, r.kayra))
+	loc, _ := url.Parse(cb.Header.Get("Location"))
 	resp, out := r.post("/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "code": {loc.Query().Get("code")}, "client_id": {"infrapi-cli"},
 		"redirect_uri": {"http://127.0.0.1:43210/callback"}, "code_verifier": {verifier + "x"}})
 	if resp.StatusCode != http.StatusBadRequest || out["error"] != "invalid_grant" {
@@ -403,5 +445,63 @@ func TestOAuth2ServerOOB(t *testing.T) {
 	p.Set("client_id", "tool")
 	if resp := r.get(r.kayra + "/oauth2/authorize?" + p.Encode()); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("another client, oob: %d", resp.StatusCode)
+	}
+}
+
+// Several providers with oauth2: the human chooses, on a page; one without
+// oauth2, whose tokens a CI job presents, is never offered.
+func TestOAuth2ServerChoice(t *testing.T) {
+	r := newOAuth2Rig(t, true)
+	verifier, challenge := pkce()
+	page := r.get(r.kayra + "/oauth2/authorize?" + cliParams(challenge, r.kayra).Encode())
+	resp, err := r.client.Get(r.kayra + "/oauth2/authorize?" + cliParams(challenge, r.kayra).Encode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if page.StatusCode != http.StatusOK || !strings.Contains(string(body), ">gitlab<") || !strings.Contains(string(body), ">okta<") || strings.Contains(string(body), ">ci<") {
+		t.Fatalf("choice page: %d %s", page.StatusCode, body)
+	}
+	i := strings.Index(string(body), `/oauth2/login?`)
+	href := string(body)[i:]
+	href = strings.ReplaceAll(href[:strings.Index(href, `"`)], "&amp;", "&")
+	u, _ := url.Parse(r.kayra + href)
+	q := u.Query()
+	q.Set("provider", "gitlab")
+	u.RawQuery = q.Encode()
+	atGitlab := r.get(u.String())
+	if !strings.HasPrefix(atGitlab.Header.Get("Location"), r.gitlab.srv.URL) {
+		t.Fatalf("to gitlab: %d %s", atGitlab.StatusCode, atGitlab.Header.Get("Location"))
+	}
+	back := r.get(r.get(atGitlab.Header.Get("Location")).Header.Get("Location"))
+	loc, _ := url.Parse(back.Header.Get("Location"))
+	resp2, tok := r.post("/oauth2/token", url.Values{"grant_type": {"authorization_code"}, "code": {loc.Query().Get("code")}, "client_id": {"infrapi-cli"},
+		"redirect_uri": {"http://127.0.0.1:43210/callback"}, "code_verifier": {verifier}})
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("token: %d %v %s", resp2.StatusCode, tok, back.Header.Get("Location"))
+	}
+	claims := jwt.MapClaims{}
+	_, _, _ = jwt.NewParser().ParseUnverified(tok["access_token"].(string), claims)
+	if claims["sub"] != "jdoe" {
+		t.Fatalf("logged in at gitlab: %v", claims)
+	}
+	// the choice is single use; a provider without oauth2 is refused
+	if again := r.get(u.String()); again.StatusCode != http.StatusBadRequest {
+		t.Fatalf("a choice twice: %d", again.StatusCode)
+	}
+	resp, _ = r.client.Get(r.kayra + "/oauth2/authorize?" + cliParams(challenge, r.kayra).Encode())
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	i = strings.Index(string(body), `/oauth2/login?`)
+	href = string(body)[i:]
+	href = strings.ReplaceAll(href[:strings.Index(href, `"`)], "&amp;", "&")
+	u, _ = url.Parse(r.kayra + href)
+	q = u.Query()
+	q.Set("provider", "ci")
+	u.RawQuery = q.Encode()
+	ci := r.get(u.String())
+	if l, _ := url.Parse(ci.Header.Get("Location")); l.Query().Get("error") != "invalid_request" {
+		t.Fatalf("a provider without oauth2: %s", ci.Header.Get("Location"))
 	}
 }

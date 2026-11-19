@@ -130,6 +130,18 @@ func (a *Authenticator) resolveJWT(token string) (*AuthContext, error) {
 		}
 	}
 
+	return a.ResolveVerified(v, nil)
+}
+
+// ResolveVerified resolves a verified token's user, as its provider's
+// user_id says (or userID, when set), then their groups and attributes
+// from its authorization backend. The authorization server
+// (internal/oauth2server) gives it the ID token it checked at a login.
+func (a *Authenticator) ResolveVerified(v *authn.Verified, userID *config.UserIDConfig) (*AuthContext, error) {
+	provider, ok := a.Config.Authentifications[v.Provider]
+	if !ok {
+		return nil, fmt.Errorf("middleware: unknown provider %q", v.Provider)
+	}
 	userIDCfg := config.UserIDConfig{From: "token", Field: "sub"}
 	remoteURL, proxy := "", ""
 	if provider.Remote != nil {
@@ -137,8 +149,11 @@ func (a *Authenticator) resolveJWT(token string) (*AuthContext, error) {
 		remoteURL = provider.Remote.URL
 		proxy = provider.Remote.Proxy
 	}
+	if userID != nil {
+		userIDCfg = *userID
+	}
 
-	userID, err := authn.ResolveUserID(v, userIDCfg, remoteURL, proxy)
+	user, err := authn.ResolveUserID(v, userIDCfg, remoteURL, proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +182,7 @@ func (a *Authenticator) resolveJWT(token string) (*AuthContext, error) {
 		if !ok {
 			return nil, fmt.Errorf("middleware: no authorization backend %q", provider.Authorization)
 		}
-		info, err := backend.ResolveUser(userID, v.ExpiresIn(a.DefaultTTL))
+		info, err := backend.ResolveUser(user, v.ExpiresIn(a.DefaultTTL))
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +190,7 @@ func (a *Authenticator) resolveJWT(token string) (*AuthContext, error) {
 	}
 
 	ac := &AuthContext{
-		UserID:        userID,
+		UserID:        user,
 		Provider:      v.Provider,
 		Authorization: provider.Authorization,
 		Attributes:    attributes,

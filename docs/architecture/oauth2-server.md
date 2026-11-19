@@ -10,15 +10,23 @@ Kayra issues tokens of its own to a client — `infrapi-cli`, an MCP client
 such as Claude, a script — and renews and revokes them: OAuth 2.1, as the
 [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
 asks of an authorization server. A human never logs in at Kayra: Kayra
-sends them to the login provider (Okta, say), and checks its token as it
-checks any of that provider's tokens: its [claims](../packages/config.md),
-its user, its groups.
+sends them to a provider of theirs (Okta, GitLab...), every
+`authentifications.<name>` with `remote.oauth2`, chosen on a page when there
+are several. At its callback, Kayra checks the provider's OIDC ID token —
+signed by its keys, its `iss` the provider's, its `aud` Kayra's
+`client_id` there, its `nonce` the login's, not expired — then resolves the
+user and their groups as for any token of that provider.
+
+A provider without `remote.oauth2` is never offered: its tokens are only
+checked when presented to an API, as a CI job's are, against its
+[claims](../packages/config.md).
 
 ```text
 client ──► Kayra /oauth2/authorize            (client, redirect URI, PKCE S256, resource)
-       ──► the login provider                 the human logs in there, MFA included
+       ──► the choice of a provider           when several have remote.oauth2
+       ──► the provider                       the human logs in there, MFA included
        ──► Kayra /oauth2/callback             Kayra redeems the code with a PKCE of its own,
-                                              checks the provider's token, resolves the user
+                                              checks the provider's ID token, resolves the user
        ──► the consent page                   a third-party client only
        ──► client redirect_uri?code=…&state=…&iss=…
 client ──► Kayra POST /oauth2/token           code + code_verifier
@@ -28,9 +36,22 @@ client ──► Kayra POST /oauth2/token           code + code_verifier
 ## Configure it
 
 ```yaml
+authentifications:
+  okta:                           # a provider to log in with: remote.oauth2
+    remote:
+      oauth2:
+        client_id: 0oa1example    # Kayra's application there
+        scopes: [openid, profile, email]   # openid always
+        # at a login, the ID token's: the provider's user_id by default.
+        # Okta's ID token's sub is its user id (00u...): its login is
+        # preferred_username
+        user_id: {from: token, field: preferred_username, filter: '^([^@]+)@'}
+  gitlab:                         # no oauth2: a CI job's tokens, never a login
+    remote:
+      claims: {aud: api://infrapi-$region-$platform}
+
 oauth2:
   enabled: true
-  login: okta                     # an authentifications.<name> with remote.oauth2
   signer: self                    # the local provider whose issuer key signs: self by default
   access_token_ttl: 15m
   refresh_token_ttl: 720h         # a login's refresh tokens, renewed or not
@@ -48,8 +69,8 @@ oauth2:
     hosts: []
 ```
 
-The login provider redirects to `<app.url>/oauth2/callback`: add it to its
-application's redirect URIs.
+Each provider to log in with redirects to `<app.url>/oauth2/callback`: add
+it to Kayra's application there, with the `openid` scope.
 
 ## Clients
 
@@ -87,7 +108,8 @@ Every endpoint is unauthenticated: they are the login.
 |---|---|---|
 | GET | `/.well-known/oauth-authorization-server` | RFC 8414 metadata: `code_challenge_methods_supported: [S256]`, `authorization_response_iss_parameter_supported`, `client_id_metadata_document_supported` |
 | GET | `/oauth2/authorize` | `response_type=code`, `client_id`, `redirect_uri`, `code_challenge`, `code_challenge_method=S256`, `state`, `resource` |
-| GET | `/oauth2/callback` | the login provider's redirect |
+| GET | `/oauth2/login` | the provider chosen, when there are several |
+| GET | `/oauth2/callback` | the provider's redirect |
 | POST | `/oauth2/consent` | the consent page's form, bound to its browser by a cookie |
 | POST | `/oauth2/token` | `grant_type=authorization_code` or `refresh_token` |
 | POST | `/oauth2/revoke` | RFC 7009: a refresh token revokes its login, an access token its `jti` |
