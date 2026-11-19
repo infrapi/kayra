@@ -123,7 +123,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	// /.well-known/kayra.json: the domain, built-in groups and endpoints
 	// apps built on infrapi/lib and infrapi-cli discover instead of
 	// configuring them.
-	discovery.Register(engine, discovery.New(apiDomain, discovery.Groups{
+	discovery.Register(engine, discovery.New(baseURL, apiDomain, discovery.Groups{
 		System: catalog.SystemAPI, Catalog: catalog.CatalogAPI, Authorization: rbac.AuthorizationAPI,
 	}, "/oauth2/userinfo", "/oauth2/discovery/keys", "/apis"))
 	// Kayra's authorization server: tokens of its own, for infrapi-cli and
@@ -162,6 +162,11 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		}
 		for k, v := range ac.Attributes {
 			body[k] = v
+		}
+		// a token of the authorization server: what it was issued for, and
+		// to whom, for an app to check it is its own (infrapi/lib)
+		if ac.ClientID != "" {
+			body["aud"], body["client_id"] = ac.Audience, ac.ClientID
 		}
 		c.JSON(http.StatusOK, body)
 	}

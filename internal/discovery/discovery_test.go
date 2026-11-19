@@ -13,7 +13,7 @@ import (
 
 func TestRegister(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	doc := New("infrapi.io", Groups{
+	doc := New("https://kayra.example.com/", "infrapi.io", Groups{
 		System: "system.infrapi.io", Catalog: "catalog.infrapi.io", Authorization: "authorization.infrapi.io",
 	}, "/oauth2/userinfo", "/oauth2/discovery/keys", "/apis")
 	engine := gin.New()
@@ -33,6 +33,7 @@ func TestRegister(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Document{
+		Issuer: "https://kayra.example.com",
 		Domain: "infrapi.io",
 		APIs: map[string]string{
 			"system":        "/apis/system.infrapi.io/v1",

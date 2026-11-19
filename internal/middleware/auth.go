@@ -35,6 +35,11 @@ type AuthContext struct {
 	Authorization string
 	Attributes    map[string]string
 	Groups        []string
+	// Audience and ClientID are a token of Kayra's authorization server's
+	// aud and client_id: an app checks the token was issued for it.
+	// Empty for any other token.
+	Audience []string
+	ClientID string
 }
 
 // GetAuth reads the AuthContext a prior Authenticator.Middleware call set.
@@ -169,13 +174,20 @@ func (a *Authenticator) resolveJWT(token string) (*AuthContext, error) {
 		groups, attributes = info.Groups, info.Attributes
 	}
 
-	return &AuthContext{
+	ac := &AuthContext{
 		UserID:        userID,
 		Provider:      v.Provider,
 		Authorization: provider.Authorization,
 		Attributes:    attributes,
 		Groups:        groups,
-	}, nil
+	}
+	// a token of Kayra's authorization server: one of its own, issued to a
+	// client
+	if cid, _ := v.Claims["client_id"].(string); cid != "" && len(provider.Local) > 0 {
+		aud, _ := v.Claims.GetAudience()
+		ac.Audience, ac.ClientID = aud, cid
+	}
+	return ac, nil
 }
 
 func (a *Authenticator) resolvePAT(token string) (*AuthContext, error) {

@@ -8,6 +8,7 @@ package discovery
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,6 +19,10 @@ const Path = "/.well-known/kayra.json"
 // Document is the content of Path. Paths are relative to Kayra's URL, so
 // they hold behind a gateway that serves Kayra on its own host.
 type Document struct {
+	// Issuer is Kayra's public URL, app.url: its authorization server's
+	// issuer, what an app's protected resource metadata names (RFC 9728),
+	// for an OAuth client to fetch its metadata from.
+	Issuer string `json:"issuer"`
 	// Domain is app.api_domain: Kayra's built-in groups are
 	// <name>.<Domain>. Other APIs' groups are their own full names.
 	Domain string `json:"domain"`
@@ -49,9 +54,10 @@ type Groups struct {
 
 // New builds the document of a Kayra on domain, its built-in groups named
 // by groups.
-func New(domain string, groups Groups, userinfo, jwks, apis string) Document {
+func New(issuer, domain string, groups Groups, userinfo, jwks, apis string) Document {
 	root := func(group string) string { return "/apis/" + group + "/v1" }
 	return Document{
+		Issuer: strings.TrimRight(issuer, "/"),
 		Domain: domain,
 		APIs: map[string]string{
 			"system":        root(groups.System),

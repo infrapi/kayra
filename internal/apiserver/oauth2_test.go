@@ -235,6 +235,19 @@ func TestOAuth2Server(t *testing.T) {
 	if got := r.userinfo(access); got != http.StatusOK {
 		t.Fatalf("userinfo with Kayra's access token: %d", got)
 	}
+	// userinfo tells an app what the token was issued for, and to whom
+	req, _ := http.NewRequest(http.MethodGet, r.kayra+"/oauth2/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer "+access)
+	uresp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var info map[string]any
+	_ = json.NewDecoder(uresp.Body).Decode(&info)
+	_ = uresp.Body.Close()
+	if aud, _ := info["aud"].([]any); len(aud) != 1 || aud[0] != r.kayra || info["client_id"] != "infrapi-cli" {
+		t.Fatalf("userinfo: %v", info)
+	}
 	// the code is single use
 	if resp, out := r.post("/oauth2/token", tokenForm); resp.StatusCode != http.StatusBadRequest || out["error"] != "invalid_grant" {
 		t.Fatalf("a code twice: %d %v", resp.StatusCode, out)
