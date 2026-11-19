@@ -127,6 +127,17 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	}, "/oauth2/userinfo", "/oauth2/discovery/keys", "/apis"))
 	oauth2broker.RegisterRoutes(engine, cfg, s, keys, baseURL)
 
+	// Empty cfg.Sysadmin.Groups falls back to the single
+	// "$platform-core-sysadmin" group the spec names — a deployment that
+	// configures its own real groups there is never limited to it.
+	sysadminGroups := cfg.Sysadmin.Groups
+	if len(sysadminGroups) == 0 {
+		sysadminGroups = []string{middleware.SysadminGroupFor(appCfg.AppPlatform)}
+	}
+	rbacRepo := rbac.NewRepository(s, keys)
+	rbacRepo.SetSysadmin(sysadminGroups)
+	catalogRepo := catalog.NewRepository(s, keys)
+
 	userinfoHandler := func(c *gin.Context) {
 		ac, ok := middleware.GetAuth(c)
 		if !ok {
@@ -149,17 +160,6 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	// Core §5.3.1) — most real providers accept both, so this does too.
 	engine.GET("/oauth2/userinfo", authenticator.Middleware(), userinfoHandler)
 	engine.POST("/oauth2/userinfo", authenticator.Middleware(), userinfoHandler)
-
-	// Empty cfg.Sysadmin.Groups falls back to the single
-	// "$platform-core-sysadmin" group the spec names — a deployment that
-	// configures its own real groups there is never limited to it.
-	sysadminGroups := cfg.Sysadmin.Groups
-	if len(sysadminGroups) == 0 {
-		sysadminGroups = []string{middleware.SysadminGroupFor(appCfg.AppPlatform)}
-	}
-	rbacRepo := rbac.NewRepository(s, keys)
-	rbacRepo.SetSysadmin(sysadminGroups)
-	catalogRepo := catalog.NewRepository(s, keys)
 
 	// Kayra's own cluster-scoped resources (namespaces, apiregistrations,
 	// the cluster RBAC): authenticated, then decided on the cluster RBAC,
@@ -196,10 +196,30 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		Builtin: func(api string) bool {
 			return api == catalog.SystemAPI || api == catalog.CatalogAPI || api == rbac.AuthorizationAPI
 		},
+		MembersRead: func(api, resource, verb string) bool {
+			return api == catalog.SystemAPI && resource == "namespaces" && (verb == "list" || verb == "get")
+		},
 	})
 	catalog.RegisterApiRegistrationRoutes(cluster, catalogRepo, pass, appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, authenticator.Middleware(), appCfg.AppPlatform, appCfg.AppRegion)
-	catalog.RegisterNamespaceCollectionRoutes(cluster, catalogRepo, pass)
+	// reading the namespaces: whoever the cluster RBAC grants it sees every
+	// one, anyone else the ones they are in, whatever their roles there
+	catalog.RegisterNamespaceCollectionRoutes(cluster, engine.Group("", authenticator.Middleware()), catalogRepo,
+		func(c *gin.Context, verb string) (bool, func(string) (bool, error), error) {
+			ac, _ := middleware.GetAuth(c)
+			if ac == nil {
+				ac = &middleware.AuthContext{}
+			}
+			all, _, err := rbacRepo.AuthorizeCluster(ac.UserID, ac.Groups, catalog.SystemAPI, "namespaces", verb)
+			if all || err != nil {
+				return all, nil, err
+			}
+			if verb == "get" {
+				return false, func(ns string) (bool, error) { return rbacRepo.IsNamespaceMember(ns, ac.UserID, ac.Groups) }, nil
+			}
+			members, err := rbacRepo.MemberNamespaces(ac.UserID, ac.Groups)
+			return false, func(ns string) (bool, error) { return members[ns], nil }, err
+		})
 	// Discovery (GET /apis) and each registration's stored openapi spec:
 	// any authenticated caller. Kayra's own groups are read from the
 	// live route table, so they always match what this server serves.

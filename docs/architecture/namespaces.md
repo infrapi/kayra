@@ -44,6 +44,34 @@ curl -s -X POST http://localhost:8080/apis/system.infrapi.io/v1/namespaces \
   -d '{"name": "core"}'
 ```
 
+## Reading them
+
+Anyone authenticated reads the namespaces they are in, whatever their
+roles there: one of the namespace's own groups names them or one of their
+resolved groups (the ones `member_regex` kept), or a cluster group scoped
+to it does, its admins'. Listing answers those only; getting another one
+is refused, `403`. Whoever the cluster RBAC grants `get` or `list` on
+`namespaces` (the sysadmin binding, a global binding) reads every one.
+
+**infrapi-cli**
+
+```bash
+infrapi-cli get namespaces            # the ones you are in
+infrapi-cli get namespaces thetenant  # yours: 200; another: 403
+```
+
+**curl**
+
+```bash
+curl -s http://localhost:8080/apis/system.infrapi.io/v1/namespaces \
+  -H "Authorization: Bearer $TOKEN"
+curl -s http://localhost:8080/apis/system.infrapi.io/v1/namespaces/thetenant \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+`/check`, and so `infrapi-cli auth can-i`, agree: `list` on `namespaces` is
+allowed to anyone, `get` to a member of at least one.
+
 `PUT` is a no-op confirmation kept for API shape compatibility: the path
 segment is the only thing that ever identified a namespace, and
 name/active are both fixed/computed, so there is nothing left in the

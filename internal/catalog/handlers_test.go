@@ -99,7 +99,7 @@ func newTestEngine(t *testing.T) (*gin.Engine, *Repository) {
 	engine := gin.New()
 	RegisterApiRegistrationRoutes(engine, catalogRepo, noopGate, testDeployPlatform, testDeployRegion)
 	RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, fakeAuthGate(testAdmin, testAdminGroup), testDeployPlatform, testDeployRegion)
-	RegisterNamespaceCollectionRoutes(engine, catalogRepo, noopGate)
+	RegisterNamespaceCollectionRoutes(engine, engine, catalogRepo, nil)
 	return engine, catalogRepo
 }
 

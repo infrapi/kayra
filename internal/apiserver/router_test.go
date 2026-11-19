@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -388,6 +389,90 @@ func TestBuildClusterRoutesAreClusterRBAC(t *testing.T) {
 		engine.ServeHTTP(w, req)
 		if w.Code != c.status {
 			t.Errorf("status %d, body %s, want %d", w.Code, w.Body.String(), c.status)
+		}
+	}
+}
+
+// Reading the namespaces: a sysadmin sees every one; anyone else lists
+// the ones they are in, and gets them, whatever their roles there.
+func TestNamespacesReadByMembers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := testKayraConfig(t)
+	engine, err := Build(testAppConfig(), cfg)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	keys, err := gcrypto.LoadSigningKeys(cfg.Authentifications["self"].Local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nobody, err := gcrypto.MintSelfJWT(keys[0], "nobody", []string{"sandbox-nobody"}, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := mintSysadminToken(t, cfg)
+	do := func(token, method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, path, bytes.NewReader([]byte(body)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		return w
+	}
+	const nss = "/apis/system.infrapi.io/v1/namespaces"
+	for _, ns := range []string{"mine", "theirs"} {
+		if w := do(root, http.MethodPost, nss, `{"name":"`+ns+`"}`); w.Code != http.StatusCreated {
+			t.Fatalf("namespace %s: %d %s", ns, w.Code, w.Body.String())
+		}
+	}
+	// nobody is in mine: a cluster group scoped to it names their group
+	group := `{"name":"mine-admins","metadata":{"namespace":"mine","region":"eu-west-1","platform":"sandbox"},"groups":["sandbox-nobody"]}`
+	if w := do(root, http.MethodPost, "/apis/authorization.infrapi.io/v1/clustergroups", group); w.Code != http.StatusCreated {
+		t.Fatalf("cluster group: %d %s", w.Code, w.Body.String())
+	}
+	names := func(token string) string {
+		t.Helper()
+		w := do(token, http.MethodGet, nss, "")
+		var list []struct{ Name string }
+		if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil || w.Code != http.StatusOK {
+			t.Fatalf("list: %d %s", w.Code, w.Body.String())
+		}
+		var out []string
+		for _, n := range list {
+			out = append(out, n.Name)
+		}
+		slices.Sort(out)
+		return strings.Join(out, " ")
+	}
+	if got := names(root); got != "mine theirs" {
+		t.Errorf("the sysadmin's: %q", got)
+	}
+	if got := names(nobody); got != "mine" {
+		t.Errorf("nobody's: %q", got)
+	}
+	for _, c := range []struct {
+		token, method, path, body string
+		status                    int
+	}{
+		{nobody, http.MethodGet, nss + "/mine", "", http.StatusOK},
+		{nobody, http.MethodGet, nss + "/theirs", "", http.StatusForbidden},
+		{nobody, http.MethodGet, nss + "/nowhere", "", http.StatusNotFound},
+		{nobody, http.MethodPost, nss, `{"name":"x"}`, http.StatusForbidden},
+		{nobody, http.MethodDelete, nss + "/mine", "", http.StatusForbidden},
+		{root, http.MethodGet, nss + "/theirs", "", http.StatusOK},
+		{"", http.MethodGet, nss, "", http.StatusUnauthorized},
+	} {
+		if w := do(c.token, c.method, c.path, c.body); w.Code != c.status {
+			t.Errorf("%s %s: %d %s, want %d", c.method, c.path, w.Code, w.Body.String(), c.status)
+		}
+	}
+	// /check agrees: can-i list namespaces, get them, not create them
+	for verb, want := range map[string]bool{"list": true, "get": true, "create": false} {
+		w := do(nobody, http.MethodPost, "/apis/authorization.infrapi.io/v1/check", `{"api":"system.infrapi.io","resource":"namespaces","verb":"`+verb+`"}`)
+		var r struct{ Allowed bool }
+		if err := json.Unmarshal(w.Body.Bytes(), &r); err != nil || r.Allowed != want {
+			t.Errorf("check %s: %d %s, want %v", verb, w.Code, w.Body.String(), want)
 		}
 	}
 }

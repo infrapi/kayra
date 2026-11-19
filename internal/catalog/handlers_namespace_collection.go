@@ -2,6 +2,8 @@ package catalog
 
 import (
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -26,19 +28,27 @@ func namespaceResponse(n Namespace) gin.H {
 	return gin.H{"name": n.Name, "active": n.Active, "created_at": n.CreatedAt, "updated_at": n.UpdatedAt}
 }
 
+// NamespaceVisibility is which namespaces a caller reading the
+// collection sees: every one when all, else those member counts them in,
+// whatever their roles there. verb is list or get.
+type NamespaceVisibility func(c *gin.Context, verb string) (all bool, member func(namespace string) (bool, error), err error)
+
 // RegisterNamespaceCollectionRoutes mounts the namespace resource itself
 // — the legacy model's "Tenant": a namespace and a tenant
-// are the same thing, so there is no separate /tenant child resource —
-// on r, gated by gate: normally a group already behind the authenticator
-// and rbac.RequireCluster, the cluster RBAC. Creating,
-// renaming or deleting a namespace is a cluster-wide administrative
-// action, same trust tier as an ApiRegistration, not something that can be
-// bootstrapped via per-namespace RBAC (there is nothing to check RBAC
-// against before the namespace exists) — unlike Subscription, this
-// package's namespace-collection routes have no dependency on
-// internal/rbac at all.
-func RegisterNamespaceCollectionRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc) {
-	group := r.Group("/apis/"+SystemAPI+"/v1/namespaces", gate)
+// are the same thing, so there is no separate /tenant child resource.
+// Creating, renaming or deleting one is a cluster-wide administrative
+// action, same trust tier as an ApiRegistration: on writers, normally a
+// group behind the authenticator and rbac.RequireCluster, the cluster
+// RBAC. Reading is on readers, behind the authenticator only: whoever the
+// cluster RBAC grants it sees every namespace, anyone else the ones they
+// are in (visible; every one when nil).
+func RegisterNamespaceCollectionRoutes(writers, readers gin.IRouter, repo *Repository, visible NamespaceVisibility) {
+	path := "/apis/" + SystemAPI + "/v1/namespaces"
+	group := writers.Group(path)
+	read := readers.Group(path)
+	if visible == nil {
+		visible = func(*gin.Context, string) (bool, func(string) (bool, error), error) { return true, nil, nil }
+	}
 
 	group.POST("", func(c *gin.Context) {
 		var req namespaceUpsertRequest
@@ -59,23 +69,54 @@ func RegisterNamespaceCollectionRoutes(r gin.IRouter, repo *Repository, gate gin
 		c.JSON(http.StatusCreated, namespaceResponse(n))
 	})
 
-	group.GET("", func(c *gin.Context) {
+	read.GET("", func(c *gin.Context) {
+		all, member, err := visible(c, "list")
+		if err != nil {
+			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.ListNamespaces", ""))
+			return
+		}
 		namespaces, err := repo.ListNamespaces()
 		if err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.ListNamespaces", ""))
 			return
 		}
-		out := make([]gin.H, len(namespaces))
-		for i, n := range namespaces {
-			out[i] = namespaceResponse(n)
+		slices.SortFunc(namespaces, func(a, b Namespace) int { return strings.Compare(a.Name, b.Name) })
+		out := make([]gin.H, 0, len(namespaces))
+		for _, n := range namespaces {
+			if !all {
+				in, err := member(n.Name)
+				if err != nil {
+					httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.ListNamespaces", ""))
+					return
+				}
+				if !in {
+					continue
+				}
+			}
+			out = append(out, namespaceResponse(n))
 		}
 		c.JSON(http.StatusOK, out)
 	})
 
-	group.GET("/:namespace", func(c *gin.Context) {
-		n, err := repo.GetNamespace(c.Param("namespace"))
+	read.GET("/:namespace", func(c *gin.Context) {
+		name := c.Param("namespace")
+		n, err := repo.GetNamespace(name)
 		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "catalog.GetNamespace", "namespace %q not found", c.Param("namespace")))
+			httpapi.Fail(c, notFoundOrInternal(err, "catalog.GetNamespace", "namespace %q not found", name))
+			return
+		}
+		all, member, err := visible(c, "get")
+		if err == nil && !all {
+			all, err = member(name)
+			if err == nil && !all {
+				httpapi.Fail(c, liberrors.New(http.StatusForbidden, "catalog.GetNamespace",
+					"you are not a member of namespace %q: neither your user id nor any of your groups is listed in any of its groups", name).
+					WithSolution("ask its admins to add you, or one of your groups, to one of its groups"))
+				return
+			}
+		}
+		if err != nil {
+			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.GetNamespace", ""))
 			return
 		}
 		c.JSON(http.StatusOK, namespaceResponse(n))

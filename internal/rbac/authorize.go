@@ -1,6 +1,7 @@
 package rbac
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -195,6 +196,65 @@ func (r *Repository) NamespaceMembership(namespace, userID string, callerGroups 
 		return nil, fmt.Sprintf("you are not a member of namespace %q: neither your user id nor any of your groups is listed in any of its groups", namespace), nil
 	}
 	return memberGroups, "", nil
+}
+
+// MemberNamespaces are the namespaces the caller is in, whatever their
+// roles there: one of the namespace's own groups names them or one of
+// their resolved groups (the ones member_regex kept), or a cluster group
+// scoped to it does, its admins'. Two reads of the store, whatever the
+// number of namespaces: the cluster groups, and every namespace group.
+func (r *Repository) MemberNamespaces(userID string, callerGroups []string) (map[string]bool, error) {
+	out, err := r.scopedNamespaces(userID, callerGroups)
+	if err != nil {
+		return nil, err
+	}
+	prefix := r.keys.NamespacesPrefix()
+	entries, err := r.store.List(prefix)
+	if err != nil {
+		return nil, fmt.Errorf("rbac: scan namespace groups: %w", err)
+	}
+	for key, data := range entries {
+		// <prefix>/namespaces/<ns>/groups/<name>/config
+		parts := strings.Split(strings.TrimPrefix(key, prefix), "/")
+		if len(parts) != 4 || parts[1] != "groups" || parts[3] != "config" || out[parts[0]] {
+			continue
+		}
+		var g Group
+		if err := json.Unmarshal(data, &g); err != nil {
+			return nil, fmt.Errorf("rbac: unmarshal namespace group %s: %w", key, err)
+		}
+		if groupMatchesCaller(g, userID, callerGroups) {
+			out[parts[0]] = true
+		}
+	}
+	return out, nil
+}
+
+// IsNamespaceMember tells whether the caller is in namespace, as
+// MemberNamespaces counts it.
+func (r *Repository) IsNamespaceMember(namespace, userID string, callerGroups []string) (bool, error) {
+	scoped, err := r.scopedNamespaces(userID, callerGroups)
+	if err != nil || scoped[namespace] {
+		return scoped[namespace], err
+	}
+	groups, err := r.namespaceGroupsMatching(namespace, userID, callerGroups)
+	return len(groups) > 0, err
+}
+
+// scopedNamespaces are the namespaces a cluster group scoped to them
+// counts the caller in.
+func (r *Repository) scopedNamespaces(userID string, callerGroups []string) (map[string]bool, error) {
+	clusterGroups, err := r.ListClusterGroups()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, g := range clusterGroups {
+		if g.Metadata.Namespace != "" && groupMatchesCaller(g, userID, callerGroups) {
+			out[g.Metadata.Namespace] = true
+		}
+	}
+	return out, nil
 }
 
 // AuthorizeMember is steps 6–7 of every /check decision, for a caller

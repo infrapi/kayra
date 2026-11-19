@@ -91,7 +91,7 @@ func TestNamespaceCollectionRequiresItsGate(t *testing.T) {
 	// a gate that always rejects, standing in for RequireCluster denying
 	// a caller with no $platform-core-sysadmin claim.
 	rejectGate := func(c *gin.Context) { c.AbortWithStatus(http.StatusForbidden) }
-	RegisterNamespaceCollectionRoutes(engine, repo, rejectGate)
+	RegisterNamespaceCollectionRoutes(engine.Group("", rejectGate), engine, repo, nil)
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/system.infrapi.io/v1/namespaces", namespaceUpsertRequest{Name: "core"})
 	if w.Code != http.StatusForbidden {

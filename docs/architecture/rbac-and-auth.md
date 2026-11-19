@@ -28,7 +28,9 @@ may do is then decided by one of three rules, by where the resource lives:
 `POST /apis/authorization.infrapi.io/v1/check` answers for all three, so
 `infrapi-cli auth can-i` tells the truth about Kayra's own routes too.
 Nothing crosses the scopes: a global binding grants nothing in a
-namespace, and no namespace object grants anything cluster-scoped.
+namespace, and no namespace object grants anything cluster-scoped. One
+exception, read-only: anyone [reads the namespaces they are
+in](namespaces.md#reading-them).
 
 ## Verifying a bearer token
 

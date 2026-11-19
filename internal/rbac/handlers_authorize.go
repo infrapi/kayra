@@ -60,6 +60,10 @@ type Prechecks struct {
 	// their resources are its routes', not a spec's, and in a namespace
 	// they are decided as their routes are (CanManageNamespaceRBAC).
 	Builtin func(api string) bool
+	// MembersRead tells a cluster-scoped resource whose route lets anyone
+	// read the namespaces they are in (system's namespaces, get and list):
+	// listing is allowed, filtered; getting when they are in one.
+	MembersRead func(api, resource, verb string) bool
 }
 
 // RegisterAuthorizeRoute mounts the one route other apps built on
@@ -133,6 +137,18 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 			if err != nil {
 				httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeCluster", ""))
 				return
+			}
+			if !allowed && prechecks.MembersRead != nil && prechecks.MembersRead(req.Api, req.Resource, req.Verb) {
+				members, err := repo.MemberNamespaces(ac.UserID, ac.Groups)
+				if err != nil {
+					httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".MemberNamespaces", ""))
+					return
+				}
+				allowed = req.Verb == "list" || len(members) > 0
+				reason = ""
+				if !allowed {
+					reason = "you are a member of no namespace: neither your user id nor any of your groups is listed in any namespace's groups"
+				}
 			}
 			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason})
 			return

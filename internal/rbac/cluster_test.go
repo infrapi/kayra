@@ -3,6 +3,8 @@ package rbac
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -289,5 +291,44 @@ func TestCheckCluster(t *testing.T) {
 	// Kayra's own api, cluster-scoped: the sysadmin
 	if r := check([]string{testSysadminGroup}, AuthorizeRequest{Api: AuthorizationAPI, Resource: "clusterroles", Verb: "create"}); !r.Allowed {
 		t.Errorf("the sysadmin on clusterroles: %+v", r)
+	}
+}
+
+// MemberNamespaces and IsNamespaceMember: the namespaces whose own
+// groups, or the cluster groups scoped to them, name the caller or a group
+// of theirs, whatever their roles.
+func TestMemberNamespaces(t *testing.T) {
+	repo := newTestRepo(t)
+	seedClusterRBAC(t, repo, testAdminGroup, testNamespace) // admins of myns, a cluster group scoped to it
+	for ns, g := range map[string]Group{
+		"acme":  {Name: "devs", Groups: []string{"sandbox-acme-devs"}},
+		"other": {Name: "jdoe", Users: []string{"jdoe"}},
+		"none":  {Name: "nobody", Groups: []string{"sandbox-nobody"}},
+	} {
+		g.Metadata = Metadata{Namespace: ns}
+		if err := repo.PutNamespaceGroup(ns, &g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	groups := []string{"sandbox-acme-devs", testAdminGroup}
+	got, err := repo.MemberNamespaces("jdoe", groups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for ns := range got {
+		names = append(names, ns)
+	}
+	slices.Sort(names)
+	if want := "acme myns other"; strings.Join(names, " ") != want {
+		t.Errorf("namespaces: %v, want %s", names, want)
+	}
+	for ns, want := range map[string]bool{"acme": true, testNamespace: true, "other": true, "none": false, "empty": false} {
+		if in, err := repo.IsNamespaceMember(ns, "jdoe", groups); err != nil || in != want {
+			t.Errorf("%s: %v %v, want %v", ns, in, err, want)
+		}
+	}
+	if got, _ := repo.MemberNamespaces("x", nil); len(got) != 0 {
+		t.Errorf("a stranger's: %v", got)
 	}
 }
