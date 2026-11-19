@@ -41,8 +41,8 @@ In order:
    about its group's routes and open without a token, `oidc`'s own routes, `GET`/`POST
    /oauth2/userinfo` (both, per OIDC Core §5.3.1: GET MUST be supported,
    POST MAY be — most real providers accept either),
-   [oauth2broker](oauth2broker.md)'s three routes (`infrapi-cli auth login`'s
-   own browser relay), then
+   the [authorization server](../architecture/oauth2-server.md)'s routes
+   when `oauth2.enabled`, then
    [rbac](rbac.md)'s cluster and namespace routes,
    the [catalog](../architecture/overview.md#catalog)'s
    cluster/namespace/namespace-collection routes, and

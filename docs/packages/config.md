@@ -219,21 +219,12 @@ it resolves users against, and exactly one of:
     `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` env vars Go's default
     transport already honors when this is unset. [Validate](#validate)
     rejects an unparseable one.
-  - `oauth2` — `client_id` (required if set) and `scopes` (defaults to
-    `oauth2broker.DefaultScopes`: `openid`, `profile`, `email`) for
-    [`infrapi-cli auth login`](https://infrapi.github.io/cli/commands/#login): a real browser-based OAuth2
-    Authorization Code + PKCE flow, saving the provider's own token into
-    a context. The CLI's browser opens at *this Kayra instance's
-    own* `/oauth2/v1/authorize`, never this provider's directly — most
-    enterprise IdPs (Okta included) will never allowlist a CLI's
-    loopback redirect_uri — which relays the real flow on to
-    `authorization_endpoint`/`token_endpoint` and back (see
-    [oauth2broker](oauth2broker.md)/[oauth2login](https://infrapi.github.io/cli/packages/#oauth2login)). A
-    public client throughout (PKCE replaces the need for a
-    `client_secret`, and Kayra's relay never introduces one), so
-    there is nothing else to configure here — just this same
-    `client_id` the provider already knows about for a native/public
-    app.
+  - `oauth2` — `client_id` (required if set) and `scopes` (`openid`,
+    `profile`, `email` when empty): Kayra's own client registration at
+    this provider, a public one (PKCE, no secret), for its
+    [authorization server](../architecture/oauth2-server.md) to log a
+    human in (`oauth2.login`). Its redirect URI is
+    `<app.url>/oauth2/callback`.
 - `local` — one or more RSA signing keys this instance trusts for
   self-issued tokens (the `self` provider the spec's bootstrap flow uses):
   `kid`, `algorithm`, whether it can `issuer` (sign, not just verify), and
@@ -261,6 +252,15 @@ authentifications:
     local:
       - {enabled: true, algorithm: RS512, issuer: true, kid: "k1", secret: "-----BEGIN PRIVATE KEY-----..."}
 ```
+
+## OAuth2 server
+
+`oauth2:` turns on Kayra's [authorization server](../architecture/oauth2-server.md):
+tokens of its own for infrapi-cli and MCP clients, renewed and revoked.
+`login` names the provider a human logs in with, `clients` the clients
+declared, `metadata_document_hosts` the hosts whose Client ID Metadata
+Documents are trusted, `resources` what a token may be for. See the
+[authorization server](../architecture/oauth2-server.md) for every key.
 
 ## Tokens
 

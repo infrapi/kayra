@@ -8,8 +8,7 @@ import (
 
 // TestExampleYAMLBuildsCleanly confirms the real examples/kayra.yaml
 // (not a hand-built test fixture) builds a full engine without panicking
-// — in particular that oauth2broker.RegisterRoutes tolerates a provider
-// with no remote.oauth2 configured.
+// — a provider with no remote.oauth2 included.
 func TestExampleYAMLBuildsCleanly(t *testing.T) {
 	cfg, err := gconfig.Load("../../examples/kayra.yaml")
 	if err != nil {

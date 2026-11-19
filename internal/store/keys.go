@@ -176,15 +176,6 @@ func (k Keys) PatKeypair() string {
 	return fmt.Sprintf("%s/keys/pat", k.Prefix)
 }
 
-// OAuth2BrokerState is where oauth2broker stashes one in-flight CLI
-// login's own redirect_uri/state while the browser is away at the real
-// provider (Okta, say) — see internal/oauth2broker. Keyed by a random
-// id, never the CLI's own state value, so a collision there can't leak
-// one login into another's lookup.
-func (k Keys) OAuth2BrokerState(id string) string {
-	return fmt.Sprintf("%s/oauth2broker/%s", k.Prefix, id)
-}
-
 // ReconcilerNamespaceLock is the JobLocker key guarding one namespace's
 // initial activation, so every kayra reconciler process sharing this
 // store agrees on which one of them actually runs it for a given

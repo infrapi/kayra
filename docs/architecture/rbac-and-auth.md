@@ -32,6 +32,9 @@ namespace, and no namespace object grants anything cluster-scoped. One
 exception, read-only: anyone [reads the namespaces they are
 in](namespaces.md#reading-them).
 
+Kayra also issues tokens of its own, renewed and revoked: see the
+[authorization server](oauth2-server.md).
+
 ## Verifying a bearer token
 
 ```text

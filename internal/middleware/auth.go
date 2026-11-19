@@ -67,6 +67,18 @@ type Authenticator struct {
 	Keys       store.Keys
 	PatKey     *rsa.PrivateKey
 	DefaultTTL time.Duration
+	// Revoked tells whether a token of a local provider, Kayra's own, was
+	// revoked, by its jti (internal/oauth2server): none is when nil.
+	Revoked func(jti string) (bool, error)
+}
+
+// Resolve authenticates token as Middleware does: a PAT, or a JWT of a
+// configured provider, its user and groups resolved.
+func (a *Authenticator) Resolve(token string) (*AuthContext, error) {
+	if gcrypto.IsToken(token) {
+		return a.resolvePAT(token)
+	}
+	return a.resolveJWT(token)
 }
 
 // Middleware authenticates every request it wraps: a personal access token
@@ -82,12 +94,7 @@ func (a *Authenticator) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		var ac *AuthContext
-		if gcrypto.IsToken(token) {
-			ac, err = a.resolvePAT(token)
-		} else {
-			ac, err = a.resolveJWT(token)
-		}
+		ac, err := a.Resolve(token)
 		if err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusUnauthorized, "middleware.Authenticate", ""))
 			return
@@ -107,6 +114,15 @@ func (a *Authenticator) resolveJWT(token string) (*AuthContext, error) {
 	provider, ok := a.Config.Authentifications[v.Provider]
 	if !ok {
 		return nil, fmt.Errorf("middleware: unknown provider %q", v.Provider)
+	}
+	if jti, _ := v.Claims["jti"].(string); jti != "" && len(provider.Local) > 0 && a.Revoked != nil {
+		revoked, err := a.Revoked(jti)
+		if err != nil {
+			return nil, err
+		}
+		if revoked {
+			return nil, fmt.Errorf("middleware: token %s is revoked", jti)
+		}
 	}
 
 	userIDCfg := config.UserIDConfig{From: "token", Field: "sub"}

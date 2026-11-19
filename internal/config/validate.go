@@ -13,6 +13,9 @@ import (
 // exactly one backend chosen per union field, and every cross-reference
 // between authentifications and authorizations resolves.
 func (c *Config) Validate() error {
+	if err := c.OAuth2.validate(c); err != nil {
+		return err
+	}
 	if _, _, err := c.ActiveDatabase(); err != nil {
 		return err
 	}

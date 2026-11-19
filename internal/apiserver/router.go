@@ -17,7 +17,7 @@ import (
 	"github.com/infrapi/kayra/internal/discovery"
 	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/middleware"
-	"github.com/infrapi/kayra/internal/oauth2broker"
+	"github.com/infrapi/kayra/internal/oauth2server"
 	"github.com/infrapi/kayra/internal/oidc"
 	"github.com/infrapi/kayra/internal/rbac"
 	"github.com/infrapi/kayra/internal/store"
@@ -94,8 +94,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	// group internal/rbac and internal/catalog mount, and every
 	// Role.Rules entry an operator authors, is "<group>.<domain>", so
 	// this must be resolved before either package registers a single
-	// route, and before oauth2broker (which relays it to `infrapi-cli
-	// login` so the CLI never has to guess it either).
+	// route.
 	apiDomain := cfg.App.APIDomain
 	if apiDomain == "" {
 		apiDomain = "infrapi.io"
@@ -127,7 +126,15 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	discovery.Register(engine, discovery.New(apiDomain, discovery.Groups{
 		System: catalog.SystemAPI, Catalog: catalog.CatalogAPI, Authorization: rbac.AuthorizationAPI,
 	}, "/oauth2/userinfo", "/oauth2/discovery/keys", "/apis"))
-	oauth2broker.RegisterRoutes(engine, cfg, s, keys, baseURL)
+	// Kayra's authorization server: tokens of its own, for infrapi-cli and
+	// MCP clients, renewed and revoked
+	if cfg.OAuth2.Enabled {
+		as, err := oauth2server.New(cfg, authenticator, s, keys, baseURL)
+		if err != nil {
+			return nil, err
+		}
+		as.RegisterRoutes(engine)
+	}
 
 	// Empty cfg.Sysadmin.Groups falls back to the single
 	// "$platform-core-sysadmin" group the spec names — a deployment that

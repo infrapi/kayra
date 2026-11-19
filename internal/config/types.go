@@ -18,6 +18,7 @@ type Config struct {
 	Tokens            TokensConfig                    `yaml:"tokens"`
 	Reconciler        ReconcilerConfig                `yaml:"reconciler"`
 	Sysadmin          SysadminConfig                  `yaml:"sysadmin"`
+	OAuth2            OAuth2ServerConfig              `yaml:"oauth2"`
 }
 
 // AppConfig is the app: block of the Kayra YAML file — the shared
@@ -127,26 +128,20 @@ type RemoteAuthConfig struct {
 	// and $platform, this instance's (INFRAPI_APP_REGION,
 	// INFRAPI_APP_PLATFORM), are rendered in the values (RenderClaims).
 	Claims map[string]ClaimValues `yaml:"claims"`
-	// OAuth2, when set, lets `infrapi-cli login` authenticate against
-	// this provider via a real browser-based Authorization Code + PKCE
-	// flow, brokered through this server (see internal/oauth2broker and
-	// infrapi-cli login) instead of a username/password bind — the
-	// same flow `oc login` runs against OpenShift's own /oauth/authorize.
+	// OAuth2, when set, is the provider's client registration for Kayra's
+	// authorization server (oauth2.login): Kayra logs a human in there,
+	// its redirect URI <app.url>/oauth2/callback.
 	OAuth2 *OAuth2LoginConfig `yaml:"oauth2"`
 }
 
-// OAuth2LoginConfig is a remote provider's own OAuth2 client
-// registration, used only to broker `infrapi-cli login` (see
-// internal/oauth2broker) — never by the API server's own token
-// verification, which only ever checks tokens already issued by the
-// provider, not requests them.
+// OAuth2LoginConfig is a remote provider's OAuth2 client registration,
+// Kayra's: the authorization server (internal/oauth2server) logs a human in
+// with it, a public client (PKCE, no secret).
 type OAuth2LoginConfig struct {
-	// ClientID is this CLI's client_id in the provider's own OAuth2 app
-	// registration — a public client (PKCE replaces the need for a
-	// client_secret, exactly like oc/kubectl's own OIDC plugins).
+	// ClientID is Kayra's client_id in the provider's application.
 	ClientID string `yaml:"client_id"`
-	// Scopes requested from the provider; empty defaults to
-	// oauth2broker.DefaultScopes ("openid", "profile", "email").
+	// Scopes requested from the provider: openid, profile, email when
+	// empty.
 	Scopes []string `yaml:"scopes"`
 }
 

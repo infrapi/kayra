@@ -88,7 +88,7 @@ internal/oidc        discovery/JWKS fetch+cache, Kayra's own discovery endpoint
 internal/discovery   /.well-known/kayra.json, what infrapi/lib and infrapi-cli discover
 internal/authn       bearer token verification, user id resolution
 internal/authz       LDAP/dev-local directory resolution, resolved-user cache
-internal/oauth2broker server-side relay for infrapi-cli auth login's browser-based OAuth2 flow
+internal/oauth2server the authorization server: tokens of Kayra's own, for infrapi-cli and MCP clients
 internal/middleware  gin Authenticator
 internal/rbac        cluster/namespace groups, roles, rolebindings
 internal/catalog     api registrations, namespaces (tenants), subscriptions, Reconciler
