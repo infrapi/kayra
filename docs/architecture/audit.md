@@ -58,7 +58,7 @@ audit:
 
 - **`id`:** a UUIDv7, so the ids sort by time.
 - **`kind`:** `user`, `serviceaccount` or `api`: see
-  [Service accounts](service-accounts.md) and [API identity](api-identity.md).
+  [Service accounts](auth/service-accounts.md) and [API identity](auth/api-identity.md).
 - **`request_id`:** the request's `X-Request-Id`. For `stage: check`, it is
   the original request's, with its `source_ip` and `user_agent`: an app on
   infrapi/lib sends them in the check. Otherwise they are the app's own.

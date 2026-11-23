@@ -39,5 +39,5 @@ claim. `FederatedCredential.Matches` compares a verified token's claims.
 `KindUser`, `KindServiceAccount` and `KindAPI` are the values of
 [`middleware.AuthContext.Kind`](middleware.md#authcontext), shown by
 `/oauth2/userinfo` as `kind`. See
-[Service accounts](../architecture/service-accounts.md) and
-[API identity](../architecture/api-identity.md).
+[Service accounts](../architecture/auth/service-accounts.md) and
+[API identity](../architecture/auth/api-identity.md).

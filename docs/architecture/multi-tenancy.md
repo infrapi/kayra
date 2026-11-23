@@ -39,12 +39,12 @@ guide, whose model Kayra follows.
 | Mechanism | What it isolates |
 |---|---|
 | [Namespaces](namespaces.md) | Every API's resources are addressed in a namespace, `/apis/<group>/v1/namespaces/<ns>/...`, and decided by that namespace's RBAC. No API has cluster-scoped resources of its own. |
-| [Namespace RBAC](rbac-and-auth.md#the-rbac-model) | A namespace's groups, roles and bindings grant its members access, and nobody else's. A user not in any of its groups is refused, without learning what it is subscribed to. |
-| [Cluster RBAC](rbac-and-auth.md#who-can-manage-a-namespaces-rbac-objects) | A cluster group and binding scoped to a namespace make its admins, and only them, able to manage its RBAC. Global cluster roles belong to the platform's admins. |
+| [Namespace RBAC](auth/rbac-and-auth.md#the-rbac-model) | A namespace's groups, roles and bindings grant its members access, and nobody else's. A user not in any of its groups is refused, without learning what it is subscribed to. |
+| [Cluster RBAC](auth/rbac-and-auth.md#who-can-manage-a-namespaces-rbac-objects) | A cluster group and binding scoped to a namespace make its admins, and only them, able to manage its RBAC. Global cluster roles belong to the platform's admins. |
 | [Subscriptions](subscriptions.md) | A namespace uses an API only once subscribed. A registration's `allowed_namespaces` restricts who may subscribe. |
-| [Service accounts](service-accounts.md) | A namespace's machine identities act in that namespace only, never in another, even with a binding. |
-| [API identity](api-identity.md) | An API acts in a namespace with that namespace's grant, and [reports events](events.md) only in the namespaces subscribed to it. |
-| [Personal access tokens](tokens.md) | A token scoped to some APIs and verbs, whatever its user may do. |
+| [Service accounts](auth/service-accounts.md) | A namespace's machine identities act in that namespace only, never in another, even with a binding. |
+| [API identity](auth/api-identity.md) | An API acts in a namespace with that namespace's grant, and [reports events](events.md) only in the namespaces subscribed to it. |
+| [Personal access tokens](auth/tokens.md) | A token scoped to some APIs and verbs, whatever its user may do. |
 | [Audit](audit.md) | Who asked for what, in which namespace, and whether it was allowed. |
 
 Kayra has no quotas: how much a namespace may provision is each API's
@@ -151,7 +151,7 @@ curl -s -X POST $A/clusterrolebindings "${H[@]}" -d "{\"name\": \"acme-prod-admi
 
 From then on, acme's admins subscribe their namespaces to the APIs and
 grant their own people, in their namespaces only (see
-[Subscriptions](subscriptions.md) and [RBAC & auth](rbac-and-auth.md)).
+[Subscriptions](subscriptions.md) and [RBAC & auth](auth/rbac-and-auth.md)).
 
 ### 3. Restrict an API to some tenants
 

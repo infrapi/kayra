@@ -24,7 +24,7 @@ type Namespace struct {
 
 `POST /apis/system.infrapi.io/v1/namespaces` (body `{name}`) creates it directly. Full CRUD at `/apis/system.infrapi.io/v1/namespaces`
 (collection) and `/apis/system.infrapi.io/v1/namespaces/:namespace` (one), decided on the
-[cluster RBAC](rbac-and-auth.md#who-decides) — same as
+[cluster RBAC](auth/rbac-and-auth.md#who-decides) — same as
 [ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
 cluster `RoleBinding` scoped to a namespace that doesn't exist yet.
 

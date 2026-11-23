@@ -1,7 +1,7 @@
 ---
 title: Personal access tokens
 description: "A user's long-lived tokens, for scripts and tools - every one expires, may be scoped to some APIs and verbs, is listed and revoked by its id."
-weight: 23
+weight: 30
 ---
 
 # Personal access tokens
@@ -17,7 +17,7 @@ at rest. It follows these rules:
 - **A token is listed and revoked by its public id,** never by its secret.
 - **Only a logged-in user creates one.** A PAT cannot create another, and a
   [service account](service-accounts.md) gets none: it logs in its own ways
-  (see [Authentication and authorization](auth.md#a-service-account-and-how-it-logs-in)).
+  (see [Authentication and authorization](_index.md#a-service-account-and-how-it-logs-in)).
 
 The examples use [`infrapi-cli`](https://infrapi.github.io/cli/getting-started/#1-install),
 logged in to `https://kayra.example.com`.
@@ -100,4 +100,4 @@ A token has no roles of its own. When it is used, its user's groups are
 resolved as for a login, live from the directory. The one exception is a
 `claims` authorization backend, which has no directory to query again: there
 the groups are those of the login that created the token (see
-[crypto](../packages/crypto.md#pat-records)).
+[crypto](../../packages/crypto.md#pat-records)).

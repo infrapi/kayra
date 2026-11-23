@@ -1,7 +1,7 @@
 ---
 title: API identity
 description: "A registered API's own identity, system:api:<group>: the app behind it gets its own tokens, with its key or its platform's token, and acts as the API."
-weight: 31
+weight: 60
 ---
 
 # API identity
@@ -15,7 +15,7 @@ secret is shared with Kayra:
 
 - **The app holds a key pair.** Kayra reads the public half from the app
   itself, at `/apis/<group>/<version>/-/jwks.json`, as it reads its
-  [OpenAPI spec](api-registrations.md#openapi-spec).
+  [OpenAPI spec](../api-registrations.md#openapi-spec).
 - **Or the app uses its platform's identity token,** a Kubernetes service
   account's say, as a [service account](federation.md) does.
 

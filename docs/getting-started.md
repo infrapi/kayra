@@ -208,7 +208,7 @@ curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clusterro
        "role": "acme-admin-role", "groups": ["acme-admins"]}'
 ```
 
-See [who can manage a namespace's RBAC](architecture/rbac-and-auth.md)
+See [who can manage a namespace's RBAC](architecture/auth/rbac-and-auth.md)
 for how this check is actually evaluated.
 
 ## 7. Register an API and subscribe the namespace to it
@@ -280,7 +280,7 @@ full reconcile model.
 
 - [CLI reference](cli.md) — `infrapi-cli auth login`, contexts, personal
   access tokens.
-- [RBAC & auth](architecture/rbac-and-auth.md#cluster-scoped-resources-and-delegation)
+- [RBAC & auth](architecture/auth/rbac-and-auth.md#cluster-scoped-resources-and-delegation)
   — delegate part of the cluster with a global binding, instead of the
   sysadmin token.
 - [Architecture](architecture/overview.md) — how every package fits

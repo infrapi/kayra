@@ -19,13 +19,13 @@ disabled records active.
 |---|---|
 | Run Kayra for the first time | [Getting started](getting-started.md) |
 | Understand how the pieces fit together | [Architecture overview](architecture/overview.md) |
-| Choose how a person, a CI job, a script or an API authenticates, and see what decides its rights | [Authentication and authorization](architecture/auth.md) |
-| See how a token is verified and how the RBAC decides | [RBAC & auth](architecture/rbac-and-auth.md) |
-| Give a CI or a script an identity of its own in a namespace | [Service accounts](architecture/service-accounts.md) |
-| Create, scope, list or revoke a personal access token | [Personal access tokens](architecture/tokens.md) |
-| Log a CI job in as a service account with its platform's token | [Federation](architecture/federation.md) |
+| Choose how a person, a CI job, a script or an API authenticates, and see what decides its rights | [Authentication and authorization](architecture/auth/_index.md) |
+| See how a token is verified and how the RBAC decides | [RBAC & auth](architecture/auth/rbac-and-auth.md) |
+| Give a CI or a script an identity of its own in a namespace | [Service accounts](architecture/auth/service-accounts.md) |
+| Create, scope, list or revoke a personal access token | [Personal access tokens](architecture/auth/tokens.md) |
+| Log a CI job in as a service account with its platform's token | [Federation](architecture/auth/federation.md) |
 | Create or update an API registration | [API registrations](architecture/api-registrations.md) |
-| Let an API's app act as the API, with its own key | [API identity](architecture/api-identity.md) |
+| Let an API's app act as the API, with its own key | [API identity](architecture/auth/api-identity.md) |
 | Audit who asked for what, to a file, a SIEM or nowhere | [Audit](architecture/audit.md) |
 | See what happened to a namespace's resources, or report it from an API | [Events](architecture/events.md) |
 | Create or update a namespace | [Namespaces](architecture/namespaces.md) |
@@ -56,7 +56,7 @@ own types, storage and HTTP handlers together.
 | [`internal/rbac`](packages/rbac.md) | `Group`/`Role`/`RoleBinding`, cluster + namespace scoped, and a namespace's `ServiceAccount`s |
 | `internal/catalog` | `ApiRegistration`/`Namespace`/`Subscription` + the reconciler (see [API registrations](architecture/api-registrations.md), [Namespaces](architecture/namespaces.md), [Subscriptions & reconciliation](architecture/subscriptions.md)) |
 | [`internal/tokenapi`](packages/tokenapi.md) | Personal access tokens: created, listed, revoked |
-| `internal/oauth2server` | The [authorization server](architecture/oauth2-server.md): tokens of Kayra's own, renewed and revoked |
+| `internal/oauth2server` | The [authorization server](architecture/auth/oauth2-server.md): tokens of Kayra's own, renewed and revoked |
 | [`internal/httpapi`](packages/httpapi.md) | RFC 9457 error response helper |
 | [`internal/apiserver`](packages/apiserver.md) | Wires every package above onto one gin engine |
 

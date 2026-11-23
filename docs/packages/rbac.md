@@ -100,7 +100,7 @@ rbac.RegisterServiceAccountRoutes(engine, repo, authenticator.Middleware(), rbac
   clusterrolebindings}`, behind [`RequireCluster`](#requirecluster):
   the cluster RBAC they define decides who manages them, the built-in
   sysadmin binding first, which no stored object can lock out. Writes
-  follow the [anti-escalation rule](../architecture/rbac-and-auth.md#anti-escalation).
+  follow the [anti-escalation rule](../architecture/auth/rbac-and-auth.md#anti-escalation).
 - **Namespace** — full CRUD at
   `/apis/authorization.infrapi.io/v1/namespaces/:namespace/{groups,roles,rolebindings}`,
   gated by `authenticator.Middleware()` **plus**
@@ -114,7 +114,7 @@ rbac.RegisterServiceAccountRoutes(engine, repo, authenticator.Middleware(), rbac
   `Role`'s rules go through `validateRules` on create and update when one
   is given; `apiserver.Build` passes `catalog.Repository.ValidateRoleRules`,
   which checks them against each api's OpenAPI spec (see
-  [RBAC & auth](../architecture/rbac-and-auth.md#authorizing-other-apps-requests)).
+  [RBAC & auth](../architecture/auth/rbac-and-auth.md#authorizing-other-apps-requests)).
 - **Authorize** — `POST /apis/authorization.infrapi.io/v1/check`,
   gated only by `authenticator.Middleware()` (any configured provider),
   never by `Allows` against that same api group — the general-purpose
@@ -129,7 +129,7 @@ rbac.RegisterServiceAccountRoutes(engine, repo, authenticator.Middleware(), rbac
   the token action `POST .../serviceaccounts/:name/token`, a permission of
   its own (`serviceaccounts/token`, `create`). Its `TokenIssuer` is the
   authorization server; without one, the action answers `501`. See
-  [Service accounts](../architecture/service-accounts.md).
+  [Service accounts](../architecture/auth/service-accounts.md).
   `repo.ServiceAccountContext(subject, uid)` resolves a token of one, the
   authenticator's `Machine`. A service account is counted only by a group of
   its own namespace: by name in `ServiceAccounts`, or through
@@ -142,7 +142,7 @@ rbac.RegisterServiceAccountRoutes(engine, repo, authenticator.Middleware(), rbac
   resource, verb, name)` is what an API may always do about itself: get its
   own `apiregistrations` and `apiregistrations/status`. `RequireCluster`
   and `/check` (a request's `name`) apply it before the RBAC. See
-  [API identity](../architecture/api-identity.md).
+  [API identity](../architecture/auth/api-identity.md).
 
 A group's members are checked on create and update: no reserved
 (`system:`) user, no reserved group but a namespace group's own
@@ -203,7 +203,7 @@ URNs. This is what backs `POST /apis/authorization.infrapi.io/v1/check`
 `pkg/auth` makes to authorize a request on behalf of any app built on
 top of it, without that app storing or evaluating RBAC rules itself.
 See
-[RBAC & auth](../architecture/rbac-and-auth.md#authorizing-other-apps-requests).
+[RBAC & auth](../architecture/auth/rbac-and-auth.md#authorizing-other-apps-requests).
 
 ## RequireClusterRBAC
 

@@ -123,7 +123,7 @@ database:
 
 Despite its name, `authorizations:` decides no access: it resolves a user's
 **groups** and attributes, which the RBAC then binds to roles (see
-[Authentication and authorization](../architecture/auth.md#terms)).
+[Authentication and authorization](../architecture/auth/_index.md#terms)).
 
 At least one entry is required; each is exactly one of `ldap`, `local`
 or `claims`. `ldap` describes a real directory
@@ -180,7 +180,7 @@ response already fetched to resolve the user id.
 A `claims` backend cannot back a username/password login (there is no
 username/password to check — only an already-issued token) and cannot
 be re-resolved later from a bare user id alone (there
-is no live session left to re-query). [Personal access tokens](../architecture/rbac-and-auth.md)
+is no live session left to re-query). [Personal access tokens](../architecture/auth/tokens.md)
 cope with that by snapshotting `Groups`/`Attributes` into the token
 record at creation time instead of resolving them live on every use —
 the one case where a PAT's roles don't track a later change in group
@@ -201,7 +201,7 @@ already embeds).
 The providers whose tokens Kayra accepts: a token of one names a **user**,
 the person it was issued to. A CI job whose token is accepted here acts as
 the user who ran it; to act as a machine of a namespace instead, see
-[federation](../architecture/federation.md).
+[federation](../architecture/auth/federation.md).
 
 At least one entry is required, each naming which `authorizations.<name>`
 it resolves users against, and exactly one of:
@@ -231,7 +231,7 @@ it resolves users against, and exactly one of:
   - `oauth2` — `client_id` (required if set) and `scopes` (`openid`,
     `profile`, `email` when empty): Kayra's own client registration at
     this provider, a public one (PKCE, no secret): the
-    [authorization server](../architecture/oauth2-server.md) offers it to
+    [authorization server](../architecture/auth/oauth2-server.md) offers it to
     log a human in, and checks its ID token; `user_id`, optional, where
     the user id is at a login, the provider's `user_id` by default. Its
     redirect URI is `<app.url>/oauth2/callback`. A provider without
@@ -266,12 +266,12 @@ authentifications:
 
 ## OAuth2 server
 
-`oauth2:` turns on Kayra's [authorization server](../architecture/oauth2-server.md):
+`oauth2:` turns on Kayra's [authorization server](../architecture/auth/oauth2-server.md):
 tokens of its own for infrapi-cli and MCP clients, renewed and revoked.
 A human logs in with a provider that has `remote.oauth2`, `clients` are the clients
 declared, `metadata_document_hosts` the hosts whose Client ID Metadata
 Documents are trusted, `resources` what a token may be for. See the
-[authorization server](../architecture/oauth2-server.md) for every key.
+[authorization server](../architecture/auth/oauth2-server.md) for every key.
 
 ## Tokens
 
@@ -289,7 +289,7 @@ type PatConfig struct {
 ```
 
 See [crypto](crypto.md#pat-keypair) and
-[Personal access tokens](../architecture/tokens.md).
+[Personal access tokens](../architecture/auth/tokens.md).
 
 ## Federation
 
@@ -303,7 +303,7 @@ type FederationConfig struct {
 The issuers whose tokens a service account's `federated_credentials` may
 trust: a GitLab instance, GitHub Actions, a Kubernetes cluster. Only the
 admin lists them. Each one is an `https` URL, or `http` on a loopback address.
-See [Federation](../architecture/federation.md). `oauth2.client_credentials_ttl`
+See [Federation](../architecture/auth/federation.md). `oauth2.client_credentials_ttl`
 (15m) is how long the token it gives lasts.
 
 ## Audit
@@ -344,7 +344,7 @@ type ServiceAccountsConfig struct {
 ```
 
 The lifetimes of the tokens a namespace's
-[service accounts](../architecture/service-accounts.md) are issued.
+[service accounts](../architecture/auth/service-accounts.md) are issued.
 `max_token_ttl` above 24h is refused: a CI asks for a new token rather than
 keeping a long one.
 
@@ -365,7 +365,7 @@ sysadmin:
 
 The group(s) of the built-in sysadmin binding: a caller whose resolved
 groups intersect them holds every cluster-scoped resource (see
-[the sysadmin binding](../architecture/rbac-and-auth.md#the-sysadmin-binding)),
+[the sysadmin binding](../architecture/auth/rbac-and-auth.md#the-sysadmin-binding)),
 and nothing in a namespace. Authored directly here as real LDAP/IdP group
 names — never derived from a template the operator has no way to
 override. Left empty (the default), a single group,

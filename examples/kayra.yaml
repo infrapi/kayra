@@ -191,7 +191,7 @@ sysadmin:
     - sandbox-core-sysadmin
     - sandbox-platform-admins
 
-# Personal access tokens: every one expires (docs/architecture/tokens.md).
+# Personal access tokens: every one expires (docs/architecture/auth/tokens.md).
 tokens:
   pat:
     ttl: 720h      # when a request names none
@@ -199,14 +199,14 @@ tokens:
 
 # A namespace's service accounts' tokens, signed by the authorization
 # server (oauth2.enabled): at most 24h, a CI asks for a new one
-# (docs/architecture/service-accounts.md).
+# (docs/architecture/auth/service-accounts.md).
 serviceaccounts:
   token_ttl: 1h
   max_token_ttl: 24h
 
 # The CI platforms whose job tokens a service account may be trusted as
 # (its federated_credentials): no secret in the CI
-# (docs/architecture/federation.md).
+# (docs/architecture/auth/federation.md).
 # federation:
 #   issuers:
 #     - issuer: https://gitlab.example.com

@@ -1,7 +1,7 @@
 ---
 title: "RBAC & auth"
 description: How a request is authenticated and how Kayra decides what the caller is allowed to do.
-weight: 20
+weight: 10
 ---
 
 # RBAC & auth
@@ -9,30 +9,30 @@ weight: 20
 How a request becomes "this is `jdoe`, authenticated via `okta`", and how
 Kayra then decides what `jdoe` is allowed to do. To choose how a person, a
 CI job or an API should authenticate, start with
-[Authentication and authorization](auth.md). Package references:
-[authn](../packages/authn.md), [authz](../packages/authz.md),
-[oidc](../packages/oidc.md), [crypto](../packages/crypto.md),
-[middleware](../packages/middleware.md), [rbac](../packages/rbac.md).
+[Authentication and authorization](_index.md). Package references:
+[authn](../../packages/authn.md), [authz](../../packages/authz.md),
+[oidc](../../packages/oidc.md), [crypto](../../packages/crypto.md),
+[middleware](../../packages/middleware.md), [rbac](../../packages/rbac.md).
 
 ## Who decides
 
 Every route authenticates its caller with
-[middleware.Authenticator](../packages/middleware.md#authenticator): any
+[middleware.Authenticator](../../packages/middleware.md#authenticator): any
 configured `authentifications.<name>` provider, or a PAT. What the caller
 may do is then decided by one of three rules, by where the resource lives:
 
 | Resource | Decided by | Routes |
 |---|---|---|
-| **cluster-scoped**: Kayra's namespaces, apiregistrations, cluster RBAC objects, and any app's `/apis/<api>/<version>/<resource>` | the **cluster RBAC**: the built-in sysadmin binding, then the global cluster role bindings ([`Repository.AuthorizeCluster`](../packages/rbac.md#authorizecluster)) | `/apis/system.infrapi.io/v1/namespaces`, `/apis/catalog.infrapi.io/v1/apiregistrations`, `/apis/authorization.infrapi.io/v1/cluster*`; an app's, through `/check` |
-| **managing a namespace**: its groups, roles, rolebindings, subscriptions | the cluster role bindings **scoped to that namespace** ([`CanManageNamespaceRBAC`](../packages/rbac.md#canmanagenamespacerbac)) | `/apis/authorization.infrapi.io/v1/namespaces/:namespace/*`, `/apis/catalog.infrapi.io/v1/namespaces/:namespace/subscriptions` |
-| **an app's resources in a namespace** | the namespace's own groups, roles and rolebindings ([`Authorize`](../packages/rbac.md#authorize)) | an app's `/apis/<api>/<version>/namespaces/:namespace/*`, through `/check` |
+| **cluster-scoped**: Kayra's namespaces, apiregistrations, cluster RBAC objects, and any app's `/apis/<api>/<version>/<resource>` | the **cluster RBAC**: the built-in sysadmin binding, then the global cluster role bindings ([`Repository.AuthorizeCluster`](../../packages/rbac.md#authorizecluster)) | `/apis/system.infrapi.io/v1/namespaces`, `/apis/catalog.infrapi.io/v1/apiregistrations`, `/apis/authorization.infrapi.io/v1/cluster*`; an app's, through `/check` |
+| **managing a namespace**: its groups, roles, rolebindings, subscriptions | the cluster role bindings **scoped to that namespace** ([`CanManageNamespaceRBAC`](../../packages/rbac.md#canmanagenamespacerbac)) | `/apis/authorization.infrapi.io/v1/namespaces/:namespace/*`, `/apis/catalog.infrapi.io/v1/namespaces/:namespace/subscriptions` |
+| **an app's resources in a namespace** | the namespace's own groups, roles and rolebindings ([`Authorize`](../../packages/rbac.md#authorize)) | an app's `/apis/<api>/<version>/namespaces/:namespace/*`, through `/check` |
 
 `POST /apis/authorization.infrapi.io/v1/check` answers for all three, so
 `infrapi-cli auth can-i` tells the truth about Kayra's own routes too.
 Nothing crosses the scopes: a global binding grants nothing in a
 namespace, and no namespace object grants anything cluster-scoped. One
 exception, read-only: anyone [reads the namespaces they are
-in](namespaces.md#reading-them).
+in](../namespaces.md#reading-them).
 
 Kayra also issues tokens of its own, renewed and revoked: see the
 [authorization server](oauth2-server.md).
@@ -61,21 +61,21 @@ Authorization: Bearer <token>
 ```
 
 A PAT record carries no groups of its own
-([crypto.PatRecord](../packages/crypto.md#pat-records)) — both paths end at
+([crypto.PatRecord](../../packages/crypto.md#pat-records)) — both paths end at
 the same `authz.Cached.ResolveUser` call, so a caller's roles are always
 resolved **live** from their current group membership, never snapshotted
-at token-mint time. [`oidc.Manager.FindKey`](../packages/oidc.md#manager)
+at token-mint time. [`oidc.Manager.FindKey`](../../packages/oidc.md#manager)
 checks local (self-signed) providers first, then every remote provider's
 JWKS **cache**, only refreshing a cache when no provider's held cache has
 the `kid` — the spec's "absent from cache -> refresh, otherwise don't"
 rule. Resolved users and fetched JWKS both live in the store with a TTL —
-see [`kayra cache clean`](../cli.md#cache-clean).
+see [`kayra cache clean`](../../cli.md#cache-clean).
 
 ## The sysadmin binding
 
 The cluster RBAC starts with one binding Kayra builds itself, from
 `kayra.yaml`: callers whose resolved groups intersect
-[`sysadmin.groups`](../packages/config.md) hold a cluster role of
+[`sysadmin.groups`](../../packages/config.md) hold a cluster role of
 `{"apis": ["*"], "resources": ["*"], "verbs": ["*"]}` on every
 cluster-scoped resource. The list is authored as real LDAP/IdP group names,
 and defaults to a single group, `<platform>-core-sysadmin`, only when left
@@ -129,7 +129,7 @@ type RoleBinding struct {
 Cluster (`/apis/authorization.infrapi.io/v1/{clustergroups,
 clusterroles,clusterrolebindings}`) and namespace
 (`/apis/authorization.infrapi.io/v1/namespaces/:namespace/{groups,roles,rolebindings}`)
-copies of the same three objects — see [rbac](../packages/rbac.md#types)
+copies of the same three objects — see [rbac](../../packages/rbac.md#types)
 for the full field reference. A `RoleBinding`'s `Role` and every `Group`
 it names must share its exact `Metadata` (region/platform/namespace),
 checked at creation time.
@@ -153,7 +153,7 @@ namespace**, and grants managing it (below).
 
 `POST`/`GET`/`PUT`/`DELETE` on a namespace's `groups`/`roles`/`rolebindings`
 — and, via the identical check, a namespace's
-[subscriptions](subscriptions.md) — require more than just being
+[subscriptions](../subscriptions.md) — require more than just being
 authenticated: either one of the caller's own resolved groups (the same
 `groups` field `/oauth2/userinfo` returns) must be listed in a
 **cluster**-level `Group`'s own `groups`, or their own user id must be
@@ -163,7 +163,7 @@ namespace, to a cluster `Role` granting
 `apis: ["authorization.infrapi.io"]` (groups/roles/rolebindings) or
 `apis: ["catalog.infrapi.io"]` (subscriptions) for the relevant
 verb — evaluated in
-[`rbac.Repository.CanManageNamespaceRBAC`](../packages/rbac.md#canmanagenamespacerbac).
+[`rbac.Repository.CanManageNamespaceRBAC`](../../packages/rbac.md#canmanagenamespacerbac).
 This is exactly the spec's cluster bootstrap flow (group → role →
 rolebinding), now actually enforced rather than only ever written. A
 denial's `detail` names which step failed: no matching group, no
@@ -185,7 +185,7 @@ id) directly: real LDAP directories commonly nest groups inside groups
 so a flat synced member list could never reliably contain the calling
 user — but `memberOf` (what authn resolves `groups` from at login,
 `cn=...` DNs stripped down to their short name by `member_regex`,
-see [config](../packages/config.md#authorizations)) already reflects the
+see [config](../../packages/config.md#authorizations)) already reflects the
 full nested membership. A `Group`'s own `groups` is authored in that
 same already-resolved vocabulary (plain names, never raw DNs), so
 there's nothing left to re-derive here — and it isn't scoped by
@@ -299,7 +299,7 @@ with `allowed: false` and the reason.
 | 3 | no `ApiRegistration` whose long name (its id) is `api` exists in this deployment's platform/region; a short name never matches, and the solution names the long one | `404` | `api "telemetry.infrapi.io" is not registered in sandbox/eu-west-1` |
 | 4 | the namespace has no subscription to that registration | `403` | `namespace "core" is not subscribed to api "telemetry.infrapi.io"` (solution: subscribe first) |
 | 5 | the subscription is not active: its initial sync hasn't completed, so **every verb is refused**, reads included | `403` | `subscription of namespace "core" to api "telemetry.infrapi.io" is not active yet (state "init"): its initial sync has not completed, so the api is not ready` |
-| 6 | the api's [OpenAPI spec](api-registrations.md#openapi-spec) has no namespaced `resource`; a singular/plural slip gets a "did you mean" | `404` | `api "telemetry.infrapi.io" has no resource "dashboard"` (solution: did you mean "dashboards"?) |
+| 6 | the api's [OpenAPI spec](../api-registrations.md#openapi-spec) has no namespaced `resource`; a singular/plural slip gets a "did you mean" | `404` | `api "telemetry.infrapi.io" has no resource "dashboard"` (solution: did you mean "dashboards"?) |
 | 7 | the spec has `resource`, but not `verb` on it | `405` | `resource "dashboards" of api "telemetry.infrapi.io" doesn't support "delete" (supported: get, list)` |
 | 8 | no role bound to the caller's groups grants `api` at all | `allowed: false` | `no role bound to your groups in namespace "core" grants api "telemetry.infrapi.io"` |
 | 9 | a role grants `api`, but not `verb` on `resource` | `allowed: false` | `your roles in namespace "core" grant api "telemetry.infrapi.io", but not "list" on "dashboards"` |
@@ -327,7 +327,7 @@ never becomes inactive again. When the registration later gets a new
 its `current_sync_id` is behind (`synced: false`): a `v1` api stays
 backward compatible, so the pending re-sync is for the api owner to plan,
 not a reason to refuse callers. See
-[subscriptions](subscriptions.md#state).
+[subscriptions](../subscriptions.md#state).
 
 `Namespace`/`Api` come straight from the URL (`Api` is the calling
 app's own full API group URN, e.g. "compute.infrapi.io", matching how
@@ -339,7 +339,7 @@ action is just part of `Resource` (`PATCH .../vm/:id/reboot` → resource
 `"vm/reboot"`, verb `"patch"`) — both parsed client-side by
 `infrapi/lib`'s `pkg/auth`, since that rule needs no Kayra-specific
 knowledge. The actual decision —
-[`rbac.Repository.Authorize`](../packages/rbac.md#authorize) — stays
+[`rbac.Repository.Authorize`](../../packages/rbac.md#authorize) — stays
 server-side: it's the same group→role→rolebinding evaluation
 `CanManageNamespaceRBAC` does, just against the namespace's own RBAC
 objects instead of the cluster's, and against an arbitrary API URN

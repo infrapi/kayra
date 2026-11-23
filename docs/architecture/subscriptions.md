@@ -55,7 +55,7 @@ the same flag `GET .../apiregistrations/:name/status` reports per subscriber.
 
 - **`active`: can the namespace use the api?** It's `false` until the initial
   sync succeeds, and while it's `false` every request to the api is refused
-  (see [rbac-and-auth](rbac-and-auth.md#authorizing-other-apps-requests),
+  (see [rbac-and-auth](auth/rbac-and-auth.md#authorizing-other-apps-requests),
   step 5). It's set once and never cleared: a later sync, failed or not,
   never makes the api unusable again, because a `v1` api stays backward
   compatible.
@@ -77,10 +77,10 @@ so a sync that keeps failing never loops.
 ## Managing one
 
 Full CRUD at `/apis/catalog.infrapi.io/v1/namespaces/:namespace/subscriptions{,/:api}`,
-gated by [`Authenticator`](rbac-and-auth.md#who-decides) plus
+gated by [`Authenticator`](auth/rbac-and-auth.md#who-decides) plus
 [`rbac.RequireClusterRBAC(repo, "subscriptions", verb)`](../packages/rbac.md#requireclusterrbac)
 — "subscriptions" is just another `resource` value checked against the
-same cluster `Role.Rules` [RBAC & auth](rbac-and-auth.md#who-can-manage-a-namespaces-rbac-objects)
+same cluster `Role.Rules` [RBAC & auth](auth/rbac-and-auth.md#who-can-manage-a-namespaces-rbac-objects)
 describes, so an existing sysadmin role using `resources: ["*"]` already
 covers it.
 

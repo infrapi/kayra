@@ -1,7 +1,7 @@
 ---
 title: Service accounts
 description: "A namespace's machine identities, system:serviceaccount:<namespace>:<name>, their rights in their own namespace only, and their short-lived tokens."
-weight: 22
+weight: 40
 ---
 
 # Service accounts
@@ -13,7 +13,7 @@ account can act **only in its own namespace**.
 
 A service account is an identity, not a way to log in. It holds no secret
 of its own; a workload proves it is the service account in one of three
-ways (see [Authentication and authorization](auth.md#a-service-account-and-how-it-logs-in)):
+ways (see [Authentication and authorization](_index.md#a-service-account-and-how-it-logs-in)):
 
 - **[federation](federation.md):** its platform's identity token, GitLab CI's,
   GitHub Actions', Kubernetes': no secret anywhere, a 15-minute token;

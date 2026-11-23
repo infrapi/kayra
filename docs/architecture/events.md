@@ -9,7 +9,7 @@ weight: 27
 Kayra serves `events.infrapi.io`: what happened to the APIs' resources, a VM
 created, a reboot that failed. It works like Kubernetes' events:
 
-- **The APIs report them**, each with its [own identity](api-identity.md). An
+- **The APIs report them**, each with its [own identity](auth/api-identity.md). An
   app built on infrapi/lib records one for every write it serves, and its
   workers record more ([lib's events package](https://infrapi.github.io/lib/packages/events/)).
 - **Kayra keeps them in etcd for `events.ttl`**, a week by default, counted
@@ -76,7 +76,7 @@ curl -s -X POST https://kayra.example.com/apis/authorization.infrapi.io/v1/names
        "rules": [{"apis": ["events.infrapi.io"], "resources": ["events"], "verbs": ["get", "list"]}]}'
 ```
 
-Bind it to the namespace's groups (see [RBAC & auth](rbac-and-auth.md#the-rbac-model)).
+Bind it to the namespace's groups (see [RBAC & auth](auth/rbac-and-auth.md#the-rbac-model)).
 The cluster's events are read with the cluster RBAC.
 
 ## 3. Who may report them
@@ -85,7 +85,7 @@ The cluster's events are read with the cluster RBAC.
   no grant. It reports about its own objects only (`regarding.api` is its
   group), in the namespaces subscribed to it, and about its objects in no
   namespace. Anything else is a `403`.
-- **Anyone else** (a user, a [service account](service-accounts.md)) reports
+- **Anyone else** (a user, a [service account](auth/service-accounts.md)) reports
   with `create` on `events.infrapi.io` granted by the namespace's roles.
 
 ## The event

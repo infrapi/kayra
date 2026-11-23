@@ -38,7 +38,7 @@ copy, and [config](docs/packages/config.md) for the full reference.
 - **RBAC** — `Group`/`Role`/`RoleBinding`, cluster- and
   namespace-scoped, gated by real resolved directory groups (never a
   synced membership list). See
-  [RBAC & auth](docs/architecture/rbac-and-auth.md).
+  [RBAC & auth](docs/architecture/auth/rbac-and-auth.md).
 - **ApiRegistration** — declares that an API group exists and who owns
   it (e.g. "compute.infrapi.io", its long name and id); Kayra never implements the API itself. See
   [API registrations](docs/architecture/api-registrations.md).

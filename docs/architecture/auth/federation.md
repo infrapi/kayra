@@ -1,7 +1,7 @@
 ---
 title: Federation
 description: "A CI job or a workload logs in as a service account with its platform's own identity token, GitLab CI, GitHub Actions or Kubernetes: no secret stored anywhere."
-weight: 24
+weight: 50
 ---
 
 # Federation
@@ -18,7 +18,7 @@ Federation is a way to **log in as** a service account: the service account
 is the identity, with its rights in its namespace. It is not the same as
 accepting the platform's token as a provider's
 (`authentifications:`), where a CI job acts as the person who ran it, with
-their rights: see [A provider's token, or federation](auth.md#a-providers-token-or-federation).
+their rights: see [A provider's token, or federation](_index.md#a-providers-token-or-federation).
 
 The examples use [`infrapi-cli`](https://infrapi.github.io/cli/getting-started/#1-install)
 and a Kayra at `https://kayra.example.com` with its

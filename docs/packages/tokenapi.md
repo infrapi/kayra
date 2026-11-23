@@ -10,7 +10,7 @@ weight: 140
 import "github.com/infrapi/kayra/internal/tokenapi"
 ```
 
-Serves a user's [personal access tokens](../architecture/tokens.md) at
+Serves a user's [personal access tokens](../architecture/auth/tokens.md) at
 `/apis/authorization.infrapi.io/v1/tokens`. The tokens are opaque, not JWTs,
 so the store alone never reveals what they are.
 

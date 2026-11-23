@@ -41,7 +41,7 @@ See [Getting started](../getting-started.md) for a runnable pair of files.
 
 ## Storage
 
-Everything — [RBAC & Auth](rbac-and-auth.md)'s objects, the catalog
+Everything — [RBAC & Auth](auth/rbac-and-auth.md)'s objects, the catalog
 resources below, the PAT keypair, every cache — goes through one
 [`store.Store`](../packages/store.md) interface: a real etcd cluster in
 production, a directory of files for the `dev: local:` backend. One
@@ -72,9 +72,9 @@ check (`rbac.RequireClusterRBAC`); rbac has no knowledge of catalog at all.
 
 ## Authentication & authorization
 
-[Authentication and authorization](auth.md) says which identities exist
+[Authentication and authorization](auth/_index.md) says which identities exist
 (users, service accounts, APIs), every way to authenticate and when to use
-each, and what decides access. See [RBAC & Auth](rbac-and-auth.md) for the
+each, and what decides access. See [RBAC & Auth](auth/rbac-and-auth.md) for the
 mechanics: how a bearer token
 (JWT or PAT) is verified and resolved to a user, how the privileged
 `$platform-core-sysadmin` bootstrap credential is produced and checked, and

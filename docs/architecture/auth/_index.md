@@ -16,7 +16,20 @@ Every request to Kayra, or to an API behind it, answers three questions:
 The three are separate: a person may authenticate in several ways and keep
 the same rights; a service account is one identity whichever way it logs
 in. This page says which identity and which way fit which use, then points to
-the page of each.
+the page of each. The pages of this section:
+
+- [RBAC & auth](rbac-and-auth.md): how a token is verified, and how the RBAC
+  decides.
+- [Authorization server](oauth2-server.md): Kayra's own tokens, for
+  `infrapi-cli auth login` and MCP clients, renewed and revoked.
+- [Personal access tokens](tokens.md): a user's long-lived tokens for
+  scripts and tools, expiring, scoped, revocable.
+- [Service accounts](service-accounts.md): a namespace's machine identities
+  and their short-lived tokens.
+- [Federation](federation.md): a CI job or a workload logs in as a service
+  account with its platform's token, no secret stored.
+- [API identity](api-identity.md): the app behind a registered API acts as
+  the API, with its own key.
 
 ## Identities
 
@@ -175,7 +188,7 @@ Once authenticated, every request is decided by Kayra, whatever the API:
 
 | Request | Decided by |
 |---|---|
-| an API's resources in a namespace | the namespace's own [groups, roles and bindings](rbac-and-auth.md#the-rbac-model), once the namespace is [subscribed](subscriptions.md) to the API |
+| an API's resources in a namespace | the namespace's own [groups, roles and bindings](rbac-and-auth.md#the-rbac-model), once the namespace is [subscribed](../subscriptions.md) to the API |
 | managing a namespace (its RBAC, its subscriptions) | the [cluster bindings scoped to it](rbac-and-auth.md#who-can-manage-a-namespaces-rbac-objects) |
 | cluster-scoped resources (namespaces, API registrations, the cluster RBAC) | the [cluster RBAC](rbac-and-auth.md#who-decides), the sysadmin binding first |
 
@@ -184,13 +197,13 @@ On top of the roles:
 - **A PAT's scope** narrows what its user may do.
 - **A service account** is matched only by groups of its own namespace.
 - **An API** may always read its own registration, and
-  [report events](events.md) about its own objects.
+  [report events](../events.md) about its own objects.
 - **A registration's `allowed_namespaces`** keeps other namespaces out.
 
 An app built on infrapi/lib asks Kayra's `/check` for each request; `infrapi-cli
 auth can-i` asks the same question. Every decision is in the
-[audit](audit.md). See [RBAC & auth](rbac-and-auth.md) for the model, and
-[Multi-tenancy](multi-tenancy.md) for sharing the platform between teams.
+[audit](../audit.md). See [RBAC & auth](rbac-and-auth.md) for the model, and
+[Multi-tenancy](../multi-tenancy.md) for sharing the platform between teams.
 
 ## Terms
 

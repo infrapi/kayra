@@ -1,14 +1,14 @@
 ---
 title: "Authorization server"
 description: Kayra's OAuth 2.1 authorization server, for infrapi-cli and MCP clients such as Claude, with tokens renewed and revoked.
-weight: 25
+weight: 20
 ---
 
 # Authorization server
 
 "Authorization server" is OAuth's name for what **issues** tokens: this
 page. What decides a caller's rights is the RBAC (see
-[Authentication and authorization](auth.md)).
+[Authentication and authorization](_index.md)).
 
 Kayra issues tokens of its own to a client — `infrapi-cli`, an MCP client
 such as Claude, a script — and renews and revokes them: OAuth 2.1, as the
@@ -23,7 +23,7 @@ user and their groups as for any token of that provider.
 
 A provider without `remote.oauth2` is never offered: its tokens are only
 checked when presented to an API, as a CI job's are, against its
-[claims](../packages/config.md).
+[claims](../../packages/config.md).
 
 ```text
 client ──► Kayra /oauth2/authorize            (client, redirect URI, PKCE S256, resource)
