@@ -1,6 +1,6 @@
 ---
 title: Audit
-description: "Who asked for what, and whether it was allowed: Kayra's audit of every /check decision and every request to its own routes, to a file, an HTTP endpoint or nowhere, and how to feed it to a SIEM like Wazuh."
+description: "Who asked for what, and whether it was allowed: Kayra's audit of every /check decision and every request to its own routes, to a file, an HTTP endpoint or nowhere, and how to feed it to a SIEM: Wazuh, Splunk."
 weight: 26
 ---
 
@@ -216,3 +216,90 @@ fires is shown.
 > [!NOTE]
 > These Wazuh files follow Wazuh's documentation for `localfile` and JSON
 > rules. Check them against your Wazuh version.
+
+## Example: Splunk
+
+A Splunk Universal Forwarder reads the same file, so use the `file` backend
+here too. Splunk's HTTP Event Collector takes events in a format of its own
+(`{"event": …}`), not the `api` backend's `{"items": [...]}`.
+
+### 1. Kayra writes the file
+
+```yaml
+audit:
+  backend: file
+  file:
+    path: /var/log/kayra/audit.log
+```
+
+Rotate it [as for Wazuh](#2-the-agent-reads-it): logrotate, then a `SIGHUP` to Kayra.
+
+### 2. The forwarder reads it
+
+In `inputs.conf` on Kayra's host, in an app of the Universal Forwarder
+(`$SPLUNK_HOME/etc/apps/kayra_audit/local/inputs.conf`):
+
+```ini
+[monitor:///var/log/kayra/audit.log]
+index = kayra
+sourcetype = kayra:audit
+disabled = false
+```
+
+Create the `kayra` index on the indexers first.
+
+### 3. The sourcetype
+
+In `props.conf` on the indexers, for the events' breaking and time, and on
+the search heads, for the fields:
+
+```ini
+[kayra:audit]
+# one JSON object per line
+SHOULD_LINEMERGE = false
+LINE_BREAKER = ([\r\n]+)
+# the record's own time, ISO 8601 in UTC
+TIME_PREFIX = "time":"
+MAX_TIMESTAMP_LOOKAHEAD = 40
+TZ = UTC
+# the fields at search time: user, verb, api, allowed...
+KV_MODE = json
+```
+
+No `TIME_FORMAT`: Splunk recognizes ISO 8601, and the record's time has as
+many fractional digits as it needs.
+
+### 4. Search it
+
+The denials, by caller:
+
+```text
+index=kayra sourcetype=kayra:audit allowed=false
+| stats count by user, api, resource, verb, reason
+| sort - count
+```
+
+A burst of denials from one address, the search behind an alert run every
+five minutes:
+
+```text
+index=kayra sourcetype=kayra:audit allowed=false earliest=-5m
+| stats count by source_ip
+| where count >= 10
+```
+
+Who changed the RBAC:
+
+```text
+index=kayra sourcetype=kayra:audit api="authorization.*" allowed=true
+  (verb=create OR verb=update OR verb=patch OR verb=delete)
+| table _time, user, verb, resource, name, namespace
+```
+
+A request and its [event](events.md) share their `request_id`:
+`index=kayra request_id="req-1"`.
+
+> [!NOTE]
+> These Splunk files follow Splunk's `inputs.conf` and `props.conf`
+> settings. Check them against your Splunk version, and where each setting
+> takes effect in your deployment.

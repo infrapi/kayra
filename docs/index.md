@@ -25,7 +25,7 @@ disabled records active.
 | Log a CI job in as a service account with its platform's token | [Federation](architecture/federation.md) |
 | Create or update an API registration | [API registrations](architecture/api-registrations.md) |
 | Let an API's app act as the API, with its own key | [API identity](architecture/api-identity.md) |
-| Audit who asked for what, to a file, a SIEM (Wazuh) or nowhere | [Audit](architecture/audit.md) |
+| Audit who asked for what, to a file, a SIEM or nowhere | [Audit](architecture/audit.md) |
 | See what happened to a namespace's resources, or report it from an API | [Events](architecture/events.md) |
 | Create or update a namespace | [Namespaces](architecture/namespaces.md) |
 | Share the platform between teams or customers | [Multi-tenancy](architecture/multi-tenancy.md) |
