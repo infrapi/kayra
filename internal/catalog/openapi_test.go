@@ -222,7 +222,12 @@ func TestReconcilerFetchesIdentityKeys(t *testing.T) {
 		case "/apis/compute.infrapi.io/v1/-/openapi.json":
 			_, _ = w.Write([]byte(`{"openapi":"3.1.0","paths":{"/apis/compute.infrapi.io/v1/namespaces/{namespace}/vms":{"get":{}}}}`))
 		case "/apis/compute.infrapi.io/v1/-/jwks.json":
-			if k := keys.Load().(string); k != "" {
+			switch k := keys.Load().(string); k {
+			case "":
+			case "401":
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			default:
 				_, _ = w.Write([]byte(k))
 				return
 			}
@@ -271,15 +276,29 @@ func TestReconcilerFetchesIdentityKeys(t *testing.T) {
 		return err == nil && len(k) == 0
 	}, "no keys when it serves none")
 
-	// a private key, or no key in the set: sync-4's spec is not stored
-	for i, bad := range []string{`{"keys":[]}`, `{"keys":[{"kty":"EC","crv":"P-256","x":"QpKqxqA4mEU2hmEoj-cdvR6XBuNOe5IL_CwjWS0x3-4","y":"d8MxKfIUkWL13JxESClUvVdBZVKBUKoD2cW6uKVDn_Q","d":"x"}]}`} {
+	// an empty set, or an app answering 401 (no open route): no keys either
+	for i, none := range []string{`{"keys":[]}`, "401"} {
+		keys.Store(none)
+		reg.SyncID = fmt.Sprintf("sync-none-%d", i)
+		if err := repo.PutClusterApiRegistration(&reg); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, func() bool {
+			spec, err := repo.GetApiSpec(testDeployPlatform, testDeployRegion, reg.Name)
+			return err == nil && spec.SyncID == reg.SyncID && spec.JWKS != nil && len(spec.JWKS.Keys) == 0
+		}, "no keys: "+none)
+	}
+	sync3 := reg.SyncID
+
+	// a private key: sync-4's spec is not stored
+	for i, bad := range []string{`{"keys":[{"kty":"EC","crv":"P-256","x":"QpKqxqA4mEU2hmEoj-cdvR6XBuNOe5IL_CwjWS0x3-4","y":"d8MxKfIUkWL13JxESClUvVdBZVKBUKoD2cW6uKVDn_Q","d":"x"}]}`} {
 		keys.Store(bad)
 		reg.SyncID = fmt.Sprintf("sync-4-%d", i)
 		if err := repo.PutClusterApiRegistration(&reg); err != nil {
 			t.Fatal(err)
 		}
 		time.Sleep(300 * time.Millisecond)
-		if spec, _ := repo.GetApiSpec(testDeployPlatform, testDeployRegion, reg.Name); spec.SyncID != "sync-3" {
+		if spec, _ := repo.GetApiSpec(testDeployPlatform, testDeployRegion, reg.Name); spec.SyncID != sync3 {
 			t.Errorf("%q: spec of %s stored", bad, spec.SyncID)
 		}
 	}

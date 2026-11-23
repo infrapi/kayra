@@ -82,8 +82,9 @@ curl -s -X POST https://kayra.example.com/apis/catalog.infrapi.io/v1/apiregistra
 | `{"federated_credentials": [...]}` | its platform's identity token, matched as a [service account's](federation.md#2-add-a-federated-credential-to-the-service-account) is, from `federation.issuers` |
 
 - **No identity** (`app register --no-identity`): the API gets no token.
-- **No keys served** (a `404` at `-/jwks.json`): the API gets no token, and
-  its spec is still synced.
+- **No keys served** (a `404`, `401` or `403` at `-/jwks.json`, or an empty
+  set: an app without a key, or on a lib before v0.20.0): the API gets no
+  token, and its spec is still synced.
 - **Refused (`400`):** a private key, two forms at once, or an issuer that is
   not in `federation.issuers`.
 - **`uid`:** Kayra sets it when the registration is first created, and

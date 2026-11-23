@@ -219,8 +219,10 @@ func jwksURL(gatewayURL, api, version string) string {
 const MaxJWKSBytes = 64 << 10
 
 // FetchJWKS downloads api's public keys through gatewayURL: a JWK set of
-// RSA or EC public keys, one at least (identity.CheckCredentials). A 404 is
-// an app that serves none, an empty set: it gets no token.
+// RSA or EC public keys (identity.CheckCredentials). An app that serves
+// none gets an empty set, and no token: a 404, an empty set, or a 401 or
+// 403, the answer of an app whose -/jwks.json is no open route (one
+// without keys, or on a lib before it).
 func FetchJWKS(ctx context.Context, client *http.Client, gatewayURL, api, version string) (*oidc.JWKSet, error) {
 	url := jwksURL(gatewayURL, api, version)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -233,8 +235,10 @@ func FetchJWKS(ctx context.Context, client *http.Client, gatewayURL, api, versio
 		return nil, fmt.Errorf("fetch keys of %q from %s: %w", api, url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == http.StatusNotFound {
-		return &oidc.JWKSet{Keys: []oidc.JWK{}}, nil
+	none := &oidc.JWKSet{Keys: []oidc.JWK{}}
+	switch resp.StatusCode {
+	case http.StatusNotFound, http.StatusUnauthorized, http.StatusForbidden:
+		return none, nil
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch keys of %q from %s: status %d", api, url, resp.StatusCode)
@@ -242,6 +246,9 @@ func FetchJWKS(ctx context.Context, client *http.Client, gatewayURL, api, versio
 	var set oidc.JWKSet
 	if err := json.NewDecoder(io.LimitReader(resp.Body, MaxJWKSBytes)).Decode(&set); err != nil {
 		return nil, fmt.Errorf("keys of %q from %s: %w", api, url, err)
+	}
+	if len(set.Keys) == 0 {
+		return none, nil
 	}
 	if err := identity.CheckCredentials(&set, nil, nil); err != nil {
 		return nil, fmt.Errorf("keys of %q from %s: %w", api, url, err)
