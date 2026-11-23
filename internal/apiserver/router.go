@@ -39,7 +39,11 @@ const DefaultUserCacheTTL = time.Hour
 // Build loads Kayra's business config, opens its store, and returns a
 // ready-to-run gin engine: the infrapi/lib discovery/metrics/docs
 // endpoints plus every Kayra route.
-func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error) {
+func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config, opts ...Option) (*gin.Engine, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	// Without this, posting a Role-shaped body (or any mismatched
 	// resource) to a Group endpoint silently drops the fields Group
 	// doesn't have and returns a confusing partial object instead of an
@@ -119,6 +123,11 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 
 	// Unknown paths get the same problem+json body as every other error
 	// instead of gin's plain-text "404 page not found".
+	// the audit of Kayra's own routes, once served: before any of them is
+	// registered, for gin to put it in front of each
+	checkPath := "/apis/" + rbac.AuthorizationAPI + "/v1/check"
+	engine.Use(auditRequests(o.auditor, Roots(), checkPath))
+
 	engine.NoRoute(func(c *gin.Context) {
 		httpapi.Fail(c, liberrors.New(http.StatusNotFound, "apiserver.NoRoute", "no route for %s %s", c.Request.Method, c.Request.URL.Path))
 	})
@@ -299,7 +308,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		MembersRead: func(api, resource, verb string) bool {
 			return api == catalog.SystemAPI && resource == "namespaces" && (verb == "list" || verb == "get")
 		},
-	})
+	}, o.auditor)
 	catalog.RegisterApiRegistrationRoutes(cluster, catalogRepo, pass, appCfg.AppPlatform, appCfg.AppRegion)
 	catalog.RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, authenticator.Middleware(), appCfg.AppPlatform, appCfg.AppRegion)
 	// reading the namespaces: whoever the cluster RBAC grants it sees every

@@ -212,6 +212,21 @@ serviceaccounts:
 #     - issuer: https://gitlab.example.com
 #     - issuer: https://token.actions.githubusercontent.com
 
+# Who asked for what, and whether it was allowed: every /check decision and
+# every write or denial on Kayra's own routes, never in etcd
+# (docs/architecture/audit.md). none (the default), file ("-" for stdout),
+# or api (batches POSTed to a SIEM).
+audit:
+  backend: file
+  file:
+    path: "-"
+# audit:
+#   backend: api
+#   api:
+#     url: https://siem.example.com/ingest
+#     headers:
+#       Authorization: "Bearer ${SIEM_TOKEN}"
+
 reconciler:
   # caps how many reconcile/activate operations `kayra reconciler`
   # runs at once (its goroutine pool size); omit/0 defaults to 30.

@@ -147,7 +147,7 @@ func TestCheckRouteOrder(t *testing.T) {
 		Resource: func(api, resource, verb string) *liberrors.Error {
 			return catalogRepo.CheckApiResource(api, resource, verb, testDeployPlatform, testDeployRegion)
 		},
-	})
+	}, nil)
 
 	resource := "dashboards"
 	check := func(verb string) (int, string) {

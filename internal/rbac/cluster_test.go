@@ -263,7 +263,7 @@ func TestCheckCluster(t *testing.T) {
 	check := func(groups []string, req AuthorizeRequest) AuthorizeResponse {
 		t.Helper()
 		engine := gin.New()
-		RegisterAuthorizeRoute(engine, repo, fakeAuthGate("u", groups...), prechecks)
+		RegisterAuthorizeRoute(engine, repo, fakeAuthGate("u", groups...), prechecks, nil)
 		w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/check", req)
 		if w.Code != http.StatusOK {
 			t.Fatalf("%+v: %d %s", req, w.Code, w.Body.String())

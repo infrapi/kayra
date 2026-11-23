@@ -13,6 +13,7 @@ import (
 // Fail writes err as the response body and aborts the gin context, so no
 // further handler in the chain runs (middleware refusing a request included).
 func Fail(c *gin.Context, err *liberrors.Error) {
+	c.Set(failureKey, err)
 	c.Data(err.Code, liberrors.MediaType, mustJSON(err))
 	c.Abort()
 }
@@ -34,4 +35,18 @@ func mustJSON(err *liberrors.Error) []byte {
 		return []byte(`{"detail":"` + err.Message + `"}`)
 	}
 	return data
+}
+
+// failureKey keeps the error Fail answered in the gin context.
+const failureKey = "httpapi.failure"
+
+// Failure is the error Fail answered the request with, if it did: the
+// audit's reason.
+func Failure(c *gin.Context) (*liberrors.Error, bool) {
+	v, ok := c.Get(failureKey)
+	if !ok {
+		return nil, false
+	}
+	err, ok := v.(*liberrors.Error)
+	return err, ok
 }

@@ -25,6 +25,9 @@ func (c *Config) Validate() error {
 	if err := c.Federation.validate(); err != nil {
 		return err
 	}
+	if err := c.Audit.validate(); err != nil {
+		return err
+	}
 	if _, _, err := c.ActiveDatabase(); err != nil {
 		return err
 	}

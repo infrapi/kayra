@@ -10,6 +10,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,6 +20,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/infrapi/kayra/internal/apiserver"
+	"github.com/infrapi/kayra/internal/audit"
 	"github.com/infrapi/kayra/internal/catalog"
 	gconfig "github.com/infrapi/kayra/internal/config"
 	gcrypto "github.com/infrapi/kayra/internal/crypto"
@@ -88,7 +91,11 @@ func serveCommand() *cli.Command {
 				return fmt.Errorf("resolve app: config: %w", err)
 			}
 
-			engine, err := apiserver.Build(appCfg, cfg)
+			sink, err := audit.New(cfg.Audit)
+			if err != nil {
+				return err
+			}
+			engine, err := apiserver.Build(appCfg, cfg, apiserver.WithAudit(audit.NewAuditor(sink, cfg.Audit.Reads)))
 			if err != nil {
 				return err
 			}
@@ -97,9 +104,7 @@ func serveCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("listen: %w", err)
 			}
-
-			fmt.Printf("kayra: listening on %s\n", appCfg.AppListenAddress)
-			return engine.RunListener(listener)
+			return serve(ctx, engine, listener, sink, cfg.Audit.BackendName())
 		},
 	}
 }
@@ -361,4 +366,47 @@ func runTokenMint(ctx context.Context, cmd *cli.Command) error {
 	}
 	fmt.Println(token)
 	return nil
+}
+
+// serve serves engine on listener until SIGINT or SIGTERM, then stops: the
+// requests in flight finish, and the audit's pending records are sent.
+// SIGHUP reopens the audit's file, for logrotate.
+func serve(ctx context.Context, engine http.Handler, listener net.Listener, sink audit.Sink, backend string) error {
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	defer signal.Stop(hup)
+	go func() {
+		for range hup {
+			if f, ok := sink.(*audit.File); ok {
+				if err := f.Reopen(); err != nil {
+					fmt.Fprintf(os.Stderr, "kayra: audit: reopen: %v\n", err)
+				}
+			}
+		}
+	}()
+
+	srv := &http.Server{Handler: engine, ReadHeaderTimeout: 10 * time.Second}
+	served := make(chan error, 1)
+	go func() { served <- srv.Serve(listener) }()
+	fmt.Printf("kayra: listening on %s (audit: %s)\n", listener.Addr(), backend)
+
+	var err error
+	select {
+	case err = <-served:
+	case <-ctx.Done():
+		shutdown, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		err = srv.Shutdown(shutdown)
+	}
+	flush, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if cerr := sink.Close(flush); cerr != nil {
+		fmt.Fprintf(os.Stderr, "kayra: audit: %v\n", cerr)
+	}
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }

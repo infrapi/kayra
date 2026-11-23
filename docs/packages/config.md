@@ -297,6 +297,22 @@ admin lists them. Each one is an `https` URL, or `http` on a loopback address.
 See [Federation](../architecture/federation.md). `oauth2.client_credentials_ttl`
 (15m) is how long the token it gives lasts.
 
+## Audit
+
+```go
+type AuditConfig struct {
+	Backend string          // file, api or none (the default)
+	Reads   bool            // get and list too
+	File    AuditFileConfig // Path, "-" for stdout
+	API     AuditAPIConfig  // URL, Headers (${VAR} expanded), TLS, Timeout, Batch, Queue
+}
+```
+
+Where Kayra writes its audit ([internal/audit](../architecture/audit.md)).
+`api.url` is an `https` URL, or `http` on a loopback address; `api.tls.cert`
+and `key` go together; `Settings()` applies the defaults: a 5s timeout,
+batches of 100 or 1s, a queue of 10000. See [Audit](../architecture/audit.md).
+
 ## Service accounts
 
 ```go

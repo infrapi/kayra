@@ -1,11 +1,13 @@
 package rbac
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/infrapi/kayra/internal/audit"
 	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/middleware"
 	liberrors "github.com/infrapi/lib/pkg/errors"
@@ -28,6 +30,12 @@ type AuthorizeRequest struct {
 	Api       string `json:"api" binding:"required"`
 	Resource  string `json:"resource" binding:"required"`
 	Verb      string `json:"verb" binding:"required"`
+	// RequestID, SourceIP and UserAgent are the original request's, as
+	// the app received it: the audit's. The app's own address and agent
+	// when empty.
+	RequestID string `json:"request_id,omitempty"`
+	SourceIP  string `json:"source_ip,omitempty"`
+	UserAgent string `json:"user_agent,omitempty"`
 	// Name is the object the request names, when it names one: what an
 	// API's implicit rules about itself read (ImplicitAPI).
 	Name string `json:"name,omitempty"`
@@ -113,7 +121,7 @@ type Prechecks struct {
 // as that, not as an RBAC denial. A precheck failure is an error
 // response; an RBAC denial (2, 8, 9) is a 200 with allowed:false and
 // the reason.
-func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, prechecks Prechecks) {
+func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, prechecks Prechecks, auditor *audit.Auditor) {
 	r.POST("/apis/"+AuthorizationAPI+"/v1/check", gate, func(c *gin.Context) {
 		const origin = "rbac.Authorize"
 		ac, ok := middleware.GetAuth(c)
@@ -127,10 +135,21 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin, ""))
 			return
 		}
+		// every outcome is answered through answer or fail, and audited
+		var rec audit.Record
+		answer := func(allowed bool, reason string) {
+			rec.Allowed, rec.Reason = allowed, reason
+			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason})
+		}
+		fail := func(err *liberrors.Error) {
+			rec.Reason, rec.Status = err.Message, err.Code
+			httpapi.Fail(c, err)
+		}
+		defer func() { auditor.Record(checkRecord(c, ac, req, rec)) }()
 		// a scoped personal access token: what its scope allows, whatever
 		// the roles of its user
 		if !ac.Scope.Allows(req.Api, req.Verb) {
-			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: false, Reason: fmt.Sprintf("your token's scope does not grant %q on api %q", req.Verb, req.Api)})
+			answer(false, fmt.Sprintf("your token's scope does not grant %q on api %q", req.Verb, req.Api))
 			return
 		}
 		builtin := prechecks.Builtin != nil && prechecks.Builtin(req.Api)
@@ -139,24 +158,24 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 		// then the cluster RBAC
 		if req.Namespace == "" {
 			if ImplicitAPI(ac.UserID, req.Api, req.Resource, req.Verb, req.Name) {
-				c.JSON(http.StatusOK, AuthorizeResponse{Allowed: true})
+				answer(true, "")
 				return
 			}
 			if !builtin && prechecks.ClusterResource != nil {
 				if perr := prechecks.ClusterResource(req.Api, req.Resource, req.Verb); perr != nil {
-					httpapi.Fail(c, perr)
+					fail(perr)
 					return
 				}
 			}
 			allowed, reason, err := repo.AuthorizeCluster(ac.UserID, ac.Groups, req.Api, req.Resource, req.Verb)
 			if err != nil {
-				httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeCluster", ""))
+				fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeCluster", ""))
 				return
 			}
 			if !allowed && prechecks.MembersRead != nil && prechecks.MembersRead(req.Api, req.Resource, req.Verb) {
 				members, err := repo.MemberNamespaces(ac.UserID, ac.Groups)
 				if err != nil {
-					httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".MemberNamespaces", ""))
+					fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".MemberNamespaces", ""))
 					return
 				}
 				allowed = req.Verb == "list" || len(members) > 0
@@ -165,13 +184,13 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 					reason = "you are a member of no namespace: neither your user id nor any of your groups is listed in any namespace's groups"
 				}
 			}
-			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason})
+			answer(allowed, reason)
 			return
 		}
 
 		if prechecks.Namespace != nil {
 			if perr := prechecks.Namespace(req.Namespace); perr != nil {
-				httpapi.Fail(c, perr)
+				fail(perr)
 				return
 			}
 		}
@@ -180,42 +199,57 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 		if builtin {
 			allowed, reason, err := repo.CanManageNamespaceRBAC(ac.UserID, ac.Groups, req.Namespace, req.Api, req.Resource, req.Verb)
 			if err != nil {
-				httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".CanManageNamespaceRBAC", ""))
+				fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".CanManageNamespaceRBAC", ""))
 				return
 			}
-			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason})
+			answer(allowed, reason)
 			return
 		}
 
 		memberGroups, reason, err := repo.NamespaceMembership(req.Namespace, ac.UserID, ac.Groups)
 		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".NamespaceMembership", ""))
+			fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".NamespaceMembership", ""))
 			return
 		}
 		if reason != "" {
-			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: false, Reason: reason})
+			answer(false, reason)
 			return
 		}
 
 		if prechecks.Api != nil {
 			if perr := prechecks.Api(req.Namespace, req.Api); perr != nil {
-				httpapi.Fail(c, perr)
+				fail(perr)
 				return
 			}
 		}
 		if prechecks.Resource != nil {
 			if perr := prechecks.Resource(req.Api, req.Resource, req.Verb); perr != nil {
-				httpapi.Fail(c, perr)
+				fail(perr)
 				return
 			}
 		}
 
 		allowed, reason, err := repo.AuthorizeMember(req.Namespace, memberGroups, req.Api, req.Resource, req.Verb)
 		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeMember", ""))
+			fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeMember", ""))
 			return
 		}
 
-		c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason})
+		answer(allowed, reason)
 	})
+}
+
+// checkRecord is the audit record of a /check decision: the caller, the
+// request it asks about, as the app received it, and the outcome.
+func checkRecord(c *gin.Context, ac *middleware.AuthContext, req AuthorizeRequest, out audit.Record) audit.Record {
+	r := audit.Record{
+		Stage: audit.StageCheck, RequestID: req.RequestID, SourceIP: cmp.Or(req.SourceIP, c.ClientIP()),
+		UserAgent: cmp.Or(req.UserAgent, c.Request.UserAgent()),
+		API:       req.Api, Namespace: req.Namespace, Resource: req.Resource, Name: req.Name, Verb: req.Verb,
+		Allowed: out.Allowed, Reason: out.Reason, Status: out.Status,
+	}
+	if ac != nil {
+		r.User, r.Groups, r.Kind, r.ClientID = ac.UserID, ac.Groups, ac.Kind, ac.ClientID
+	}
+	return r
 }
