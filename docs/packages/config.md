@@ -313,7 +313,7 @@ type AuditConfig struct {
 	Backend string          // file, api or none (the default)
 	Reads   bool            // get and list too
 	File    AuditFileConfig // Path, "-" for stdout
-	API     AuditAPIConfig  // URL, Headers (${VAR} expanded), TLS, Timeout, Batch, Queue
+	API     AuditAPIConfig  // URL, Format (generic, splunk-hec), SplunkHEC, Headers (${VAR} expanded), TLS, Timeout, Batch, Queue
 }
 ```
 

@@ -95,6 +95,7 @@ audit:
   backend: api
   api:
     url: https://siem.example.com/ingest
+    format: generic                              # {"items": [...]}; or splunk-hec
     headers:                                     # sent as they are
       Authorization: "Bearer ${SIEM_TOKEN}"      # ${VAR}: read from Kayra's environment at start
     tls:
@@ -109,7 +110,8 @@ audit:
 - **A batch** goes out at `max_events` records, or `max_wait` after its
   first.
 - **The body** is `{"items": [<record>, ...]}`, `Content-Type:
-  application/json`.
+  application/json`, or Splunk's HEC's with `format: splunk-hec`
+  ([below](#or-straight-to-splunks-hec)).
 - **A failure, a `5xx` or a `429`** is retried 3 times, waiting 0.5, 1 then
   2 seconds. Then the batch is dropped. A `4xx` is not retried.
 - **A full queue** drops the record.
@@ -219,9 +221,9 @@ fires is shown.
 
 ## Example: Splunk
 
-A Splunk Universal Forwarder reads the same file, so use the `file` backend
-here too. Splunk's HTTP Event Collector takes events in a format of its own
-(`{"event": …}`), not the `api` backend's `{"items": [...]}`.
+Two ways: a Splunk Universal Forwarder reads the file, the most reliable,
+or Kayra sends the records [straight to Splunk's HTTP Event
+Collector](#or-straight-to-splunks-hec), with no forwarder and no file.
 
 ### 1. Kayra writes the file
 
@@ -268,6 +270,47 @@ KV_MODE = json
 
 No `TIME_FORMAT`: Splunk recognizes ISO 8601, and the record's time has as
 many fractional digits as it needs.
+
+### Or straight to Splunk's HEC
+
+The `api` backend in Splunk's HTTP Event Collector's format: no forwarder,
+no file to rotate, what suits a Kayra in a container. Create an HEC token
+in Splunk first (Settings > Data inputs > HTTP Event Collector), allowed the
+`kayra` index.
+
+```yaml
+audit:
+  backend: api
+  api:
+    url: https://splunk.example.com:8088/services/collector/event
+    format: splunk-hec
+    headers:
+      Authorization: "Splunk ${SPLUNK_HEC_TOKEN}"   # the HEC token, from Kayra's environment
+    splunk_hec:
+      index: kayra
+      sourcetype: kayra:audit
+      # source, host: Splunk's defaults for the token when empty
+    tls:
+      cacert: /etc/kayra/splunk-ca.pem              # when Splunk's certificate is not a public one
+```
+
+Each record is one HEC event, the events of a batch back to back:
+
+```json
+{"time": 1795459327.311, "sourcetype": "kayra:audit", "index": "kayra", "event": {"id": "0193a0c4-…", "stage": "check", "user": "jdoe", …}}
+```
+
+- **`time`** is the record's own, in seconds since the epoch, milliseconds
+  kept: no timestamp to extract, no `TIME_PREFIX`.
+- **The fields:** the `kayra:audit` sourcetype needs only `KV_MODE = json` on
+  the search heads.
+- **`Authorization`** must be `Splunk <token>`: Kayra refuses to start
+  otherwise.
+- **Delivery** is the `api` backend's: a `5xx` (Splunk's "server is busy") or
+  a `429` is retried, then the batch is dropped and counted in
+  `kayra_audit_dropped_total`, as a record that finds the queue full. HEC's
+  indexer acknowledgement is not used. Where no record may be lost, keep the
+  file and the forwarder.
 
 ### 4. Search it
 

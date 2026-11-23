@@ -199,3 +199,62 @@ func TestNew(t *testing.T) {
 		t.Fatalf("%T %v", s, err)
 	}
 }
+
+// splunk-hec: one event object per record, back to back, its time the
+// record's, the HEC metadata set; Splunk's own 503 retried.
+func TestAPISplunkHEC(t *testing.T) {
+	retryWait = 10 * time.Millisecond
+	t.Setenv("SPLUNK_HEC_TOKEN", "hec-token")
+	var mu sync.Mutex
+	var events []map[string]any
+	var busy atomic.Bool
+	busy.Store(true)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/services/collector/event" || r.Header.Get("Authorization") != "Splunk hec-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"text":"Token is required","code":2}`))
+			return
+		}
+		if busy.CompareAndSwap(true, false) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"text":"Server is busy","code":9}`))
+			return
+		}
+		d := json.NewDecoder(r.Body)
+		for {
+			var ev map[string]any
+			if err := d.Decode(&ev); err != nil {
+				break
+			}
+			mu.Lock()
+			events = append(events, ev)
+			mu.Unlock()
+		}
+		_, _ = w.Write([]byte(`{"text":"Success","code":0}`))
+	}))
+	defer srv.Close()
+	a, err := NewAPI(config.AuditAPIConfig{URL: srv.URL + "/services/collector/event", Format: config.AuditFormatSplunkHEC,
+		Headers:   map[string]string{"Authorization": "Splunk ${SPLUNK_HEC_TOKEN}"},
+		SplunkHEC: config.SplunkHECConfig{Index: "kayra", Sourcetype: "kayra:audit"},
+		Batch:     config.AuditBatchConfig{MaxEvents: 10, MaxWait: "20ms"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	when := time.Date(2026, 11, 23, 18, 42, 7, 311_000_000, time.UTC)
+	a.Write(Record{Time: when, User: "jdoe", Verb: "delete", Allowed: false})
+	a.Write(Record{User: "asmith", Verb: "create", Allowed: true})
+	if err := a.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(events) != 2 {
+		t.Fatalf("events: %v", events)
+	}
+	e := events[0]
+	ev, _ := e["event"].(map[string]any)
+	if e["time"] != 1795459327.311 || e["index"] != "kayra" || e["sourcetype"] != "kayra:audit" || e["host"] != nil ||
+		ev["user"] != "jdoe" || ev["verb"] != "delete" || ev["allowed"] != false || ev["id"] == "" {
+		t.Errorf("event: %v", e)
+	}
+}

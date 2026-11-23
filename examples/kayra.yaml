@@ -232,6 +232,15 @@ events:
 #     url: https://siem.example.com/ingest
 #     headers:
 #       Authorization: "Bearer ${SIEM_TOKEN}"
+# or straight to Splunk's HTTP Event Collector:
+# audit:
+#   backend: api
+#   api:
+#     url: https://splunk.example.com:8088/services/collector/event
+#     format: splunk-hec
+#     headers:
+#       Authorization: "Splunk ${SPLUNK_HEC_TOKEN}"
+#     splunk_hec: {index: kayra, sourcetype: "kayra:audit"}
 
 reconciler:
   # caps how many reconcile/activate operations `kayra reconciler`

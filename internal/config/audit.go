@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -34,11 +35,27 @@ type AuditFileConfig struct {
 	Path string `yaml:"path"`
 }
 
+// The formats of the api backend's batches.
+const (
+	// AuditFormatGeneric is {"items": [<record>, ...]}.
+	AuditFormatGeneric = "generic"
+	// AuditFormatSplunkHEC is Splunk's HTTP Event Collector's: one
+	// {"time", "event": <record>, ...} object per record, one after the
+	// other.
+	AuditFormatSplunkHEC = "splunk-hec"
+)
+
 // AuditAPIConfig is an HTTP endpoint the records are POSTed to, in
-// batches: {"items": [...]}.
+// batches: {"items": [...]}, or as Splunk's HEC takes them.
 type AuditAPIConfig struct {
 	// URL receives the batches: https, or http on a loopback address.
+	// Splunk's HEC: https://<host>:8088/services/collector/event.
 	URL string `yaml:"url"`
+	// Format is the batches': generic (the default) or splunk-hec.
+	Format string `yaml:"format"`
+	// SplunkHEC is what splunk-hec sets on every event, Splunk's defaults
+	// for the token when empty.
+	SplunkHEC SplunkHECConfig `yaml:"splunk_hec"`
 	// Headers are sent as they are, ${VAR} replaced by the environment
 	// variable VAR: Authorization: "Splunk ${SPLUNK_HEC_TOKEN}".
 	Headers map[string]string `yaml:"headers"`
@@ -52,6 +69,22 @@ type AuditAPIConfig struct {
 	// Queue is how many records wait to be sent (10000): a record that
 	// finds it full is dropped, and counted.
 	Queue int `yaml:"queue"`
+}
+
+// SplunkHECConfig is the metadata of every event sent to Splunk's HEC.
+type SplunkHECConfig struct {
+	Index      string `yaml:"index"`
+	Sourcetype string `yaml:"sourcetype"`
+	Source     string `yaml:"source"`
+	Host       string `yaml:"host"`
+}
+
+// FormatName is a's format, generic when empty.
+func (a AuditAPIConfig) FormatName() string {
+	if a.Format == "" {
+		return AuditFormatGeneric
+	}
+	return a.Format
 }
 
 // AuditTLSConfig is the api backend's TLS: the endpoint's certificate is
@@ -127,6 +160,18 @@ func (a AuditConfig) validate() error {
 		}
 		if (a.API.TLS.Cert == "") != (a.API.TLS.Key == "") {
 			return fmt.Errorf("audit.api.tls: cert and key together")
+		}
+		switch a.API.FormatName() {
+		case AuditFormatGeneric:
+			if a.API.SplunkHEC != (SplunkHECConfig{}) {
+				return fmt.Errorf("audit.api.splunk_hec: with format: splunk-hec only")
+			}
+		case AuditFormatSplunkHEC:
+			if !strings.HasPrefix(a.API.Headers["Authorization"], "Splunk ") {
+				return fmt.Errorf(`audit.api.headers.Authorization: Splunk's HEC needs "Splunk <token>", say "Splunk ${SPLUNK_HEC_TOKEN}"`)
+			}
+		default:
+			return fmt.Errorf("audit.api.format %q: generic or splunk-hec", a.API.Format)
 		}
 		if _, err := a.API.Settings(); err != nil {
 			return err
