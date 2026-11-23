@@ -17,6 +17,8 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/infrapi/kayra/internal/identity"
+	"github.com/infrapi/kayra/internal/oidc"
 	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
@@ -120,10 +122,41 @@ type ApiRegistration struct {
 	// back to reconciler.default_mode when empty; reconcile fails only
 	// when neither resolves to anything at all.
 	Mode string `json:"mode" yaml:"mode"`
+	// UID is set by Kayra when the registration is first created and kept
+	// by every later write: the API's tokens carry it, so one of a deleted
+	// registration is refused even once another takes its name.
+	UID string `json:"uid" yaml:"uid"`
+	// Identity is how the app behind it authenticates as the API,
+	// system:api:<name> (client_credentials): none when nil, and it gets
+	// no token.
+	Identity *ApiIdentity `json:"identity,omitempty" yaml:"identity,omitempty"`
 
 	// Timestamps (created_at/updated_at) are server-owned — set by
 	// store.PutObject on every write, never read from a request.
 	store.Timestamps `yaml:",inline"`
+}
+
+// ApiIdentity is how an API's app proves it is the API, one of three ways:
+//
+//   - JWKSFrom "spec": the app serves its public keys at
+//     /apis/<name>/<version>/-/jwks.json, fetched with its spec at each
+//     sync (ApiSpec.JWKS), and signs its assertions with its private key;
+//     an app that serves none (a 404) gets no token;
+//   - JWKS: its public keys, pinned in the registration, nothing fetched;
+//   - FederatedCredentials: its platform's identity token, a Kubernetes
+//     service account's say, as a service account's (federation.issuers).
+type ApiIdentity struct {
+	JWKSFrom             string                         `json:"jwks_from,omitempty" yaml:"jwks_from,omitempty"`
+	JWKS                 *oidc.JWKSet                   `json:"jwks,omitempty" yaml:"jwks,omitempty"`
+	FederatedCredentials []identity.FederatedCredential `json:"federated_credentials,omitempty" yaml:"federated_credentials,omitempty"`
+}
+
+// JWKSFromSpec is ApiIdentity.JWKSFrom's one value: the keys the app serves.
+const JWKSFromSpec = "spec"
+
+// KeysFromSpec tells a registration whose app serves its keys.
+func (reg ApiRegistration) KeysFromSpec() bool {
+	return reg.Identity != nil && reg.Identity.JWKSFrom == JWKSFromSpec
 }
 
 // DefaultApiVersion is an ApiRegistration's Version when none is set.

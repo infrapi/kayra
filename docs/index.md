@@ -22,7 +22,9 @@ disabled records active.
 | See who can authenticate and who can manage what | [RBAC & auth](architecture/rbac-and-auth.md) |
 | Give a CI or a script an identity of its own in a namespace | [Service accounts](architecture/service-accounts.md) |
 | Create, scope, list or revoke a personal access token | [Personal access tokens](architecture/tokens.md) |
+| Log a CI job in as a service account with its platform's token | [Federation](architecture/federation.md) |
 | Create or update an API registration | [API registrations](architecture/api-registrations.md) |
+| Let an API's app act as the API, with its own key | [API identity](architecture/api-identity.md) |
 | Create or update a tenant | [Namespaces](architecture/namespaces.md) |
 | Subscribe a tenant to an API registration, or trigger reconcile | [Subscriptions & reconciliation](architecture/subscriptions.md) |
 | Run a command (`serve`, `reconciler`, `cache clean`, `token mint`) or use `infrapi-cli` | [CLI](cli.md) |

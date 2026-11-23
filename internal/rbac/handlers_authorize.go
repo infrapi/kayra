@@ -28,6 +28,9 @@ type AuthorizeRequest struct {
 	Api       string `json:"api" binding:"required"`
 	Resource  string `json:"resource" binding:"required"`
 	Verb      string `json:"verb" binding:"required"`
+	// Name is the object the request names, when it names one: what an
+	// API's implicit rules about itself read (ImplicitAPI).
+	Name string `json:"name,omitempty"`
 }
 
 // AuthorizeResponse is this route's answer: Allowed decides it, Reason
@@ -132,8 +135,13 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 		}
 		builtin := prechecks.Builtin != nil && prechecks.Builtin(req.Api)
 
-		// a cluster-scoped resource: the cluster RBAC
+		// a cluster-scoped resource: an API's implicit rules about itself,
+		// then the cluster RBAC
 		if req.Namespace == "" {
+			if ImplicitAPI(ac.UserID, req.Api, req.Resource, req.Verb, req.Name) {
+				c.JSON(http.StatusOK, AuthorizeResponse{Allowed: true})
+				return
+			}
 			if !builtin && prechecks.ClusterResource != nil {
 				if perr := prechecks.ClusterResource(req.Api, req.Resource, req.Verb); perr != nil {
 					httpapi.Fail(c, perr)

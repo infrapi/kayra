@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/infrapi/kayra/internal/identity"
+	"github.com/infrapi/kayra/internal/oidc"
 	"github.com/infrapi/kayra/internal/store"
 )
 
@@ -42,6 +44,9 @@ type ApiSpec struct {
 	Resources []ApiResource `json:"resources"`
 	// Spec is the document exactly as the app served it.
 	Spec json.RawMessage `json:"spec"`
+	// JWKS are the app's public keys, fetched with the spec when its
+	// identity's jwks_from is spec (FetchJWKS).
+	JWKS *oidc.JWKSet `json:"jwks,omitempty"`
 
 	store.Timestamps
 }
@@ -204,6 +209,46 @@ func FetchSpec(ctx context.Context, client *http.Client, gatewayURL, api, versio
 	return ApiSpec{Api: api, Version: version, URL: url, Resources: DeriveResources(api, version, routes), Spec: compact.Bytes()}, nil
 }
 
+// jwksURL is where api serves its public keys through the gateway, beside
+// its spec, as infrapi/lib's server serves them.
+func jwksURL(gatewayURL, api, version string) string {
+	return strings.TrimRight(gatewayURL, "/") + "/apis/" + api + "/" + version + "/-/jwks.json"
+}
+
+// MaxJWKSBytes caps a fetched key set.
+const MaxJWKSBytes = 64 << 10
+
+// FetchJWKS downloads api's public keys through gatewayURL: a JWK set of
+// RSA or EC public keys, one at least (identity.CheckCredentials). A 404 is
+// an app that serves none, an empty set: it gets no token.
+func FetchJWKS(ctx context.Context, client *http.Client, gatewayURL, api, version string) (*oidc.JWKSet, error) {
+	url := jwksURL(gatewayURL, api, version)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("fetch keys of %q: %w", api, err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetch keys of %q from %s: %w", api, url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return &oidc.JWKSet{Keys: []oidc.JWK{}}, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch keys of %q from %s: status %d", api, url, resp.StatusCode)
+	}
+	var set oidc.JWKSet
+	if err := json.NewDecoder(io.LimitReader(resp.Body, MaxJWKSBytes)).Decode(&set); err != nil {
+		return nil, fmt.Errorf("keys of %q from %s: %w", api, url, err)
+	}
+	if err := identity.CheckCredentials(&set, nil, nil); err != nil {
+		return nil, fmt.Errorf("keys of %q from %s: %w", api, url, err)
+	}
+	return &set, nil
+}
+
 // specRoutes validates an OpenAPI document and lists its operations.
 func specRoutes(doc []byte) ([]Route, error) {
 	var spec struct {
@@ -245,4 +290,29 @@ func (r *Repository) DeleteApiSpec(platform, region, name string) error {
 		return fmt.Errorf("catalog: delete openapi spec %s/%s/%s: %w", platform, region, name, err)
 	}
 	return nil
+}
+
+// ApiClient is api's registration as a client of the token endpoint
+// (client_credentials): its uid, and what authenticates it, the keys of
+// its identity (pinned, or its app's from its spec) and its federated
+// credentials. store.ErrNotFound when it is not registered here, or has
+// no identity.
+func (r *Repository) ApiClient(platform, region, api string) (uid string, keys []oidc.JWK, federated []identity.FederatedCredential, err error) {
+	reg, err := r.GetClusterApiRegistration(platform, region, api)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	if reg.Identity == nil {
+		return "", nil, nil, store.ErrNotFound
+	}
+	switch {
+	case reg.Identity.JWKS != nil:
+		keys = reg.Identity.JWKS.Keys
+	case reg.KeysFromSpec():
+		// none until the reconciler fetched them: no token yet
+		if spec, err := r.GetApiSpec(platform, region, api); err == nil && spec.JWKS != nil {
+			keys = spec.JWKS.Keys
+		}
+	}
+	return reg.UID, keys, reg.Identity.FederatedCredentials, nil
 }

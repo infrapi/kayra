@@ -109,6 +109,7 @@ type Group struct {
 	Groups   []string // resolved group names, e.g. "sandbox-core-sysadmin"
 	Users    []string // resolved user ids, e.g. "ahdemir"
 	ServiceAccounts []string // a namespace group only: its own namespace's service accounts, by name
+	APIs     []string // registered APIs, by group, exactly: "compute.infrapi.io"
 }
 type Role struct {
 	Name     string
@@ -137,8 +138,10 @@ Besides humans, a namespace group can name the namespace's own
 reserved for them: a user id an identity provider resolves under it is
 refused, and so is a `system:` entry in a group's `users`. A cluster group
 names no service account, and no group outside a service account's namespace
-ever counts it. [Personal access tokens](tokens.md) act as their user, within
-their scope.
+ever counts it. A group, cluster or namespace, can also name registered APIs
+in `apis`: the app behind each, calling with [its own identity](api-identity.md)
+(`system:api:<group>`). [Personal access tokens](tokens.md) act as their
+user, within their scope.
 
 A cluster object is **global** when its `metadata.namespace` is `""`:
 it grants cluster-scoped resources only. Otherwise it is **scoped to that

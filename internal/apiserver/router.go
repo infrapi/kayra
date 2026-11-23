@@ -139,6 +139,11 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		sysadminGroups = []string{middleware.SysadminGroupFor(appCfg.AppPlatform)}
 	}
 	rbacRepo := rbac.NewRepository(s, keys)
+	catalogRepo := catalog.NewRepository(s, keys)
+	catalogRepo.TrustedIssuer = func(iss string) bool {
+		_, ok := cfg.Federation.Issuer(iss)
+		return ok
+	}
 	// Kayra's authorization server: tokens of its own, for infrapi-cli and
 	// MCP clients, renewed and revoked
 	saTokens := rbac.ServiceAccountTokens{TrustedIssuer: func(iss string) bool {
@@ -157,6 +162,13 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		// client_credentials: a service account, its keys and its
 		// federated credentials
 		as.Clients = func(clientID string) (oauth2server.MachineClient, error) {
+			if api, ok := identity.ParseAPI(clientID); ok {
+				uid, keys, federated, err := catalogRepo.ApiClient(appCfg.AppPlatform, appCfg.AppRegion, api)
+				if errors.Is(err, store.ErrNotFound) {
+					return oauth2server.MachineClient{}, oauth2server.ErrNoClient
+				}
+				return oauth2server.MachineClient{UID: uid, Kind: identity.KindAPI, Keys: keys, Federated: federated}, err
+			}
 			sa, err := rbacRepo.ServiceAccountClient(clientID)
 			if errors.Is(err, store.ErrNotFound) {
 				return oauth2server.MachineClient{}, oauth2server.ErrNoClient
@@ -178,7 +190,6 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		as.RegisterRoutes(engine)
 	}
 	rbacRepo.SetSysadmin(sysadminGroups)
-	catalogRepo := catalog.NewRepository(s, keys)
 	// a token of one of Kayra's own identities: signed by the authorization
 	// server's signer, never another provider's, and resolved from the
 	// store, the service account still there with the token's uid, in a
@@ -188,17 +199,31 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		if v.Provider != signer {
 			return nil, fmt.Errorf("apiserver: a token of one of Kayra's own identities, not signed by %s", signer)
 		}
-		if kind, _ := v.Claims["kind"].(string); kind != identity.KindServiceAccount {
-			return nil, fmt.Errorf("apiserver: unknown token kind %q", kind)
-		}
 		sub, _ := v.Claims.GetSubject()
 		uid, _ := v.Claims["uid"].(string)
-		ac, err := rbacRepo.ServiceAccountContext(sub, uid)
-		if err != nil {
-			return nil, err
-		}
-		if ns, _, _ := identity.ParseServiceAccount(sub); catalogRepo.CheckNamespace(ns) != nil {
-			return nil, fmt.Errorf("apiserver: namespace %q of %s does not exist", ns, sub)
+		var ac *middleware.AuthContext
+		switch kind, _ := v.Claims["kind"].(string); kind {
+		case identity.KindServiceAccount:
+			var err error
+			if ac, err = rbacRepo.ServiceAccountContext(sub, uid); err != nil {
+				return nil, err
+			}
+			if ns, _, _ := identity.ParseServiceAccount(sub); catalogRepo.CheckNamespace(ns) != nil {
+				return nil, fmt.Errorf("apiserver: namespace %q of %s does not exist", ns, sub)
+			}
+		case identity.KindAPI:
+			// the API still registered, the same registration
+			api, ok := identity.ParseAPI(sub)
+			if !ok {
+				return nil, fmt.Errorf("apiserver: %q is no API's subject", sub)
+			}
+			reg, err := catalogRepo.GetClusterApiRegistration(appCfg.AppPlatform, appCfg.AppRegion, api)
+			if err != nil || reg.UID == "" || reg.UID != uid || reg.Identity == nil {
+				return nil, fmt.Errorf("apiserver: %s is no longer registered here, or no longer with an identity", sub)
+			}
+			ac = &middleware.AuthContext{UserID: sub, Groups: []string{identity.APIsGroup}, Kind: identity.KindAPI}
+		default:
+			return nil, fmt.Errorf("apiserver: unknown token kind %q", kind)
 		}
 		ac.Provider = v.Provider
 		ac.Audience, _ = v.Claims.GetAudience()

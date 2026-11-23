@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 
@@ -8,6 +9,7 @@ import (
 	uuid "github.com/hashicorp/go-uuid"
 
 	"github.com/infrapi/kayra/internal/httpapi"
+	"github.com/infrapi/kayra/internal/identity"
 	libapi "github.com/infrapi/lib/pkg/api"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
@@ -68,6 +70,25 @@ func validateApiRegistration(repo *Repository, reg ApiRegistration) *liberrors.E
 			return liberrors.New(http.StatusConflict, "catalog.ApiRegistration", "short_name %q is already used by api registration %q", reg.ShortName, other.Name)
 		}
 	}
+	if id := reg.Identity; id != nil {
+		forms := 0
+		for _, set := range []bool{id.JWKSFrom != "", id.JWKS != nil, len(id.FederatedCredentials) > 0} {
+			if set {
+				forms++
+			}
+		}
+		if forms != 1 || (id.JWKSFrom != "" && id.JWKSFrom != JWKSFromSpec) {
+			return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "identity: one of jwks_from (\"spec\"), jwks or federated_credentials").
+				WithSolution(`{"identity": {"jwks_from": "spec"}}: the app serves its public keys at -/jwks.json`)
+		}
+		if err := identity.CheckCredentials(id.JWKS, id.FederatedCredentials, repo.TrustedIssuer); err != nil {
+			e := liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "identity.%s", err)
+			if errors.Is(err, identity.ErrUntrustedIssuer) {
+				e = e.WithSolution("ask Kayra's admin to add it to federation.issuers")
+			}
+			return e
+		}
+	}
 	for _, dep := range reg.DependsOn {
 		if dep.Platform == "" || dep.Region == "" || dep.Name == "" {
 			return liberrors.New(http.StatusBadRequest, "catalog.ApiRegistration", "depends_on entries require platform, region and name")
@@ -77,6 +98,16 @@ func validateApiRegistration(repo *Repository, reg ApiRegistration) *liberrors.E
 		}
 	}
 	return nil
+}
+
+// ensureUID gives reg a uid when it has none: a new registration.
+func ensureUID(reg *ApiRegistration) error {
+	if reg.UID != "" {
+		return nil
+	}
+	uid, err := uuid.GenerateUUID()
+	reg.UID = uid
+	return err
 }
 
 // RegisterApiRegistrationRoutes mounts cluster-wide ApiRegistration CRUD
@@ -124,6 +155,15 @@ func RegisterApiRegistrationRoutes(r gin.IRouter, repo *Repository, gate gin.Han
 		}
 		if err := validateApiRegistration(repo, reg); err != nil {
 			httpapi.Fail(c, err)
+			return
+		}
+		// a registration posted again (app register) keeps its uid
+		reg.UID = ""
+		if existing, err := repo.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, reg.Name); err == nil {
+			reg.UID = existing.UID
+		}
+		if err := ensureUID(&reg); err != nil {
+			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.CreateApiRegistration", ""))
 			return
 		}
 		if err := repo.PutClusterApiRegistration(&reg); err != nil {
@@ -220,6 +260,11 @@ func RegisterApiRegistrationRoutes(r gin.IRouter, repo *Repository, gate gin.Han
 		// general-purpose update ever touches — only PUT .../sync
 		// manages it.
 		reg.CanaryNamespaces = existing.CanaryNamespaces
+		reg.UID = existing.UID
+		if err := ensureUID(&reg); err != nil {
+			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "catalog.UpdateApiRegistration", ""))
+			return
+		}
 		if err := validateApiRegistration(repo, reg); err != nil {
 			httpapi.Fail(c, err)
 			return

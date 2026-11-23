@@ -40,3 +40,20 @@ func TestFederatedCredentialMatches(t *testing.T) {
 		}
 	}
 }
+
+func TestAPI(t *testing.T) {
+	if s := API("compute.infrapi.io"); s != "system:api:compute.infrapi.io" {
+		t.Fatal(s)
+	}
+	if g, ok := ParseAPI("system:api:compute.infrapi.io"); !ok || g != "compute.infrapi.io" {
+		t.Fatalf("%q %v", g, ok)
+	}
+	for _, bad := range []string{"system:api:compute", "system:api:", "system:api:Compute.infrapi.io", "system:serviceaccount:core:x", "compute.infrapi.io"} {
+		if _, ok := ParseAPI(bad); ok {
+			t.Errorf("%q parsed", bad)
+		}
+	}
+	if !IsServiceAccount("system:serviceaccount:core:x") || IsServiceAccount("system:api:compute.infrapi.io") {
+		t.Error("IsServiceAccount")
+	}
+}

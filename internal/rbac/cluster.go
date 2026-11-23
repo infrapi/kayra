@@ -36,7 +36,7 @@ func (r *Repository) IsSysadmin(callerGroups []string) bool {
 // the built-in sysadmin binding's, and the cluster roles of every global
 // binding of a global cluster group the caller is a member of.
 func (r *Repository) ClusterRules(userID string, callerGroups []string) ([]Rule, error) {
-	if identity.IsReserved(userID) {
+	if identity.IsServiceAccount(userID) {
 		return nil, nil // a service account holds nothing cluster-scoped
 	}
 	if r.IsSysadmin(callerGroups) {
@@ -128,6 +128,10 @@ func RequireCluster(repo *Repository) gin.HandlerFunc {
 		api, resource, verb, err := ClusterRequest(c.Request.URL.Path, c.Request.Method)
 		if err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusNotFound, origin, ""))
+			return
+		}
+		if ImplicitAPI(ac.UserID, api, resource, verb, c.Param("name")) {
+			c.Next()
 			return
 		}
 		allowed, reason, err := repo.AuthorizeCluster(ac.UserID, ac.Groups, api, resource, verb)

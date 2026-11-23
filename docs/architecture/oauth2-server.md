@@ -108,10 +108,11 @@ it sends the user back to, the resource and the user.
   replicas, are taken one after the other (an etcd lock): the second is a
   reuse.
 
-- **A service account's token** (`client_credentials`) is a JWT of the same
-  signer, with `kind: serviceaccount` and its `uid`. It lasts
-  `oauth2.client_credentials_ttl` (15 minutes) and has no refresh token. See
-  [Federation](federation.md).
+- **A service account's or an API's token** (`client_credentials`) is a JWT
+  of the same signer, with `kind: serviceaccount` or `kind: api` and its
+  `uid`. It lasts `oauth2.client_credentials_ttl` (15 minutes) and has no
+  refresh token. See [Federation](federation.md) and
+  [API identity](api-identity.md).
 
 ## Sessions
 
@@ -155,7 +156,7 @@ Every endpoint but the sessions' is unauthenticated: they are the login.
 | GET | `/oauth2/login` | the provider chosen, when there are several |
 | GET | `/oauth2/callback` | the provider's redirect |
 | POST | `/oauth2/consent` | the consent page's form, bound to its browser by a cookie |
-| POST | `/oauth2/token` | `grant_type=authorization_code` or `refresh_token`; `client_credentials` for a [service account](service-accounts.md), authenticated by a JWT (`client_assertion_type` jwt-bearer): its own key's, or its platform's, see [Federation](federation.md) |
+| POST | `/oauth2/token` | `grant_type=authorization_code` or `refresh_token`; `client_credentials` for a [service account](service-accounts.md) or an [API](api-identity.md), authenticated by a JWT (`client_assertion_type` jwt-bearer): its own key's, or its platform's, see [Federation](federation.md) |
 | POST | `/oauth2/revoke` | RFC 7009: a refresh token revokes its login, an access token its `jti` |
 | POST | `/oauth2/register` | RFC 7591, when enabled |
 | GET | `/oauth2/sessions` | a bearer token: the caller's sessions, `?user=` another's |

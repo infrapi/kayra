@@ -52,6 +52,11 @@ type Group struct {
 	// by name: a namespace group only, never a cluster one, and never
 	// another namespace's (no service account acts outside its own).
 	ServiceAccounts []string `json:"serviceaccounts,omitempty" yaml:"serviceaccounts,omitempty"`
+	// APIs are registered APIs, by group (compute.infrapi.io): the app
+	// behind each, calling with its own identity (system:api:<group>).
+	// Exact names, no wildcard. In a namespace group, its rights there;
+	// in a cluster group, the cluster RBAC's.
+	APIs []string `json:"apis,omitempty" yaml:"apis,omitempty"`
 
 	// Timestamps (created_at/updated_at) are server-owned — set by
 	// store.PutObject on every write, never read from a request.

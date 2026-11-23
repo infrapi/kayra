@@ -603,7 +603,7 @@ func (r *Reconciler) ensureSpec(ctx context.Context, reg ApiRegistration, lockID
 	}
 	upToDate := func() bool {
 		spec, err := r.repo.GetApiSpec(reg.Platform, reg.Region, reg.Name)
-		return err == nil && spec.SyncID == reg.SyncID && spec.Version == reg.APIVersion()
+		return err == nil && spec.SyncID == reg.SyncID && spec.Version == reg.APIVersion() && (!reg.KeysFromSpec() || spec.JWKS != nil)
 	}
 	if upToDate() {
 		return nil
@@ -621,6 +621,13 @@ func (r *Reconciler) ensureSpec(ctx context.Context, reg ApiRegistration, lockID
 			return
 		}
 		spec.SyncID = reg.SyncID
+		// its identity's keys, served beside it: rotated by serving the
+		// new key with the old, a sync, then the new alone and a sync
+		if reg.KeysFromSpec() {
+			if spec.JWKS, err = FetchJWKS(ctx, r.httpClient, r.gatewayURL, reg.Name, reg.APIVersion()); err != nil {
+				return
+			}
+		}
 		if err = r.repo.PutApiSpec(reg.Platform, reg.Region, &spec); err != nil {
 			return
 		}

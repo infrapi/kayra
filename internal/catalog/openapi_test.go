@@ -3,6 +3,8 @@ package catalog
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/infrapi/kayra/internal/config"
+	"github.com/infrapi/kayra/internal/store"
 )
 
 // testGatewayURL is a fake gateway every test Reconciler is pointed at
@@ -205,6 +208,88 @@ func TestReconcilerStoresSpecOnSyncAndBlocksWithoutIt(t *testing.T) {
 	}
 	if _, err := repo.GetApiSpec(testDeployPlatform, testDeployRegion, reg.Name); err == nil {
 		t.Fatalf("spec still stored after the registration was deleted")
+	}
+}
+
+// TestReconcilerFetchesIdentityKeys: an identity with jwks_from spec, the
+// app's public keys fetched with its spec at each sync, and the client
+// they make (ApiClient); no keys served, no spec stored.
+func TestReconcilerFetchesIdentityKeys(t *testing.T) {
+	var keys atomic.Value
+	keys.Store(`{"keys":[{"kty":"EC","crv":"P-256","kid":"k1","x":"QpKqxqA4mEU2hmEoj-cdvR6XBuNOe5IL_CwjWS0x3-4","y":"d8MxKfIUkWL13JxESClUvVdBZVKBUKoD2cW6uKVDn_Q"}]}`)
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/apis/compute.infrapi.io/v1/-/openapi.json":
+			_, _ = w.Write([]byte(`{"openapi":"3.1.0","paths":{"/apis/compute.infrapi.io/v1/namespaces/{namespace}/vms":{"get":{}}}}`))
+		case "/apis/compute.infrapi.io/v1/-/jwks.json":
+			if k := keys.Load().(string); k != "" {
+				_, _ = w.Write([]byte(k))
+				return
+			}
+			http.NotFound(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer gw.Close()
+
+	repo := newTestRepo(t)
+	reg := ApiRegistration{Name: "compute.infrapi.io", Platform: testDeployPlatform, Region: testDeployRegion, SyncID: "sync-1", UID: "u1",
+		Identity: &ApiIdentity{JWKSFrom: JWKSFromSpec}}
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		_ = NewReconciler(repo, testDeployPlatform, testDeployRegion, config.ReconcilerConfig{GatewayURL: gw.URL}).Run(ctx)
+	}()
+	waitFor(t, func() bool {
+		uid, k, _, err := repo.ApiClient(testDeployPlatform, testDeployRegion, reg.Name)
+		return err == nil && uid == "u1" && len(k) == 1 && k[0].Kid == "k1"
+	}, "its keys, from its spec")
+
+	// rotated: the new key served, a sync
+	keys.Store(`{"keys":[{"kty":"EC","crv":"P-256","kid":"k2","x":"QpKqxqA4mEU2hmEoj-cdvR6XBuNOe5IL_CwjWS0x3-4","y":"d8MxKfIUkWL13JxESClUvVdBZVKBUKoD2cW6uKVDn_Q"}]}`)
+	reg.SyncID = "sync-2"
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		_, k, _, err := repo.ApiClient(testDeployPlatform, testDeployRegion, reg.Name)
+		return err == nil && len(k) == 1 && k[0].Kid == "k2"
+	}, "the new key after a sync")
+
+	// none served: no keys, no token
+	keys.Store("")
+	reg.SyncID = "sync-3"
+	if err := repo.PutClusterApiRegistration(&reg); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		_, k, _, err := repo.ApiClient(testDeployPlatform, testDeployRegion, reg.Name)
+		return err == nil && len(k) == 0
+	}, "no keys when it serves none")
+
+	// a private key, or no key in the set: sync-4's spec is not stored
+	for i, bad := range []string{`{"keys":[]}`, `{"keys":[{"kty":"EC","crv":"P-256","x":"QpKqxqA4mEU2hmEoj-cdvR6XBuNOe5IL_CwjWS0x3-4","y":"d8MxKfIUkWL13JxESClUvVdBZVKBUKoD2cW6uKVDn_Q","d":"x"}]}`} {
+		keys.Store(bad)
+		reg.SyncID = fmt.Sprintf("sync-4-%d", i)
+		if err := repo.PutClusterApiRegistration(&reg); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(300 * time.Millisecond)
+		if spec, _ := repo.GetApiSpec(testDeployPlatform, testDeployRegion, reg.Name); spec.SyncID != "sync-3" {
+			t.Errorf("%q: spec of %s stored", bad, spec.SyncID)
+		}
+	}
+
+	// no identity: no client
+	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: "vault.infrapi.io", Platform: testDeployPlatform, Region: testDeployRegion}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := repo.ApiClient(testDeployPlatform, testDeployRegion, "vault.infrapi.io"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("no identity: %v", err)
 	}
 }
 

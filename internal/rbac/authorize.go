@@ -53,6 +53,7 @@ var AuthorizationAPI = "authorization.infrapi.io"
 // SetAPIDomain rebuilds AuthorizationAPI as "authorization.<domain>".
 func SetAPIDomain(domain string) {
 	AuthorizationAPI = "authorization." + domain
+	catalogAPI = "catalog." + domain
 }
 
 // CanManageNamespaceRBAC reports whether a caller identified by userID
@@ -89,7 +90,7 @@ func SetAPIDomain(domain string) {
 //
 // reason explains a false result; it is empty when allowed is true.
 func (r *Repository) CanManageNamespaceRBAC(userID string, callerGroups []string, namespace, api, resource, verb string) (allowed bool, reason string, err error) {
-	if identity.IsReserved(userID) {
+	if identity.IsServiceAccount(userID) {
 		return false, "a service account manages no RBAC, not even its own namespace's", nil
 	}
 	memberGroups, err := r.clusterGroupsMatching(userID, callerGroups)
@@ -145,8 +146,8 @@ func (r *Repository) CanManageNamespaceRBAC(userID string, callerGroups []string
 // match means one of callerGroups is listed in its own Groups, or
 // userID is listed in its Users.
 func (r *Repository) clusterGroupsMatching(userID string, callerGroups []string) ([]string, error) {
-	if identity.IsReserved(userID) {
-		return nil, nil // no cluster group ever counts one of Kayra's own identities
+	if identity.IsServiceAccount(userID) {
+		return nil, nil // no cluster group ever counts a service account
 	}
 	groups, err := r.ListClusterGroups()
 	if err != nil {
@@ -252,7 +253,7 @@ func (r *Repository) IsNamespaceMember(namespace, userID string, callerGroups []
 // scopedNamespaces are the namespaces a cluster group scoped to them
 // counts the caller in.
 func (r *Repository) scopedNamespaces(userID string, callerGroups []string) (map[string]bool, error) {
-	if identity.IsReserved(userID) {
+	if identity.IsServiceAccount(userID) {
 		return map[string]bool{}, nil
 	}
 	clusterGroups, err := r.ListClusterGroups()
@@ -352,12 +353,21 @@ func (r *Repository) namespaceGroupsMatching(namespace, userID string, callerGro
 // group in Groups, exactly: never by a wildcard, nor by any other
 // namespace's group or a cluster one (clusterGroupsMatching, ClusterRules
 // and scopedNamespaces skip it before ever calling this).
+//
+// An API is matched by a group naming it in APIs, exactly, cluster or
+// namespace group. No other of Kayra's own identities is ever matched.
 func groupMatchesCaller(g Group, userID string, callerGroups []string) bool {
 	if ns, name, ok := identity.ParseServiceAccount(userID); ok {
 		if g.Metadata.Namespace != ns {
 			return false
 		}
 		return slices.Contains(g.ServiceAccounts, name) || slices.Contains(g.Groups, identity.NamespaceServiceAccounts(ns))
+	}
+	if api, ok := identity.ParseAPI(userID); ok {
+		return slices.Contains(g.APIs, api)
+	}
+	if identity.IsReserved(userID) {
+		return false
 	}
 	for _, cg := range callerGroups {
 		if cg != "" && MatchesAny(g.Groups, cg) {

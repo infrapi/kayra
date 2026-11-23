@@ -11,7 +11,8 @@ can log in as a [service account](service-accounts.md) **without a stored
 secret**. Kayra trusts the platform's token as the service account when it
 matches one of the account's **federated credentials**. It then issues the
 account's own token for 15 minutes (`client_credentials`). Azure's workload
-identity federation and GCP's work the same way.
+identity federation and GCP's work the same way. An API's app can use its
+platform's token the same way, as the [API's own identity](api-identity.md#on-kubernetes-without-a-key).
 
 The examples use [`infrapi-cli`](https://infrapi.github.io/cli/getting-started/#1-install)
 and a Kayra at `https://kayra.example.com` with its

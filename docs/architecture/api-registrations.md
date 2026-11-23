@@ -34,6 +34,10 @@ Full CRUD at `/apis/catalog.infrapi.io/v1/apiregistrations`, decided on the
 [cluster RBAC](rbac-and-auth.md#who-decides): the sysadmin binding, or a
 global binding granting `apiregistrations` on `catalog.infrapi.io`.
 
+`identity` gives the app behind it an identity of its own,
+`system:api:<name>`, to get tokens and act as the API: see
+[API identity](api-identity.md). `uid` is set by Kayra.
+
 `allowed_namespaces` restricts who may subscribe to it, and use it: every
 namespace when empty. A namespace left out is refused at subscription,
 and at its next `/check` when it is taken out later (`403`, naming the

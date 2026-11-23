@@ -17,6 +17,9 @@ import (
 type Repository struct {
 	store store.Store
 	keys  store.Keys
+	// TrustedIssuer tells an issuer of federation.issuers: an API's
+	// federated credential names one, or is refused. None is when nil.
+	TrustedIssuer func(issuer string) bool
 }
 
 // NewRepository returns a Repository backed by s, addressed through keys.

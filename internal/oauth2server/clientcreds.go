@@ -60,7 +60,7 @@ func (s *Server) clientCredentials(c *gin.Context) {
 	}
 	client, err := s.Clients(clientID)
 	if errors.Is(err, ErrNoClient) {
-		tokenError(c, http.StatusUnauthorized, "invalid_client", fmt.Sprintf("%q is no client of client_credentials: a service account's subject, system:serviceaccount:<namespace>:<name>", clientID))
+		tokenError(c, http.StatusUnauthorized, "invalid_client", fmt.Sprintf("%q is no client of client_credentials: a service account's subject, system:serviceaccount:<namespace>:<name>, or an API's registered with an identity, system:api:<group>", clientID))
 		return
 	}
 	if err != nil {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"slices"
 	"time"
 
@@ -22,12 +21,13 @@ import (
 // where they cannot be: a reserved user anywhere (a service account goes
 // in ServiceAccounts), a reserved group other than its own namespace's
 // service accounts' (a namespace group only), service accounts in a
-// cluster group, and a service account name that is no DNS label.
+// cluster group, a service account name that is no DNS label, and an API
+// that is no API group.
 func validateGroupMembers(g Group, cluster bool, origin string) *liberrors.Error {
 	for _, u := range g.Users {
 		if identity.IsReserved(u) {
 			return liberrors.New(http.StatusBadRequest, origin, "users: %q: the %q prefix is Kayra's own", u, identity.Reserved).
-				WithSolution("name a service account in serviceaccounts, in a group of its own namespace")
+				WithSolution("name a service account in serviceaccounts, in a group of its own namespace, an API in apis")
 		}
 	}
 	for _, gr := range g.Groups {
@@ -46,6 +46,11 @@ func validateGroupMembers(g Group, cluster bool, origin string) *liberrors.Error
 	for _, name := range g.ServiceAccounts {
 		if !identity.ValidName(name) {
 			return liberrors.New(http.StatusBadRequest, origin, "serviceaccounts: %q: a service account of the group's namespace, by name (a DNS label)", name)
+		}
+	}
+	for _, api := range g.APIs {
+		if !identity.ValidAPIGroup(api) {
+			return liberrors.New(http.StatusBadRequest, origin, "apis: %q: an API by its group, exactly, like compute.infrapi.io", api)
 		}
 	}
 	return nil
@@ -76,48 +81,18 @@ type ServiceAccountTokens struct {
 	TrustedIssuer func(issuer string) bool
 }
 
-// validateServiceAccount refuses keys that are no RSA or EC public key,
-// and a federated credential without a name (or one taken), naming an
-// issuer the admin does not trust, matching nothing (no subject, no
-// claim), an empty claim, or an audience that is no URL.
+// validateServiceAccount refuses unsound keys and federated credentials
+// (identity.CheckCredentials).
 func validateServiceAccount(sa ServiceAccount, tokens ServiceAccountTokens, origin string) *liberrors.Error {
-	if sa.JWKS != nil {
-		if len(sa.JWKS.Keys) == 0 {
-			return liberrors.New(http.StatusBadRequest, origin, "jwks: no key").WithSolution(`{"keys": [{"kty": "EC", "crv": "P-256", "kid": "…", "x": "…", "y": "…"}]}`)
-		}
-		for i, k := range sa.JWKS.Keys {
-			if _, err := k.Key(); err != nil {
-				return liberrors.New(http.StatusBadRequest, origin, "jwks.keys[%d]: %s", i, err)
-			}
-			if k.D != "" {
-				return liberrors.New(http.StatusBadRequest, origin, "jwks.keys[%d]: a private key: give the public one only", i)
-			}
-		}
+	err := identity.CheckCredentials(sa.JWKS, sa.FederatedCredentials, tokens.TrustedIssuer)
+	if err == nil {
+		return nil
 	}
-	names := map[string]bool{}
-	for i, f := range sa.FederatedCredentials {
-		switch {
-		case f.Name == "" || names[f.Name]:
-			return liberrors.New(http.StatusBadRequest, origin, "federated_credentials[%d]: a name, unique", i)
-		case tokens.TrustedIssuer == nil || !tokens.TrustedIssuer(f.Issuer):
-			return liberrors.New(http.StatusBadRequest, origin, "federated_credentials.%s: issuer %q is not one Kayra trusts", f.Name, f.Issuer).
-				WithSolution("ask Kayra's admin to add it to federation.issuers")
-		case f.Subject == "" && len(f.Claims) == 0:
-			return liberrors.New(http.StatusBadRequest, origin, "federated_credentials.%s: a subject or claims to match, or any token of the issuer would do", f.Name)
-		}
-		for k, v := range f.Claims {
-			if k == "" || v == "" {
-				return liberrors.New(http.StatusBadRequest, origin, "federated_credentials.%s: claims: a name and a value, neither empty", f.Name)
-			}
-		}
-		if f.Audience != "" {
-			if u, err := url.Parse(f.Audience); err != nil || u.Host == "" {
-				return liberrors.New(http.StatusBadRequest, origin, "federated_credentials.%s: audience %q: a URL", f.Name, f.Audience)
-			}
-		}
-		names[f.Name] = true
+	e := liberrors.New(http.StatusBadRequest, origin, "%s", err)
+	if errors.Is(err, identity.ErrUntrustedIssuer) {
+		e = e.WithSolution("ask Kayra's admin to add it to federation.issuers")
 	}
-	return nil
+	return e
 }
 
 // ServiceAccountClient is a service account as a client of the token

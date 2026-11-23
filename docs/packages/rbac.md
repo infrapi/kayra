@@ -30,6 +30,7 @@ type Group struct {
 	Groups            []string // resolved group names, e.g. "sandbox-core-sysadmin" — matched against the caller's resolved groups
 	Users             []string // resolved user ids, e.g. "ahdemir" — matched against the caller's own resolved user id
 	ServiceAccounts   []string // a namespace group only: its namespace's service accounts, by name
+	APIs              []string // registered APIs, by group, exactly: system:api:<group> is a member
 }
 
 type ServiceAccount struct {
@@ -135,10 +136,18 @@ rbac.RegisterServiceAccountRoutes(engine, repo, authenticator.Middleware(), rbac
   `system:serviceaccounts:<ns>` in `Groups`, never by a wildcard.
   `clusterGroupsMatching`, `ClusterRules`, `CanManageNamespaceRBAC` and
   `scopedNamespaces` never count one.
+- **APIs** — an API's identity, `system:api:<group>`, is counted by a
+  group, cluster or namespace, that names it in `APIs`, exactly; no other of
+  Kayra's own identities is ever matched. `ImplicitAPI(caller, api,
+  resource, verb, name)` is what an API may always do about itself: get its
+  own `apiregistrations` and `apiregistrations/status`. `RequireCluster`
+  and `/check` (a request's `name`) apply it before the RBAC. See
+  [API identity](../architecture/api-identity.md).
 
 A group's members are checked on create and update: no reserved
 (`system:`) user, no reserved group but a namespace group's own
-`system:serviceaccounts:<ns>`, and no service account in a cluster group.
+`system:serviceaccounts:<ns>`, no service account in a cluster group, and no
+`apis` entry that is not an API group (no wildcard).
 
 A `RoleBinding`'s `Role` and every `Group` it names must share its exact
 `Metadata` (checked on create/update) — region, platform and namespace all
@@ -212,8 +221,8 @@ with `403` and the check's `reason` in `detail`.
 
 `RequireCluster(repo)` gates a cluster-scoped route: its api, resource and
 verb are read from the request as infrapi/lib reads them
-(`ClusterRequest`), then decided by `AuthorizeCluster` — what `/check`
-answers for the same request.
+(`ClusterRequest`), then decided by `ImplicitAPI` (the route's `:name`) and
+`AuthorizeCluster` — what `/check` answers for the same request.
 
 ## AuthorizeCluster
 
