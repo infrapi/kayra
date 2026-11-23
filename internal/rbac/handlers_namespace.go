@@ -117,7 +117,7 @@ func grantNamespace(c *gin.Context, repo *Repository, namespace string, rules []
 // it. RequireClusterRBAC is exported so internal/catalog can gate its
 // own namespace-scoped Subscription routes through the exact same check,
 // against catalog.CatalogAPI instead. The namespace resource itself
-// (the legacy model's "Tenant") and the infra catalog
+// (Kayra's unit of isolation) and the infra catalog
 // (ApiRegistration/Subscription) are registered separately, by
 // internal/catalog's own RegisterClusterRoutes/RegisterNamespaceRoutes/
 // RegisterNamespaceCollectionRoutes.

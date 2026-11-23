@@ -1,12 +1,12 @@
 ---
 title: Getting started
-description: Install Kayra, run it, bootstrap a token and create a tenant through to a running subscription.
+description: Install Kayra, run it, bootstrap a token and create a namespace through to a running subscription.
 weight: 20
 ---
 
 # Getting started
 
-A full walkthrough: install, run, bootstrap a token, and create a tenant
+A full walkthrough: install, run, bootstrap a token, and create a namespace
 all the way through to a running subscription — every command below is
 copy-pasteable `infrapi-cli`, with its raw `curl` equivalent in the
 block that follows it.
@@ -136,19 +136,21 @@ infrapi-cli auth context set bootstrap --server http://localhost:8080 --token "$
 That token's group is in `sysadmin.groups` above, so the built-in
 sysadmin binding grants it every cluster-scoped resource: namespaces, api
 registrations, the cluster RBAC. It grants nothing in a namespace: step 6
-adds its group to the tenant's admins, explicitly. Past this point, a real deployment
+adds its group to the namespace's admins, explicitly. Past this point, a real deployment
 switches to real logins (`infrapi-cli auth login`, see [CLI](cli.md)) and
 mints this bootstrap token only when actually needed again.
 
-## 5. Create a tenant
+## 5. Create a namespace
 
-A namespace *is* a tenant — one call creates both:
+A namespace is where an API's resources live, and the RBAC that grants
+them. A tenant, a team or a customer, owns one or several (see
+[Multi-tenancy](architecture/multi-tenancy.md)):
 
 **infrapi-cli**
 
 ```bash
-infrapi-cli create namespaces -d '{"name": "thetenant"}'
-# {"active": false, "name": "thetenant"}
+infrapi-cli create namespaces -d '{"name": "acme"}'
+# {"active": false, "name": "acme"}
 ```
 
 **curl**
@@ -156,8 +158,8 @@ infrapi-cli create namespaces -d '{"name": "thetenant"}'
 ```bash
 curl -s -X POST http://localhost:8080/apis/system.infrapi.io/v1/namespaces \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name": "thetenant"}'
-# {"active": false, "name": "thetenant"}
+  -d '{"name": "acme"}'
+# {"active": false, "name": "acme"}
 ```
 
 It comes back `active: false` — only `kayra reconciler` ever flips
@@ -165,23 +167,23 @@ that (see [Namespaces](architecture/namespaces.md)).
 
 ## 6. Grant a group access to it
 
-Group → role → rolebinding, cluster-scoped, so this tenant's own
+Group → role → rolebinding, cluster-scoped, so this namespace's own
 admins can later manage its day-to-day RBAC themselves:
 
 **infrapi-cli**
 
 ```bash
-infrapi-cli create clustergroups -d '{"name": "thetenant-admins",
-       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+infrapi-cli create clustergroups -d '{"name": "acme-admins",
+       "metadata": {"namespace": "acme", "region": "eu-west-1", "platform": "sandbox"},
        "groups": ["sandbox-core-sysadmin"]}'
 
-infrapi-cli create clusterroles -d '{"name": "thetenant-admin-role",
-       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+infrapi-cli create clusterroles -d '{"name": "acme-admin-role",
+       "metadata": {"namespace": "acme", "region": "eu-west-1", "platform": "sandbox"},
        "rules": [{"apis": ["catalog.infrapi.io"], "resources": ["*"], "verbs": ["*"]}]}'
 
-infrapi-cli create clusterrolebindings -d '{"name": "thetenant-admin-binding",
-       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-       "role": "thetenant-admin-role", "groups": ["thetenant-admins"]}'
+infrapi-cli create clusterrolebindings -d '{"name": "acme-admin-binding",
+       "metadata": {"namespace": "acme", "region": "eu-west-1", "platform": "sandbox"},
+       "role": "acme-admin-role", "groups": ["acme-admins"]}'
 ```
 
 **curl**
@@ -189,27 +191,27 @@ infrapi-cli create clusterrolebindings -d '{"name": "thetenant-admin-binding",
 ```bash
 curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clustergroups \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name": "thetenant-admins",
-       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+  -d '{"name": "acme-admins",
+       "metadata": {"namespace": "acme", "region": "eu-west-1", "platform": "sandbox"},
        "groups": ["sandbox-core-sysadmin"]}'
 
 curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clusterroles \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name": "thetenant-admin-role",
-       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
+  -d '{"name": "acme-admin-role",
+       "metadata": {"namespace": "acme", "region": "eu-west-1", "platform": "sandbox"},
        "rules": [{"apis": ["catalog.infrapi.io"], "resources": ["*"], "verbs": ["*"]}]}'
 
 curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clusterrolebindings \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name": "thetenant-admin-binding",
-       "metadata": {"namespace": "thetenant", "region": "eu-west-1", "platform": "sandbox"},
-       "role": "thetenant-admin-role", "groups": ["thetenant-admins"]}'
+  -d '{"name": "acme-admin-binding",
+       "metadata": {"namespace": "acme", "region": "eu-west-1", "platform": "sandbox"},
+       "role": "acme-admin-role", "groups": ["acme-admins"]}'
 ```
 
 See [who can manage a namespace's RBAC](architecture/rbac-and-auth.md)
 for how this check is actually evaluated.
 
-## 7. Register an API and subscribe the tenant to it
+## 7. Register an API and subscribe the namespace to it
 
 An `ApiRegistration` declares that an API group exists (e.g. "vault.infrapi.io", its long name — its id)
 and who owns it — Kayra never implements the API itself, only tracks
@@ -223,7 +225,7 @@ infrapi-cli create apiregistrations \
   -d '{"name": "vault.infrapi.io", "short_name": "vault", "owner": "sre"}'
 # sync_id is minted automatically — note it down, or just GET it back below
 
-infrapi-cli create subscriptions -n thetenant -d '{"api": "vault.infrapi.io"}'
+infrapi-cli create subscriptions -n acme -d '{"api": "vault.infrapi.io"}'
 # {"api": "vault.infrapi.io", "active": false, "state": "init", ...}
 ```
 
@@ -235,7 +237,7 @@ curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistration
   -d '{"name": "vault.infrapi.io", "short_name": "vault", "owner": "sre"}'
 # sync_id is minted automatically — note it down, or just GET it back below
 
-curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/thetenant/subscriptions \
+curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/acme/subscriptions \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"api": "vault.infrapi.io"}'
 # {"api": "vault.infrapi.io", "active": false, "state": "init", ...}
@@ -245,7 +247,7 @@ Any caller whose groups are bound to the `catalog.infrapi.io` API
 can do the subscribe step — it doesn't have to be the bootstrap token;
 `$TOKEN` works here only because step 6's rolebinding happens to grant
 `sandbox-core-sysadmin` (the bootstrap token's own group) that right
-too. A real deployment would bind a tenant's actual admin group there
+too. A real deployment would bind the namespace's actual admin group there
 instead.
 
 ## 8. Trigger a sync and check status

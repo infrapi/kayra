@@ -52,7 +52,7 @@ API.
 
 ## Catalog
 
-The business domain: cluster-wide **API registrations**, per-tenant
+The business domain: cluster-wide **API registrations**,
 **namespaces**, and the **subscriptions** linking them — ported from the
 legacy Postgres/GORM tool, now etcd-backed. Split across
 three pages, since each has its own management story:
@@ -60,7 +60,9 @@ three pages, since each has its own management story:
 - [API registrations](api-registrations.md) — records declaring that an
   API group exists and who owns it; Kayra never implements the API
   itself.
-- [Namespaces](namespaces.md) — the legacy model's "Tenant".
+- [Namespaces](namespaces.md) — the unit of isolation a tenant's
+  resources live in; a tenant owns one or several (see
+  [Multi-tenancy](multi-tenancy.md)).
 - [Subscriptions & reconciliation](subscriptions.md) — the link between
   them, plus `kayra reconciler`, the controller that activates and
   reconciles everything above.

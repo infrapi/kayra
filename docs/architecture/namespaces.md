@@ -1,13 +1,15 @@
 ---
 title: Namespaces
-description: "A Namespace is the tenant: its name and active state live on one record in internal/catalog."
+description: "A namespace, Kayra's unit of isolation: its name and active state on one record in internal/catalog."
 weight: 40
 ---
 
 # Namespaces
 
-A `Namespace` **is** the legacy model's "Tenant" — not two
-things joined by a name, one thing: its name and whether it's active
+A `Namespace` is Kayra's unit of isolation: every API's resources, the
+RBAC that grants them, the subscriptions and the events live in one. It is
+not a tenant: a tenant (a team, a customer) owns one or several namespaces
+(see [Multi-tenancy](multi-tenancy.md)). Its name and whether it's active
 both live directly on the one record. Repository and route code lives
 in `internal/catalog`, backed by [store](../packages/store.md).
 
@@ -20,8 +22,7 @@ type Namespace struct {
 
 ## Managing one
 
-`POST /apis/system.infrapi.io/v1/namespaces` (body `{name}`) creates it directly — no
-separate `/tenant` child resource. Full CRUD at `/apis/system.infrapi.io/v1/namespaces`
+`POST /apis/system.infrapi.io/v1/namespaces` (body `{name}`) creates it directly. Full CRUD at `/apis/system.infrapi.io/v1/namespaces`
 (collection) and `/apis/system.infrapi.io/v1/namespaces/:namespace` (one), decided on the
 [cluster RBAC](rbac-and-auth.md#who-decides) — same as
 [ApiRegistration](api-registrations.md), since creating a namespace can't depend on a
@@ -57,7 +58,7 @@ is refused, `403`. Whoever the cluster RBAC grants `get` or `list` on
 
 ```bash
 infrapi-cli get namespaces            # the ones you are in
-infrapi-cli get namespaces thetenant  # yours: 200; another: 403
+infrapi-cli get namespaces acme  # yours: 200; another: 403
 ```
 
 **curl**
@@ -65,7 +66,7 @@ infrapi-cli get namespaces thetenant  # yours: 200; another: 403
 ```bash
 curl -s http://localhost:8080/apis/system.infrapi.io/v1/namespaces \
   -H "Authorization: Bearer $TOKEN"
-curl -s http://localhost:8080/apis/system.infrapi.io/v1/namespaces/thetenant \
+curl -s http://localhost:8080/apis/system.infrapi.io/v1/namespaces/acme \
   -H "Authorization: Bearer $TOKEN"
 ```
 

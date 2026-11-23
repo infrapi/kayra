@@ -34,8 +34,7 @@ func namespaceResponse(n Namespace) gin.H {
 type NamespaceVisibility func(c *gin.Context, verb string) (all bool, member func(namespace string) (bool, error), err error)
 
 // RegisterNamespaceCollectionRoutes mounts the namespace resource itself
-// — the legacy model's "Tenant": a namespace and a tenant
-// are the same thing, so there is no separate /tenant child resource.
+// — Kayra's unit of isolation, which a tenant owns one or several of.
 // Creating, renaming or deleting one is a cluster-wide administrative
 // action, same trust tier as an ApiRegistration: on writers, normally a
 // group behind the authenticator and rbac.RequireCluster, the cluster

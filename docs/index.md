@@ -8,7 +8,7 @@ weight: 10
 
 Kayra is the authentication, namespace creation and IAM policy service,
 built on [`infrapi/lib`](https://infrapi.github.io/lib/). Cluster-wide
-**API registrations**, per-tenant **namespaces** and the
+**API registrations**, **namespaces** and the
 **subscriptions** linking them sit behind one bearer-auth and
 cluster-RBAC model, with a separate `kayra reconciler` process turning
 disabled records active.
@@ -27,8 +27,9 @@ disabled records active.
 | Let an API's app act as the API, with its own key | [API identity](architecture/api-identity.md) |
 | Audit who asked for what, to a file, a SIEM (Wazuh) or nowhere | [Audit](architecture/audit.md) |
 | See what happened to a namespace's resources, or report it from an API | [Events](architecture/events.md) |
-| Create or update a tenant | [Namespaces](architecture/namespaces.md) |
-| Subscribe a tenant to an API registration, or trigger reconcile | [Subscriptions & reconciliation](architecture/subscriptions.md) |
+| Create or update a namespace | [Namespaces](architecture/namespaces.md) |
+| Share the platform between teams or customers | [Multi-tenancy](architecture/multi-tenancy.md) |
+| Subscribe a namespace to an API registration, or trigger reconcile | [Subscriptions & reconciliation](architecture/subscriptions.md) |
 | Run a command (`serve`, `reconciler`, `cache clean`, `token mint`) or use `infrapi-cli` | [CLI](cli.md) |
 | Look up one `internal/*` package's API | [Packages](#packages) |
 | Build, test, or work on the docs themselves | [Development](development.md) |

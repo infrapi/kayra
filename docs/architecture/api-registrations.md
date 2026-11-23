@@ -171,7 +171,7 @@ set of choices.
 ### Canary rollout
 
 By default, bumping `SyncID` reconciles every active subscriber at once.
-To try a new target against one tenant first:
+To try a new target against one namespace first:
 
 **infrapi-cli**
 

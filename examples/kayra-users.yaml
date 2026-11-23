@@ -10,4 +10,4 @@ users:
       name: John Doe
       employee_id: "12345"
     groups:
-      - "cn=sandbox-thetenant-sysadmin,cn=groups,cn=accounts,dc=ipa,dc=global,dc=example,dc=com"
+      - "cn=sandbox-acme-sysadmin,cn=groups,cn=accounts,dc=ipa,dc=global,dc=example,dc=com"

@@ -91,7 +91,7 @@ internal/authz       LDAP/dev-local directory resolution, resolved-user cache
 internal/oauth2server the authorization server: tokens of Kayra's own, for infrapi-cli and MCP clients
 internal/middleware  gin Authenticator
 internal/rbac        cluster/namespace groups, roles, rolebindings
-internal/catalog     api registrations, namespaces (tenants), subscriptions, Reconciler
+internal/catalog     api registrations, namespaces, subscriptions, Reconciler
 internal/tokenapi    personal access token issuance
 internal/httpapi     RFC 9457 error response helper
 internal/apiserver   wires every other package onto one gin engine

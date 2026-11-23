@@ -103,7 +103,7 @@ func (r *Repository) apiRegistrationIsReferenced(platform, region, name, deploym
 	return false, nil
 }
 
-// --- Namespaces (the legacy model's "Tenant": a namespace is a tenant) ---
+// --- Namespaces (Kayra's unit of isolation; a tenant owns one or several) ---
 
 func (r *Repository) PutNamespace(n *Namespace) error {
 	return store.PutObject(r.store, r.keys.NamespaceConfig(n.Name), n)

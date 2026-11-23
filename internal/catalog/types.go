@@ -2,8 +2,8 @@
 // from the legacy Postgres/GORM tool: ApiRegistration (a platform+
 // region-scoped record declaring that some API group exists and who
 // owns it — Kayra itself never implements the API it names, only
-// tracks and notifies on it), Namespace (that tool's "Tenant" — a
-// namespace IS a tenant, not a separate thing joined by a name), and
+// tracks and notifies on it), Namespace (the unit of isolation an API's
+// resources live in: a tenant owns one or several), and
 // Subscription (linking a namespace to an ApiRegistration by name).
 //
 // It depends on internal/rbac only for rbac.RequireClusterRBAC/
@@ -239,10 +239,10 @@ func ValidSubscriptionState(state string) bool {
 	}
 }
 
-// Namespace is itself the legacy model's "Tenant": a namespace and a
-// tenant are the same thing, not two things joined by a name. Name and
-// whether it's active both live directly on the namespace record —
-// there is no separate tenant resource or URL segment.
+// Namespace is the unit of isolation an API's resources, their RBAC and
+// subscriptions live in. It is not a tenant: a tenant (a team, a
+// customer) owns one or several. Name and whether it's active both live
+// directly on the namespace record.
 type Namespace struct {
 	Name   string `json:"name"`
 	Active bool   `json:"active"`

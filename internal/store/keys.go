@@ -146,9 +146,7 @@ func (k Keys) ReconcilerApiSpecLock(platform, region, name string) string {
 	return fmt.Sprintf("%s/locks/reconciler/apiregistrations/%s/%s/%s/openapi", k.Prefix, platform, region, name)
 }
 
-// NamespaceConfig is a namespace's own record — its active flag (the
-// legacy model's "Tenant": a namespace IS a tenant, not a separate thing
-// alongside one).
+// NamespaceConfig is a namespace's own record — its active flag.
 func (k Keys) NamespaceConfig(namespace string) string {
 	return fmt.Sprintf("%s/namespaces/%s/config", k.Prefix, namespace)
 }

@@ -3,13 +3,13 @@
 Authentication, namespace creation and IAM policy service, built on
 [`infrapi/lib`](https://github.com/infrapi/lib).
 
-Three resources — cluster-wide **API registrations**, per-tenant
+Three resources — cluster-wide **API registrations**,
 **namespaces**, and the **subscriptions** linking them — sit behind the
 same bearer-auth and cluster-RBAC model every other endpoint uses, with
 a separate `kayra reconciler` process turning disabled records active.
 
 New here? Start with the [quickstart](docs/getting-started.md) — install,
-run, bootstrap a token, and create a tenant end to end with `infrapi-cli`.
+run, bootstrap a token, and create a namespace end to end with `infrapi-cli`.
 
 ## Why "Kayra"
 
@@ -42,8 +42,10 @@ copy, and [config](docs/packages/config.md) for the full reference.
 - **ApiRegistration** — declares that an API group exists and who owns
   it (e.g. "compute.infrapi.io", its long name and id); Kayra never implements the API itself. See
   [API registrations](docs/architecture/api-registrations.md).
-- **Namespace** — *is* the tenant, not two things joined by a name.
-  See [Namespaces](docs/architecture/namespaces.md).
+- **Namespace** — Kayra's unit of isolation, its APIs' resources, RBAC and
+  subscriptions. A tenant owns one or several: see
+  [Namespaces](docs/architecture/namespaces.md) and
+  [Multi-tenancy](docs/architecture/multi-tenancy.md).
 - **Subscription** — links a namespace to an API registration by name; only
   `kayra reconciler` (a separate process, see
   [Subscriptions & reconciliation](docs/architecture/subscriptions.md))

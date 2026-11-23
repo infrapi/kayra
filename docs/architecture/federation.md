@@ -116,7 +116,7 @@ deploy:
       aud: https://kayra.example.com
   script:
     - infrapi-cli auth login --server https://kayra.example.com --service-account core/deployer --id-token env:KAYRA_ID_TOKEN
-    - infrapi-cli update puppetreleases/promote apache -n core -d '{"location": "emea"}'
+    - infrapi-cli update vms/resize web-1 -n core -d '{"size": "large"}'
 ```
 
 GitLab's `sub` is `project_path:<group>/<project>:ref_type:<branch|tag>:ref:<name>`.

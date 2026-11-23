@@ -36,7 +36,7 @@ type DiscoveryGroup struct {
 const builtinOwner = "kayra"
 
 // RegisterDiscoveryRoutes mounts, behind gate (normally
-// middleware.Authenticator: any authenticated caller — tenants need it
+// middleware.Authenticator: any authenticated caller — a namespace's users need it
 // to see what they can subscribe to; the resources themselves stay
 // gated as they are):
 //

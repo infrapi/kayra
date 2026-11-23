@@ -93,7 +93,7 @@ func validateSubscription(repo *Repository, sub Subscription, deploymentPlatform
 }
 
 // RegisterNamespaceRoutes mounts namespace-scoped Subscription CRUD —
-// the legacy model's tenant↔api registration link — at
+// the legacy model's namespace↔api registration link — at
 // /apis/catalog.infrapi.io/v1/namespaces/:namespace/
 // subscriptions{,/:api{,/sync}}, the namespace-scoped half of CatalogAPI
 // next to the cluster-scoped apiregistrations, exactly like

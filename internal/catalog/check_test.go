@@ -308,13 +308,13 @@ func TestValidateRoleRules(t *testing.T) {
 // resources, never its namespaced ones.
 func TestClusterResources(t *testing.T) {
 	repo := newTestRepo(t)
-	const api = "puppet.infrapi.io"
+	const api = "compute.infrapi.io"
 	if err := repo.PutClusterApiRegistration(&ApiRegistration{Name: api, Platform: testDeployPlatform, Region: testDeployRegion}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.PutApiSpec(testDeployPlatform, testDeployRegion, &ApiSpec{Api: api, Resources: []ApiResource{
-		{Name: "nodes", Namespaced: false, Verbs: []string{"create", "get", "list", "update"}},
-		{Name: "puppetreleases", Namespaced: true, Verbs: []string{"create", "get"}},
+		{Name: "hosts", Namespaced: false, Verbs: []string{"create", "get", "list", "update"}},
+		{Name: "vms", Namespaced: true, Verbs: []string{"create", "get"}},
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestClusterResources(t *testing.T) {
 		resource, verb string
 		code           int
 	}{
-		{"nodes", "update", 0}, {"nodes", "delete", 405}, {"puppetreleases", "get", 404}, {"locations", "get", 404},
+		{"hosts", "update", 0}, {"hosts", "delete", 405}, {"vms", "get", 404}, {"flavors", "get", 404},
 	} {
 		err := repo.CheckApiClusterResource(api, c.resource, c.verb, testDeployPlatform, testDeployRegion)
 		if (err == nil && c.code != 0) || (err != nil && err.Code != c.code) {
@@ -336,20 +336,20 @@ func TestClusterResources(t *testing.T) {
 	rule := func(resources ...string) []rbac.Rule {
 		return []rbac.Rule{{Apis: []string{api}, Resources: resources, Verbs: []string{"get"}}}
 	}
-	if err := repo.ValidateClusterRoleRules(rule("nodes"), testDeployPlatform, testDeployRegion); err != nil {
+	if err := repo.ValidateClusterRoleRules(rule("hosts"), testDeployPlatform, testDeployRegion); err != nil {
 		t.Errorf("a cluster-scoped resource: %v", err)
 	}
-	if err := repo.ValidateClusterRoleRules(rule("puppetreleases"), testDeployPlatform, testDeployRegion); err == nil {
+	if err := repo.ValidateClusterRoleRules(rule("vms"), testDeployPlatform, testDeployRegion); err == nil {
 		t.Error("a namespaced resource in a global cluster role")
 	}
-	if err := repo.ValidateRoleRules(rule("nodes"), testDeployPlatform, testDeployRegion); err == nil {
+	if err := repo.ValidateRoleRules(rule("hosts"), testDeployPlatform, testDeployRegion); err == nil {
 		t.Error("a cluster-scoped resource in a namespace role")
 	}
 }
 
 // allowed_namespaces: a namespace it leaves out is refused, at /check.
 func TestAllowedNamespaces(t *testing.T) {
-	reg := ApiRegistration{Name: "puppet.infrapi.io", Owner: "sre"}
+	reg := ApiRegistration{Name: "compute.infrapi.io", Owner: "sre"}
 	if err := reg.Allows("acme"); err != nil {
 		t.Errorf("open: %v", err)
 	}

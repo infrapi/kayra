@@ -263,7 +263,7 @@ succeeds, so it starts out already reconciled
 ### Ongoing action
 
 The "ongoing" action is the mechanism behind a sentence like *"we bumped
-compute's sync id, now reconcile every tenant subscribed to it"*:
+compute's sync id, now reconcile every namespace subscribed to it"*:
 
 1. An operator (or `PUT .../apiregistrations/:name/sync`, see [API registrations](api-registrations.md#triggering-reconcile))
    changes an api registration's `SyncID` to any new value — which is also, from the

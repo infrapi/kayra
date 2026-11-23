@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	puppetAPI     = "puppet.infrapi.io"
-	platformGroup = "sandbox-puppet-platform" // the platform's Terraform
+	computeAPI    = "compute.infrapi.io"
+	platformGroup = "sandbox-compute-platform" // the platform's Terraform
 )
 
 // seedGlobal writes a global cluster group of callerGroup, bound to a
@@ -39,22 +39,22 @@ func seedGlobal(t *testing.T, repo *Repository, name, callerGroup string, rules 
 func TestAuthorizeCluster(t *testing.T) {
 	repo := newTestRepo(t)
 	repo.SetSysadmin([]string{testSysadminGroup})
-	seedClusterRBAC(t, repo, testAdminGroup, testNamespace) // a tenant's admins, scoped to myns
-	seedGlobal(t, repo, "puppet-platform", platformGroup,
-		Rule{Apis: []string{puppetAPI}, Resources: []string{"locations", "nodes"}, Verbs: []string{"*"}})
+	seedClusterRBAC(t, repo, testAdminGroup, testNamespace) // a namespace's admins, scoped to myns
+	seedGlobal(t, repo, "compute-platform", platformGroup,
+		Rule{Apis: []string{computeAPI}, Resources: []string{"flavors", "hosts"}, Verbs: []string{"*"}})
 
 	for _, c := range []struct {
 		groups              []string
 		api, resource, verb string
 		want                bool
 	}{
-		{[]string{testSysadminGroup}, puppetAPI, "nodes", "create", true},
+		{[]string{testSysadminGroup}, computeAPI, "hosts", "create", true},
 		{[]string{testSysadminGroup}, AuthorizationAPI, "clusterroles", "escalate", true},
-		{[]string{platformGroup}, puppetAPI, "nodes", "delete", true},
-		{[]string{platformGroup}, puppetAPI, "artifacts", "get", false},
+		{[]string{platformGroup}, computeAPI, "hosts", "delete", true},
+		{[]string{platformGroup}, computeAPI, "artifacts", "get", false},
 		{[]string{platformGroup}, AuthorizationAPI, "clustergroups", "create", false},
 		{[]string{testAdminGroup}, AuthorizationAPI, "roles", "create", false}, // scoped to myns only
-		{[]string{"nobody"}, puppetAPI, "nodes", "get", false},
+		{[]string{"nobody"}, computeAPI, "hosts", "get", false},
 	} {
 		got, reason, err := repo.AuthorizeCluster("u", c.groups, c.api, c.resource, c.verb)
 		if err != nil {
@@ -81,8 +81,8 @@ func TestClusterRequest(t *testing.T) {
 	for _, c := range []struct{ method, path, api, resource, verb string }{
 		{"POST", "/apis/system.infrapi.io/v1/namespaces", "system.infrapi.io", "namespaces", "create"},
 		{"GET", "/apis/system.infrapi.io/v1/namespaces/core", "system.infrapi.io", "namespaces", "get"},
-		{"PUT", "/apis/catalog.infrapi.io/v1/apiregistrations/puppet.infrapi.io/sync", "catalog.infrapi.io", "apiregistrations/sync", "update"},
-		{"GET", "/apis/catalog.infrapi.io/v1/apiregistrations/puppet.infrapi.io/status", "catalog.infrapi.io", "apiregistrations/status", "list"},
+		{"PUT", "/apis/catalog.infrapi.io/v1/apiregistrations/compute.infrapi.io/sync", "catalog.infrapi.io", "apiregistrations/sync", "update"},
+		{"GET", "/apis/catalog.infrapi.io/v1/apiregistrations/compute.infrapi.io/status", "catalog.infrapi.io", "apiregistrations/status", "list"},
 		{"DELETE", "/apis/authorization.infrapi.io/v1/clusterroles/r", "authorization.infrapi.io", "clusterroles", "delete"},
 	} {
 		api, resource, verb, err := ClusterRequest(c.path, c.method)
@@ -138,7 +138,7 @@ func TestClusterEscalation(t *testing.T) {
 	repo.SetSysadmin([]string{testSysadminGroup})
 	delegated := []Rule{
 		{Apis: []string{AuthorizationAPI}, Resources: []string{"clusterroles", "clusterrolebindings", "clustergroups"}, Verbs: []string{"create", "update", "get", "list"}},
-		{Apis: []string{puppetAPI}, Resources: []string{"nodes"}, Verbs: []string{"get", "list", "update"}},
+		{Apis: []string{computeAPI}, Resources: []string{"hosts"}, Verbs: []string{"get", "list", "update"}},
 	}
 	seedGlobal(t, repo, "rbac-delegates", "sandbox-delegates", delegated...)
 	engine := gin.New()
@@ -146,23 +146,23 @@ func TestClusterEscalation(t *testing.T) {
 
 	// a subset of what they hold: accepted
 	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", Role{
-		Name: "agents", Rules: []Rule{{Apis: []string{puppetAPI}, Resources: []string{"nodes"}, Verbs: []string{"update"}}},
+		Name: "agents", Rules: []Rule{{Apis: []string{computeAPI}, Resources: []string{"hosts"}, Verbs: []string{"update"}}},
 	})
 	if w.Code != http.StatusCreated {
 		t.Fatalf("a subset: %d %s", w.Code, w.Body.String())
 	}
 	// more: refused, naming what
 	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", Role{
-		Name: "more", Rules: []Rule{{Apis: []string{puppetAPI}, Resources: []string{"nodes"}, Verbs: []string{"delete"}}},
+		Name: "more", Rules: []Rule{{Apis: []string{computeAPI}, Resources: []string{"hosts"}, Verbs: []string{"delete"}}},
 	})
 	var problem struct{ Detail string }
 	_ = json.Unmarshal(w.Body.Bytes(), &problem)
-	if w.Code != http.StatusForbidden || problem.Detail != "it grants puppet.infrapi.io nodes delete, which you do not hold" {
+	if w.Code != http.StatusForbidden || problem.Detail != "it grants compute.infrapi.io hosts delete, which you do not hold" {
 		t.Fatalf("more: %d %s", w.Code, w.Body.String())
 	}
 	// a "*" is covered by a "*" only
 	w = doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", Role{
-		Name: "star", Rules: []Rule{{Apis: []string{puppetAPI}, Resources: []string{"*"}, Verbs: []string{"get"}}},
+		Name: "star", Rules: []Rule{{Apis: []string{computeAPI}, Resources: []string{"*"}, Verbs: []string{"get"}}},
 	})
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("a star: %d %s", w.Code, w.Body.String())
@@ -210,7 +210,7 @@ func TestNamespaceEscalation(t *testing.T) {
 	}
 	if err := repo.PutClusterRole(&Role{Name: "writers", Metadata: meta, Rules: []Rule{
 		{Apis: []string{AuthorizationAPI}, Resources: []string{"roles", "groups", "rolebindings"}, Verbs: []string{"create", "update", "get", "list"}},
-		{Apis: []string{puppetAPI}, Resources: []string{"puppetreleases"}, Verbs: []string{"get", "list"}},
+		{Apis: []string{computeAPI}, Resources: []string{"vms"}, Verbs: []string{"get", "list"}},
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -222,22 +222,22 @@ func TestNamespaceEscalation(t *testing.T) {
 	path := "/apis/authorization.infrapi.io/v1/namespaces/" + testNamespace + "/roles"
 
 	if w := doJSON(t, engine, http.MethodPost, path, Role{Name: "read", Rules: []Rule{
-		{Apis: []string{puppetAPI}, Resources: []string{"puppetreleases"}, Verbs: []string{"get"}},
+		{Apis: []string{computeAPI}, Resources: []string{"vms"}, Verbs: []string{"get"}},
 	}}); w.Code != http.StatusCreated {
 		t.Fatalf("a subset: %d %s", w.Code, w.Body.String())
 	}
 	if w := doJSON(t, engine, http.MethodPost, path, Role{Name: "all", Rules: []Rule{
-		{Apis: []string{puppetAPI}, Resources: []string{"*"}, Verbs: []string{"*"}},
+		{Apis: []string{computeAPI}, Resources: []string{"*"}, Verbs: []string{"*"}},
 	}}); w.Code != http.StatusForbidden {
-		t.Fatalf("puppet *: %d %s", w.Code, w.Body.String())
+		t.Fatalf("compute *: %d %s", w.Code, w.Body.String())
 	}
 
-	// a tenant's admins (authorization *, so escalate): unaffected
+	// a namespace's admins (authorization *, so escalate): unaffected
 	seedClusterRBAC(t, repo, testAdminGroup, testNamespace)
 	admins := gin.New()
 	RegisterNamespaceRoutes(admins, repo, fakeAuthGate(testAdmin, testAdminGroup), nil)
 	if w := doJSON(t, admins, http.MethodPost, path, Role{Name: "all", Rules: []Rule{
-		{Apis: []string{puppetAPI}, Resources: []string{"*"}, Verbs: []string{"*"}},
+		{Apis: []string{computeAPI}, Resources: []string{"*"}, Verbs: []string{"*"}},
 	}}); w.Code != http.StatusCreated {
 		t.Fatalf("the admins: %d %s", w.Code, w.Body.String())
 	}
@@ -250,8 +250,8 @@ func TestCheckCluster(t *testing.T) {
 	repo := newTestRepo(t)
 	repo.SetSysadmin([]string{testSysadminGroup})
 	seedClusterRBAC(t, repo, testAdminGroup, testNamespace)
-	seedGlobal(t, repo, "puppet-platform", platformGroup,
-		Rule{Apis: []string{puppetAPI}, Resources: []string{"nodes"}, Verbs: []string{"*"}})
+	seedGlobal(t, repo, "compute-platform", platformGroup,
+		Rule{Apis: []string{computeAPI}, Resources: []string{"hosts"}, Verbs: []string{"*"}})
 	var asked []string
 	prechecks := Prechecks{
 		ClusterResource: func(api, resource, verb string) *liberrors.Error {
@@ -272,18 +272,18 @@ func TestCheckCluster(t *testing.T) {
 		_ = json.Unmarshal(w.Body.Bytes(), &r)
 		return r
 	}
-	if r := check([]string{platformGroup}, AuthorizeRequest{Api: puppetAPI, Resource: "nodes", Verb: "update"}); !r.Allowed {
-		t.Errorf("the platform on nodes: %+v", r)
+	if r := check([]string{platformGroup}, AuthorizeRequest{Api: computeAPI, Resource: "hosts", Verb: "update"}); !r.Allowed {
+		t.Errorf("the platform on hosts: %+v", r)
 	}
-	if r := check([]string{testAdminGroup}, AuthorizeRequest{Api: puppetAPI, Resource: "nodes", Verb: "get"}); r.Allowed {
-		t.Errorf("a tenant's admin on nodes: %+v", r)
+	if r := check([]string{testAdminGroup}, AuthorizeRequest{Api: computeAPI, Resource: "hosts", Verb: "get"}); r.Allowed {
+		t.Errorf("a namespace's admin on hosts: %+v", r)
 	}
-	if len(asked) != 2 || asked[0] != puppetAPI+" nodes" {
+	if len(asked) != 2 || asked[0] != computeAPI+" hosts" {
 		t.Errorf("prechecks: %v", asked)
 	}
 	// Kayra's own api, in a namespace: as RequireClusterRBAC decides it
 	if r := check([]string{testAdminGroup}, AuthorizeRequest{Namespace: testNamespace, Api: AuthorizationAPI, Resource: "roles", Verb: "create"}); !r.Allowed {
-		t.Errorf("a tenant's admin on its roles: %+v", r)
+		t.Errorf("a namespace's admin on its roles: %+v", r)
 	}
 	if r := check([]string{platformGroup}, AuthorizeRequest{Namespace: testNamespace, Api: AuthorizationAPI, Resource: "roles", Verb: "create"}); r.Allowed {
 		t.Errorf("the platform on a tenant's roles: %+v", r)

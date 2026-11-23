@@ -204,11 +204,11 @@ cluster-scoped resources.
 
 ```bash
 M='"metadata": {"namespace": "", "region": "eu-west-1", "platform": "sandbox"}'
-infrapi-cli create clustergroups -d "{\"name\": \"puppet-platform\", $M, \"groups\": [\"sandbox-puppet-platform\"]}"
-infrapi-cli create clusterroles -d "{\"name\": \"puppet-platform\", $M,
-  \"rules\": [{\"apis\": [\"puppet.infrapi.io\"], \"resources\": [\"locations\", \"nodes\"], \"verbs\": [\"*\"]}]}"
-infrapi-cli create clusterrolebindings -d "{\"name\": \"puppet-platform\", $M,
-  \"role\": \"puppet-platform\", \"groups\": [\"puppet-platform\"]}"
+infrapi-cli create clustergroups -d "{\"name\": \"compute-platform\", $M, \"groups\": [\"sandbox-compute-platform\"]}"
+infrapi-cli create clusterroles -d "{\"name\": \"compute-platform\", $M,
+  \"rules\": [{\"apis\": [\"compute.infrapi.io\"], \"resources\": [\"flavors\", \"hosts\"], \"verbs\": [\"*\"]}]}"
+infrapi-cli create clusterrolebindings -d "{\"name\": \"compute-platform\", $M,
+  \"role\": \"compute-platform\", \"groups\": [\"compute-platform\"]}"
 ```
 
 **curl**
@@ -217,19 +217,19 @@ infrapi-cli create clusterrolebindings -d "{\"name\": \"puppet-platform\", $M,
 M='"metadata": {"namespace": "", "region": "eu-west-1", "platform": "sandbox"}'
 curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clustergroups \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "{\"name\": \"puppet-platform\", $M, \"groups\": [\"sandbox-puppet-platform\"]}"
+  -d "{\"name\": \"compute-platform\", $M, \"groups\": [\"sandbox-compute-platform\"]}"
 curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clusterroles \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "{\"name\": \"puppet-platform\", $M, \"rules\": [{\"apis\": [\"puppet.infrapi.io\"], \"resources\": [\"locations\", \"nodes\"], \"verbs\": [\"*\"]}]}"
+  -d "{\"name\": \"compute-platform\", $M, \"rules\": [{\"apis\": [\"compute.infrapi.io\"], \"resources\": [\"flavors\", \"hosts\"], \"verbs\": [\"*\"]}]}"
 curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clusterrolebindings \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "{\"name\": \"puppet-platform\", $M, \"role\": \"puppet-platform\", \"groups\": [\"puppet-platform\"]}"
+  -d "{\"name\": \"compute-platform\", $M, \"role\": \"compute-platform\", \"groups\": [\"compute-platform\"]}"
 ```
 
 A global cluster role's rules are checked like a namespace role's
 (`catalog.Repository.ValidateClusterRoleRules`), against the apis'
-**cluster-scoped** resources: `puppetreleases`, a namespaced resource, is
-refused there, as `nodes` is in a namespace role.
+**cluster-scoped** resources: `vms`, a namespaced resource, is
+refused there, as `hosts` is in a namespace role.
 
 An app's cluster-scoped request reaches `/check` with no namespace, and is
 decided on the cluster RBAC alone: the api is registered, its spec serves
@@ -238,7 +238,7 @@ then the caller's global rules decide (`allowed: false` with the reason).
 
 ```json
 // request
-{"api": "puppet.infrapi.io", "resource": "nodes/status", "verb": "update"}
+{"api": "compute.infrapi.io", "resource": "hosts/status", "verb": "update"}
 // response
 {"allowed": true}
 ```
@@ -251,7 +251,7 @@ on the cluster for a cluster role or binding, in the namespace for a
 namespace one. Writing more is refused:
 
 ```json
-{"status": 403, "detail": "it grants puppet.infrapi.io nodes delete, which you do not hold",
+{"status": 403, "detail": "it grants compute.infrapi.io hosts delete, which you do not hold",
  "solution": "grant only what you hold, or ask for \"escalate\" on clusterroles"}
 ```
 
