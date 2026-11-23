@@ -33,6 +33,11 @@ client ──► Kayra POST /oauth2/token           code + code_verifier
        ◄── access token (a JWT, 15 min, aud the resource) + refresh token (opaque, rotated)
 ```
 
+> [!TIP]
+> [ulgen](https://infrapi.github.io/ulgen/) is one MCP endpoint in front of
+> several MCP servers: an MCP client logs in here once for all of them, and
+> ulgen checks each tool call on its tenant with `/check`.
+
 ## Configure it
 
 ```yaml
