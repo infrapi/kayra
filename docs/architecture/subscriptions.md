@@ -115,15 +115,14 @@ there's nothing left in the body a caller could legitimately change.
 **infrapi-cli**
 
 ```bash
-infrapi-cli update subscriptions -n sre dev.infrapi.io/sync -d '{}'
+infrapi-cli update subscriptions/sync -n sre dev.infrapi.io
 ```
 
 **curl**
 
 ```bash
 curl -s -X PUT http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/sre/subscriptions/dev.infrapi.io/sync \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{}'
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 Resets `current_sync_id` to empty — nothing else: `active`/`state` are left

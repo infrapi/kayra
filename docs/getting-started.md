@@ -253,17 +253,16 @@ instead.
 **infrapi-cli**
 
 ```bash
-infrapi-cli update apiregistrations vault.infrapi.io/sync -d '{}'
+infrapi-cli update apiregistrations/sync vault.infrapi.io
 
-infrapi-cli get apiregistrations vault.infrapi.io/status
+infrapi-cli get apiregistrations/status vault.infrapi.io
 ```
 
 **curl**
 
 ```bash
 curl -s -X PUT http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/vault.infrapi.io/sync \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{}'
+  -H "Authorization: Bearer $TOKEN"
 
 curl -s http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/vault.infrapi.io/status \
   -H "Authorization: Bearer $TOKEN"

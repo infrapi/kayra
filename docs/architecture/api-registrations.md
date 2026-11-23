@@ -144,15 +144,14 @@ The shorthand:
 **infrapi-cli**
 
 ```bash
-infrapi-cli update apiregistrations compute.infrapi.io/sync -d '{}'
+infrapi-cli update apiregistrations/sync compute.infrapi.io
 ```
 
 **curl**
 
 ```bash
 curl -s -X PUT http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/compute.infrapi.io/sync \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{}'
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 stamps a fresh [`hashicorp/go-uuid`](https://github.com/hashicorp/go-uuid)-generated
@@ -173,7 +172,7 @@ To try a new target against one tenant first:
 **infrapi-cli**
 
 ```bash
-infrapi-cli update apiregistrations compute.infrapi.io/sync -d '{"canary_namespaces": ["sre"]}'
+infrapi-cli update apiregistrations/sync compute.infrapi.io -d '{"canary_namespaces": ["sre"]}'
 ```
 
 **curl**
@@ -197,15 +196,14 @@ Once satisfied, release the same build to everyone else:
 **infrapi-cli**
 
 ```bash
-infrapi-cli update apiregistrations compute.infrapi.io/sync -d '{}'
+infrapi-cli update apiregistrations/sync compute.infrapi.io
 ```
 
 **curl**
 
 ```bash
 curl -s -X PUT http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/compute.infrapi.io/sync \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{}'
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 called again with **no** `canary_namespaces` while a rollout is pending —
@@ -277,7 +275,7 @@ report for one yet.
 **infrapi-cli**
 
 ```bash
-infrapi-cli get apiregistrations compute.infrapi.io/status
+infrapi-cli get apiregistrations/status compute.infrapi.io
 ```
 
 **curl**
