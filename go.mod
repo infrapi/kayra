@@ -8,7 +8,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-uuid v1.0.4
-	github.com/infrapi/lib v0.19.0
+	github.com/infrapi/lib v0.20.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/urfave/cli/v3 v3.14.0
 	go.etcd.io/etcd/client/v3 v3.7.3
