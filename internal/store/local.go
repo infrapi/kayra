@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -254,4 +255,47 @@ func (s *LocalStore) Watch(ctx context.Context, prefix string) (<-chan Event, er
 
 func (s *LocalStore) Close() error {
 	return nil
+}
+
+// Range returns the unexpired keys in [from, to), sorted by key.
+func (s *LocalStore) Range(from, to string, limit int, desc bool) ([]KV, error) {
+	entries, err := s.List(commonPrefix(from, to))
+	if err != nil {
+		return nil, err
+	}
+	var out []KV
+	for k, v := range entries {
+		if k >= from && k < to {
+			out = append(out, KV{Key: k, Value: v})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if desc {
+			return out[i].Key > out[j].Key
+		}
+		return out[i].Key < out[j].Key
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// PutBatchTTL writes each of kvs with ttl.
+func (s *LocalStore) PutBatchTTL(kvs []KV, ttl time.Duration) error {
+	for _, kv := range kvs {
+		if err := s.PutTTL(kv.Key, kv.Value, ttl); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// commonPrefix is the longest prefix of a and b, up to a "/".
+func commonPrefix(a, b string) string {
+	n := 0
+	for n < len(a) && n < len(b) && a[n] == b[n] {
+		n++
+	}
+	return a[:strings.LastIndex(a[:n], "/")+1]
 }

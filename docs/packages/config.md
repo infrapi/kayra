@@ -313,6 +313,18 @@ Where Kayra writes its audit ([internal/audit](../architecture/audit.md)).
 and `key` go together; `Settings()` applies the defaults: a 5s timeout,
 batches of 100 or 1s, a queue of 10000. See [Audit](../architecture/audit.md).
 
+## Events
+
+```go
+type EventsConfig struct {
+	TTL    string     // 168h; a minute at least
+	Stdout bool       // a JSON line per accepted event
+	Rate   EventsRate // PerSecond (50), Burst (200), per reporter
+}
+```
+
+`Settings()` applies the defaults. See [Events](../architecture/events.md).
+
 ## Service accounts
 
 ```go

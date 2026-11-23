@@ -43,8 +43,8 @@ audit:
   denial, a read included: a `401`, a `403`, or a `/check` that is not
   allowed, or that Kayra refused itself (a namespace that does not exist).
 - **With `reads: true`:** allowed `get` and `list` too.
-- **Never:** the `-/` routes (health, metrics, docs), the bodies, and the
-  token endpoints.
+- **Never:** the `-/` routes (health, metrics, docs), the bodies, the token
+  endpoints, and an allowed [event](events.md) write.
 
 ## 2. The record
 
@@ -60,8 +60,9 @@ audit:
 - **`kind`:** `user`, `serviceaccount` or `api`: see
   [Service accounts](service-accounts.md) and [API identity](api-identity.md).
 - **`request_id`:** the request's `X-Request-Id`. For `stage: check`, it is
-  the original request's, with its `source_ip` and `user_agent`, when the
-  app sends them in the check. Otherwise they are the app's own.
+  the original request's, with its `source_ip` and `user_agent`: an app on
+  infrapi/lib sends them in the check. Otherwise they are the app's own.
+  The request's [event](events.md) carries the same `request_id`.
 - **`status`:** for `stage: request`, the response's. For `stage: check`, set
   only when Kayra refused the check itself (a `404`).
 

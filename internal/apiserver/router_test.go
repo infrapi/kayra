@@ -290,7 +290,7 @@ func TestOperationalEndpointsPerGroup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	want := []string{"/apis/system.infrapi.io/v1", "/apis/catalog.infrapi.io/v1", "/apis/authorization.infrapi.io/v1"}
+	want := []string{"/apis/system.infrapi.io/v1", "/apis/catalog.infrapi.io/v1", "/apis/authorization.infrapi.io/v1", "/apis/events.infrapi.io/v1"}
 	if got := Roots(); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("Roots = %v, want %v", got, want)
 	}
@@ -354,7 +354,7 @@ func TestAPIIndexListsKayraGroups(t *testing.T) {
 	for _, g := range idx.Groups {
 		got = append(got, g.Name+"="+g.API+"/"+g.Version)
 	}
-	want := "system=system.infrapi.io/v1 catalog=catalog.infrapi.io/v1 authorization=authorization.infrapi.io/v1"
+	want := "system=system.infrapi.io/v1 catalog=catalog.infrapi.io/v1 authorization=authorization.infrapi.io/v1 events=events.infrapi.io/v1"
 	if strings.Join(got, " ") != want || !idx.Groups[0].Primary {
 		t.Fatalf("groups = %v, want %s, system primary", got, want)
 	}

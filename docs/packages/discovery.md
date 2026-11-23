@@ -20,7 +20,8 @@ and nothing else:
   "apis": {
     "system": "/apis/system.infrapi.io/v1",
     "catalog": "/apis/catalog.infrapi.io/v1",
-    "authorization": "/apis/authorization.infrapi.io/v1"
+    "authorization": "/apis/authorization.infrapi.io/v1",
+    "events": "/apis/events.infrapi.io/v1"
   },
   "endpoints": {
     "userinfo": "/oauth2/userinfo",

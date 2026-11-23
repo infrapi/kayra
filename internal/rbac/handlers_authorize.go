@@ -47,6 +47,9 @@ type AuthorizeRequest struct {
 type AuthorizeResponse struct {
 	Allowed bool   `json:"allowed"`
 	Reason  string `json:"reason,omitempty"`
+	// User is the caller's subject: an app's events name who asked
+	// without verifying the token again.
+	User string `json:"user,omitempty"`
 }
 
 // Prechecks are the catalog-owned steps of a /check decision, passed in
@@ -139,7 +142,7 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 		var rec audit.Record
 		answer := func(allowed bool, reason string) {
 			rec.Allowed, rec.Reason = allowed, reason
-			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason})
+			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason, User: ac.UserID})
 		}
 		fail := func(err *liberrors.Error) {
 			rec.Reason, rec.Status = err.Message, err.Code

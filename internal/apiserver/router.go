@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +20,7 @@ import (
 	gconfig "github.com/infrapi/kayra/internal/config"
 	gcrypto "github.com/infrapi/kayra/internal/crypto"
 	"github.com/infrapi/kayra/internal/discovery"
+	"github.com/infrapi/kayra/internal/events"
 	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/identity"
 	"github.com/infrapi/kayra/internal/middleware"
@@ -109,6 +112,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config, opts ...Option) (*g
 	}
 	rbac.SetAPIDomain(apiDomain)
 	catalog.SetAPIDomain(apiDomain)
+	events.SetAPIDomain(apiDomain)
 
 	// infrapi/lib serves its own endpoints (health, metrics, metadata,
 	// OpenAPI, docs) under each of Kayra's groups, about that group's
@@ -126,7 +130,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config, opts ...Option) (*g
 	// the audit of Kayra's own routes, once served: before any of them is
 	// registered, for gin to put it in front of each
 	checkPath := "/apis/" + rbac.AuthorizationAPI + "/v1/check"
-	engine.Use(auditRequests(o.auditor, Roots(), checkPath))
+	engine.Use(auditRequests(o.auditor, Roots(), checkPath, "/apis/"+events.API+"/v1/"))
 
 	engine.NoRoute(func(c *gin.Context) {
 		httpapi.Fail(c, liberrors.New(http.StatusNotFound, "apiserver.NoRoute", "no route for %s %s", c.Request.Method, c.Request.URL.Path))
@@ -137,7 +141,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config, opts ...Option) (*g
 	// apps built on infrapi/lib and infrapi-cli discover instead of
 	// configuring them.
 	discovery.Register(engine, discovery.New(baseURL, apiDomain, discovery.Groups{
-		System: catalog.SystemAPI, Catalog: catalog.CatalogAPI, Authorization: rbac.AuthorizationAPI,
+		System: catalog.SystemAPI, Catalog: catalog.CatalogAPI, Authorization: rbac.AuthorizationAPI, Events: events.API,
 	}, "/oauth2/userinfo", "/oauth2/discovery/keys", "/apis"))
 
 	// Empty cfg.Sysadmin.Groups falls back to the single
@@ -291,15 +295,55 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config, opts ...Option) (*g
 	// the full order): the namespace exists, then — once the caller is
 	// known to be a member — the api is registered here, the namespace is
 	// subscribed to it, and that subscription is active.
+	// events.<domain>: decided by the namespace's RBAC, as an app's API,
+	// though no namespace subscribes to it
+	eventsSettings, err := cfg.Events.Settings()
+	if err != nil {
+		return nil, err
+	}
+	events.Register(engine, authenticator.Middleware(), events.Options{
+		Store: s, Keys: keys, Settings: eventsSettings, Stdout: os.Stdout,
+		Namespace: catalogRepo.CheckNamespace,
+		Authorize: func(ac *middleware.AuthContext, namespace, verb string) (bool, string, error) {
+			if !ac.Scope.Allows(events.API, verb) {
+				return false, fmt.Sprintf("your token's scope does not grant %q on api %q", verb, events.API), nil
+			}
+			if namespace == "" {
+				return rbacRepo.AuthorizeCluster(ac.UserID, ac.Groups, events.API, events.Resource, verb)
+			}
+			return rbacRepo.Authorize(ac.UserID, ac.Groups, namespace, events.API, events.Resource, verb)
+		},
+		Subscribed: func(namespace, api string) *liberrors.Error {
+			return catalogRepo.CheckApiSubscription(namespace, api, appCfg.AppPlatform, appCfg.AppRegion)
+		},
+	})
+	eventsResource := func(resource, verb string) *liberrors.Error {
+		if resource != events.Resource {
+			return liberrors.New(http.StatusNotFound, "events", "api %q serves %q only", events.API, events.Resource)
+		}
+		if !slices.Contains([]string{"get", "list", "create", "patch"}, verb) {
+			return liberrors.New(http.StatusMethodNotAllowed, "events", "events: get, list, create or patch")
+		}
+		return nil
+	}
 	rbac.RegisterAuthorizeRoute(engine, rbacRepo, authenticator.Middleware(), rbac.Prechecks{
 		Namespace: catalogRepo.CheckNamespace,
 		Api: func(namespace, api string) *liberrors.Error {
+			if api == events.API {
+				return nil
+			}
 			return catalogRepo.CheckApiSubscription(namespace, api, appCfg.AppPlatform, appCfg.AppRegion)
 		},
 		Resource: func(api, resource, verb string) *liberrors.Error {
+			if api == events.API {
+				return eventsResource(resource, verb)
+			}
 			return catalogRepo.CheckApiResource(api, resource, verb, appCfg.AppPlatform, appCfg.AppRegion)
 		},
 		ClusterResource: func(api, resource, verb string) *liberrors.Error {
+			if api == events.API {
+				return eventsResource(resource, verb)
+			}
 			return catalogRepo.CheckApiClusterResource(api, resource, verb, appCfg.AppPlatform, appCfg.AppRegion)
 		},
 		Builtin: func(api string) bool {
@@ -367,6 +411,7 @@ func Roots() []string {
 		"/apis/" + catalog.SystemAPI + "/v1",
 		"/apis/" + catalog.CatalogAPI + "/v1",
 		"/apis/" + rbac.AuthorizationAPI + "/v1",
+		"/apis/" + events.API + "/v1",
 	}
 }
 

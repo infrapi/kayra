@@ -217,3 +217,18 @@ func (k Keys) ReconcilerNamespaceLock(name string) string {
 func (k Keys) ReconcilerSubscriptionLock(namespace, apiName string) string {
 	return fmt.Sprintf("%s/locks/reconciler/namespaces/%s/subscriptions/%s", k.Prefix, namespace, apiName)
 }
+
+// Event is an event's key: <prefix>/events/namespaces/<ns>/<id>, or
+// <prefix>/events/cluster/<id> without namespace. Its id is a UUIDv7: the
+// keys sort by the time the events were received.
+func (k Keys) Event(namespace, id string) string {
+	return k.EventsPrefix(namespace) + id
+}
+
+// EventsPrefix is the prefix of namespace's events, or the cluster's.
+func (k Keys) EventsPrefix(namespace string) string {
+	if namespace == "" {
+		return fmt.Sprintf("%s/events/cluster/", k.Prefix)
+	}
+	return fmt.Sprintf("%s/events/namespaces/%s/", k.Prefix, namespace)
+}

@@ -220,6 +220,12 @@ audit:
   backend: file
   file:
     path: "-"
+# What happened to the APIs' resources, reported by the APIs themselves
+# (docs/architecture/events.md): kept this long after last seen.
+events:
+  ttl: 168h
+  rate: {per_second: 50, burst: 200}
+
 # audit:
 #   backend: api
 #   api:

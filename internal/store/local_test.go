@@ -246,3 +246,32 @@ func TestKeysBuilders(t *testing.T) {
 		t.Fatalf("AuthCachePrefix = %q, want %q", got, want)
 	}
 }
+
+func TestLocalStoreRangeAndBatch(t *testing.T) {
+	s, err := NewLocalStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kvs []KV
+	for _, k := range []string{"a", "b", "c", "d"} {
+		kvs = append(kvs, KV{Key: "/p/ev/" + k, Value: []byte(k)})
+	}
+	if err := s.PutBatchTTL(append(kvs, KV{Key: "/p/other/x", Value: []byte("x")}), time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Range("/p/ev/b", "/p/ev/z", 0, false)
+	if err != nil || len(got) != 3 || got[0].Key != "/p/ev/b" || got[2].Key != "/p/ev/d" {
+		t.Fatalf("%v %v", got, err)
+	}
+	got, _ = s.Range("/p/ev/", "/p/ev/~", 2, true)
+	if len(got) != 2 || got[0].Key != "/p/ev/d" || string(got[1].Value) != "c" {
+		t.Fatalf("desc: %v", got)
+	}
+	if err := s.PutBatchTTL([]KV{{Key: "/p/ev/e", Value: []byte("e")}}, time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	if got, _ := s.Range("/p/ev/", "/p/ev/~", 0, false); len(got) != 4 {
+		t.Fatalf("an expired key: %v", got)
+	}
+}

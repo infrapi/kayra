@@ -26,6 +26,7 @@ disabled records active.
 | Create or update an API registration | [API registrations](architecture/api-registrations.md) |
 | Let an API's app act as the API, with its own key | [API identity](architecture/api-identity.md) |
 | Audit who asked for what, to a file, a SIEM (Wazuh) or nowhere | [Audit](architecture/audit.md) |
+| See what happened to a namespace's resources, or report it from an API | [Events](architecture/events.md) |
 | Create or update a tenant | [Namespaces](architecture/namespaces.md) |
 | Subscribe a tenant to an API registration, or trigger reconcile | [Subscriptions & reconciliation](architecture/subscriptions.md) |
 | Run a command (`serve`, `reconciler`, `cache clean`, `token mint`) or use `infrapi-cli` | [CLI](cli.md) |
@@ -39,6 +40,7 @@ own types, storage and HTTP handlers together.
 
 | Package | Owns |
 |---|---|
+| [`internal/events`](packages/events.md) | `events.<domain>`: the APIs' events, in etcd under a TTL, with series and a rate per reporter |
 | [`internal/audit`](packages/audit.md) | Kayra's audit: a record per `/check` decision and per request to its own routes, to a file, an HTTP endpoint or nowhere |
 | [`internal/config`](packages/config.md) | Loading and validating `kayra.yaml` |
 | [`internal/store`](packages/store.md) | etcd / local storage backend |

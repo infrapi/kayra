@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/infrapi/kayra/internal/events"
 	"github.com/infrapi/kayra/internal/rbac"
 	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
@@ -220,7 +221,7 @@ func (r *Repository) validateRules(rules []rbac.Rule, namespaced bool, deploymen
 	if !namespaced {
 		scope = "cluster-scoped"
 	}
-	builtin := map[string]bool{CatalogAPI: true, SystemAPI: true, rbac.AuthorizationAPI: true}
+	builtin := map[string]bool{CatalogAPI: true, SystemAPI: true, rbac.AuthorizationAPI: true, events.API: true}
 
 	for i, rule := range rules {
 		for _, api := range rule.Apis {

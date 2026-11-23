@@ -33,8 +33,9 @@ const sessionsPath = "/oauth2/sessions"
 
 // auditRequests audits each request to Kayra's own routes once served
 // (stage request): its groups under roots, and the sessions. Not their -/
-// routes, nor /check, which audits its own decision.
-func auditRequests(auditor *audit.Auditor, roots []string, check string) gin.HandlerFunc {
+// routes, nor /check, which audits its own decision. Under quiet, the events'
+// root, only denials: an event is not worth an audit record.
+func auditRequests(auditor *audit.Auditor, roots []string, check, quiet string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 		ours := strings.HasPrefix(path, sessionsPath)
@@ -46,7 +47,11 @@ func auditRequests(auditor *audit.Auditor, roots []string, check string) gin.Han
 			return
 		}
 		c.Next()
-		auditor.Record(requestRecord(c))
+		r := requestRecord(c)
+		if strings.HasPrefix(path, quiet) && r.Allowed {
+			return
+		}
+		auditor.Record(r)
 	}
 }
 

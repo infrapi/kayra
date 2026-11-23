@@ -14,7 +14,7 @@ import (
 func TestRegister(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	doc := New("https://kayra.example.com/", "infrapi.io", Groups{
-		System: "system.infrapi.io", Catalog: "catalog.infrapi.io", Authorization: "authorization.infrapi.io",
+		System: "system.infrapi.io", Catalog: "catalog.infrapi.io", Authorization: "authorization.infrapi.io", Events: "events.infrapi.io",
 	}, "/oauth2/userinfo", "/oauth2/discovery/keys", "/apis")
 	engine := gin.New()
 	Register(engine, doc)
@@ -39,6 +39,7 @@ func TestRegister(t *testing.T) {
 			"system":        "/apis/system.infrapi.io/v1",
 			"catalog":       "/apis/catalog.infrapi.io/v1",
 			"authorization": "/apis/authorization.infrapi.io/v1",
+			"events":        "/apis/events.infrapi.io/v1",
 		},
 		Endpoints: Endpoints{
 			Userinfo: "/oauth2/userinfo",

@@ -29,7 +29,11 @@ type EtcdStore struct {
 	// its own, with no manual renewal logic needed here.
 	sessionOnce sync.Once
 	session     *concurrency.Session
-	sessionErr  error
+
+	// leases are PutBatchTTL's, by ttl: reused for LeaseReuse
+	leaseMu    sync.Mutex
+	leases     map[time.Duration]reusedLease
+	sessionErr error
 }
 
 // NewEtcdStore dials cfg's endpoints and returns a ready Store.
@@ -291,4 +295,72 @@ func (s *EtcdStore) Close() error {
 		_ = s.session.Close()
 	}
 	return s.client.Close()
+}
+
+type reusedLease struct {
+	id      clientv3.LeaseID
+	granted time.Time
+}
+
+// Range returns the keys in [from, to), sorted by key.
+func (s *EtcdStore) Range(from, to string, limit int, desc bool) ([]KV, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	order := clientv3.SortAscend
+	if desc {
+		order = clientv3.SortDescend
+	}
+	opts := []clientv3.OpOption{clientv3.WithRange(to), clientv3.WithSort(clientv3.SortByKey, order)}
+	if limit > 0 {
+		opts = append(opts, clientv3.WithLimit(int64(limit)))
+	}
+	resp, err := s.client.Get(ctx, from, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("etcd store: range %s..%s: %w", from, to, err)
+	}
+	out := make([]KV, 0, len(resp.Kvs))
+	for _, kv := range resp.Kvs {
+		out = append(out, KV{Key: string(kv.Key), Value: kv.Value})
+	}
+	return out, nil
+}
+
+// PutBatchTTL writes kvs in one transaction, under a lease of ttl plus
+// LeaseReuse, granted once a minute per ttl.
+func (s *EtcdStore) PutBatchTTL(kvs []KV, ttl time.Duration) error {
+	if len(kvs) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	lease, err := s.batchLease(ctx, ttl)
+	if err != nil {
+		return err
+	}
+	ops := make([]clientv3.Op, 0, len(kvs))
+	for _, kv := range kvs {
+		ops = append(ops, clientv3.OpPut(kv.Key, string(kv.Value), clientv3.WithLease(lease)))
+	}
+	if _, err := s.client.Txn(ctx).Then(ops...).Commit(); err != nil {
+		return fmt.Errorf("etcd store: put %d keys: %w", len(kvs), err)
+	}
+	return nil
+}
+
+func (s *EtcdStore) batchLease(ctx context.Context, ttl time.Duration) (clientv3.LeaseID, error) {
+	s.leaseMu.Lock()
+	defer s.leaseMu.Unlock()
+	if l, ok := s.leases[ttl]; ok && time.Since(l.granted) < LeaseReuse {
+		return l.id, nil
+	}
+	seconds := int64((ttl + LeaseReuse).Seconds())
+	grant, err := s.client.Grant(ctx, seconds)
+	if err != nil {
+		return 0, fmt.Errorf("etcd store: grant lease: %w", err)
+	}
+	if s.leases == nil {
+		s.leases = map[time.Duration]reusedLease{}
+	}
+	s.leases[ttl] = reusedLease{id: grant.ID, granted: time.Now()}
+	return grant.ID, nil
 }

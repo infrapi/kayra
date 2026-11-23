@@ -48,6 +48,15 @@ type Store interface {
 	// carry production event traffic.
 	Watch(ctx context.Context, prefix string) (<-chan Event, error)
 
+	// Range returns the keys in [from, to), sorted, descending when desc,
+	// at most limit of them (every one when limit <= 0).
+	Range(from, to string, limit int, desc bool) ([]KV, error)
+
+	// PutBatchTTL writes kvs at once, each expiring after ttl at the
+	// earliest. etcd shares one lease among the batches written within a
+	// minute (LeaseReuse), so many short-lived keys cost few leases.
+	PutBatchTTL(kvs []KV, ttl time.Duration) error
+
 	// Close releases any resource the backend holds.
 	Close() error
 }
@@ -112,3 +121,14 @@ func sendEvent(ctx context.Context, out chan<- Event, ev Event) bool {
 		return false
 	}
 }
+
+// KV is a key and its value.
+type KV struct {
+	Key   string
+	Value []byte
+}
+
+// LeaseReuse is how long etcd's PutBatchTTL reuses a lease, as Kubernetes'
+// --lease-reuse-duration-seconds: a key may then live up to this much
+// longer than its ttl.
+const LeaseReuse = time.Minute

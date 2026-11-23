@@ -29,9 +29,18 @@ type Store interface {
 	DeletePrefix(prefix string) (int64, error)
 	List(prefix string) (map[string][]byte, error)
 	Watch(ctx context.Context, prefix string) (<-chan Event, error)
+	Range(from, to string, limit int, desc bool) ([]KV, error)
+	PutBatchTTL(kvs []KV, ttl time.Duration) error
 	Close() error
 }
 ```
+
+- **`Range`:** the keys in `[from, to)`, sorted, descending when `desc`, at
+  most `limit`.
+- **`PutBatchTTL`:** a batch in one etcd transaction, under a lease of
+  `ttl + LeaseReuse` that the batches written within `LeaseReuse` (a
+  minute) share, as Kubernetes' `--lease-reuse-duration-seconds`: many
+  short-lived keys, few leases. [Events](../architecture/events.md) use both.
 
 Keys are etcd-style slash-separated paths. `Get` returns `ErrNotFound` when
 a key is absent or has expired; deleting an absent key is not an error.

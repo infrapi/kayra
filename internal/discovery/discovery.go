@@ -27,7 +27,7 @@ type Document struct {
 	// <name>.<Domain>. Other APIs' groups are their own full names.
 	Domain string `json:"domain"`
 	// APIs maps each built-in group's name (system, catalog,
-	// authorization) to its path, /apis/<name>.<Domain>/v1.
+	// authorization, events) to its path, /apis/<name>.<Domain>/v1.
 	APIs map[string]string `json:"apis"`
 	// Endpoints are the paths clients call.
 	Endpoints Endpoints `json:"endpoints"`
@@ -49,7 +49,7 @@ type Endpoints struct {
 // Groups are the names and full names of Kayra's built-in API groups, as
 // rbac and catalog define them once the domain is set.
 type Groups struct {
-	System, Catalog, Authorization string
+	System, Catalog, Authorization, Events string
 }
 
 // New builds the document of a Kayra on domain, its built-in groups named
@@ -63,6 +63,7 @@ func New(issuer, domain string, groups Groups, userinfo, jwks, apis string) Docu
 			"system":        root(groups.System),
 			"catalog":       root(groups.Catalog),
 			"authorization": root(groups.Authorization),
+			"events":        root(groups.Events),
 		},
 		Endpoints: Endpoints{
 			Userinfo: userinfo,
