@@ -148,6 +148,10 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 			httpapi.Fail(c, err)
 			return
 		}
+		if err := validateGroupMembers(g, false, "rbac.CreateNamespaceGroup"); err != nil {
+			httpapi.Fail(c, err)
+			return
+		}
 
 		if err := repo.PutNamespaceGroup(namespace, &g); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateNamespaceGroup", ""))
@@ -189,6 +193,10 @@ func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 		}
 		g.Name = name
 		if err := resolveNamespace(&g.Metadata, namespace); err != nil {
+			httpapi.Fail(c, err)
+			return
+		}
+		if err := validateGroupMembers(g, false, "rbac.UpdateNamespaceGroup"); err != nil {
 			httpapi.Fail(c, err)
 			return
 		}

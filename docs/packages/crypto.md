@@ -37,12 +37,20 @@ hash := crypto.HashToken(token)             // sha256 hex — the etcd lookup ke
 
 ```go
 type PatRecord struct {
+	ID                 string    // public: lists and revokes it
+	Name               string
 	UserID             string
 	Authorization      string
 	Provider           string
 	CreatedAt          int64
+	ExpiresAt          int64     // every token expires
+	Scope              *PatScope // Apis, Verbs: nil allows what its user may
 	SnapshotGroups     []string          // only set for a claims-backed Authorization
 	SnapshotAttributes map[string]string // only set for a claims-backed Authorization
+}
+
+type PatIndexEntry struct { // the user's index: ID, Name, Hash, dates, Scope, LastUsedAt; no secret
+	...
 }
 
 data, err := crypto.EncryptRecord(pub, record)   // hybrid RSA-OAEP + AES-256-GCM

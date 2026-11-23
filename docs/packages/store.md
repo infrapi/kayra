@@ -141,7 +141,9 @@ layout lives in one place:
 | `NamespaceRoleConfig(ns, name)` | `{prefix}/namespaces/{ns}/roles/{name}/config` |
 | `NamespaceRoleBindingConfig(ns, name)` | `{prefix}/namespaces/{ns}/rolebindings/{name}/config` |
 | `NamespaceSubscriptionConfig(ns, api)` | `{prefix}/namespaces/{ns}/subscriptions/{api}/config` |
+| `NamespaceServiceAccountConfig(ns, name)` | `{prefix}/namespaces/{ns}/serviceaccounts/{name}/config` |
 | `PatToken(hash)` | `{prefix}/tokens/pat/{hash}` |
+| `PatIndex(user, id)` | `{prefix}/users/{user}/tokens/{id}`: a token by its public id, no secret |
 | `PatKeypair()` | `{prefix}/keys/pat` |
 
 Every `*Prefix` counterpart (`ClusterGroupPrefix`, `NamespacesPrefix`, ...)

@@ -20,6 +20,8 @@ disabled records active.
 | Run Kayra for the first time | [Getting started](getting-started.md) |
 | Understand how the pieces fit together | [Architecture overview](architecture/overview.md) |
 | See who can authenticate and who can manage what | [RBAC & auth](architecture/rbac-and-auth.md) |
+| Give a CI or a script an identity of its own in a namespace | [Service accounts](architecture/service-accounts.md) |
+| Create, scope, list or revoke a personal access token | [Personal access tokens](architecture/tokens.md) |
 | Create or update an API registration | [API registrations](architecture/api-registrations.md) |
 | Create or update a tenant | [Namespaces](architecture/namespaces.md) |
 | Subscribe a tenant to an API registration, or trigger reconcile | [Subscriptions & reconciliation](architecture/subscriptions.md) |
@@ -41,10 +43,11 @@ own types, storage and HTTP handlers together.
 | [`internal/discovery`](packages/discovery.md) | `/.well-known/kayra.json`: the API domain, built-in groups and endpoints clients discover |
 | [`internal/authn`](packages/authn.md) | Verifying a bearer token, resolving its user id |
 | [`internal/authz`](packages/authz.md) | Resolving a user id to groups/attributes (LDAP or fixture) |
+| [`internal/identity`](packages/identity.md) | Kayra's own identities: the reserved `system:` prefix, service account subjects |
 | [`internal/middleware`](packages/middleware.md) | The gin auth middleware |
-| [`internal/rbac`](packages/rbac.md) | `Group`/`Role`/`RoleBinding`, cluster + namespace scoped |
+| [`internal/rbac`](packages/rbac.md) | `Group`/`Role`/`RoleBinding`, cluster + namespace scoped, and a namespace's `ServiceAccount`s |
 | `internal/catalog` | `ApiRegistration`/`Namespace`/`Subscription` + the reconciler (see [API registrations](architecture/api-registrations.md), [Namespaces](architecture/namespaces.md), [Subscriptions & reconciliation](architecture/subscriptions.md)) |
-| [`internal/tokenapi`](packages/tokenapi.md) | Personal access token issuance |
+| [`internal/tokenapi`](packages/tokenapi.md) | Personal access tokens: created, listed, revoked |
 | `internal/oauth2server` | The [authorization server](architecture/oauth2-server.md): tokens of Kayra's own, renewed and revoked |
 | [`internal/httpapi`](packages/httpapi.md) | RFC 9457 error response helper |
 | [`internal/apiserver`](packages/apiserver.md) | Wires every package above onto one gin engine |

@@ -44,6 +44,28 @@ type Group struct {
 	Metadata    Metadata `json:"metadata" yaml:"metadata"`
 	Groups      []string `json:"groups" yaml:"groups"`
 	Users       []string `json:"users" yaml:"users"`
+	// ServiceAccounts are service accounts of the group's own namespace,
+	// by name: a namespace group only, never a cluster one, and never
+	// another namespace's (no service account acts outside its own).
+	ServiceAccounts []string `json:"serviceaccounts,omitempty" yaml:"serviceaccounts,omitempty"`
+
+	// Timestamps (created_at/updated_at) are server-owned — set by
+	// store.PutObject on every write, never read from a request.
+	store.Timestamps `yaml:",inline"`
+}
+
+// ServiceAccount is a namespace's machine identity:
+// system:serviceaccount:<namespace>:<name>. It holds no secret: its
+// tokens are requested (its token action) and short-lived, and stop
+// working once it is deleted, its UID theirs.
+type ServiceAccount struct {
+	Name        string   `json:"name" yaml:"name"`
+	Description string   `json:"description" yaml:"description"`
+	Metadata    Metadata `json:"metadata" yaml:"metadata"`
+	// UID is set by Kayra at creation and never changes: a token carries
+	// it, so one of a deleted service account is refused even once
+	// another is created under the same name.
+	UID string `json:"uid" yaml:"uid"`
 
 	// Timestamps (created_at/updated_at) are server-owned — set by
 	// store.PutObject on every write, never read from a request.

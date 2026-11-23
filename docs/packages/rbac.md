@@ -29,6 +29,13 @@ type Group struct {
 	Metadata          Metadata
 	Groups            []string // resolved group names, e.g. "sandbox-core-sysadmin" — matched against the caller's resolved groups
 	Users             []string // resolved user ids, e.g. "ahdemir" — matched against the caller's own resolved user id
+	ServiceAccounts   []string // a namespace group only: its namespace's service accounts, by name
+}
+
+type ServiceAccount struct {
+	Name, Description string
+	Metadata          Metadata
+	UID               string // set at creation, never changed: its tokens carry it
 }
 
 type Rule struct {
@@ -84,6 +91,7 @@ cluster := engine.Group("", authenticator.Middleware(), rbac.RequireCluster(repo
 rbac.RegisterClusterRoutes(cluster, repo, pass, validateClusterRules)
 rbac.RegisterNamespaceRoutes(engine, repo, authenticator.Middleware(), validateRules) // validateRules may be nil
 rbac.RegisterAuthorizeRoute(engine, repo, authenticator.Middleware(), rbac.Prechecks{Namespace: ..., Api: ..., Resource: ...})
+rbac.RegisterServiceAccountRoutes(engine, repo, authenticator.Middleware(), rbac.ServiceAccountTokens{Issuer: as, DefaultTTL: time.Hour, MaxTTL: 24 * time.Hour})
 ```
 
 - **Cluster** — full CRUD at
@@ -113,6 +121,24 @@ rbac.RegisterAuthorizeRoute(engine, repo, authenticator.Middleware(), rbac.Prech
   ever on behalf of the caller's own already-resolved identity, exactly
   like Kubernetes' `SelfSubjectAccessReview` needs no RBAC grant of its
   own — see [Authorize](#authorize).
+
+- **Service accounts** — CRUD at
+  `/apis/authorization.infrapi.io/v1/namespaces/:namespace/serviceaccounts`,
+  behind the same `RequireClusterRBAC` as the namespace's other objects, and
+  the token action `POST .../serviceaccounts/:name/token`, a permission of
+  its own (`serviceaccounts/token`, `create`). Its `TokenIssuer` is the
+  authorization server; without one, the action answers `501`. See
+  [Service accounts](../architecture/service-accounts.md).
+  `repo.ServiceAccountContext(subject, uid)` resolves a token of one, the
+  authenticator's `Machine`. A service account is counted only by a group of
+  its own namespace: by name in `ServiceAccounts`, or through
+  `system:serviceaccounts:<ns>` in `Groups`, never by a wildcard.
+  `clusterGroupsMatching`, `ClusterRules`, `CanManageNamespaceRBAC` and
+  `scopedNamespaces` never count one.
+
+A group's members are checked on create and update: no reserved
+(`system:`) user, no reserved group but a namespace group's own
+`system:serviceaccounts:<ns>`, and no service account in a cluster group.
 
 A `RoleBinding`'s `Role` and every `Group` it names must share its exact
 `Metadata` (checked on create/update) — region, platform and namespace all

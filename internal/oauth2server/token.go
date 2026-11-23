@@ -3,6 +3,7 @@ package oauth2server
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -223,3 +224,41 @@ func (s *Server) revokeFamily(id string) error {
 	fam.Revoked = true
 	return s.put("families", id, fam, fam.Created.Add(s.ttl.Refresh).Sub(s.now()))
 }
+
+// IssueMachineToken signs an access token of one of Kayra's own
+// identities, subject (a service account): no login behind it, no
+// refresh token, its kind and uid claims the ones the authenticator
+// resolves it by (middleware.Authenticator.Machine). It is revoked by
+// its jti, at the revocation endpoint with its subject as client_id.
+func (s *Server) IssueMachineToken(subject, uid, kind string, audience []string, ttl time.Duration) (string, time.Time, error) {
+	method := jwt.GetSigningMethod(s.signer.Algorithm)
+	if method == nil {
+		return "", time.Time{}, fmt.Errorf("oauth2server: algorithm %q", s.signer.Algorithm)
+	}
+	now := s.now()
+	exp := now.Add(ttl)
+	t := jwt.NewWithClaims(method, jwt.MapClaims{
+		"iss":       s.issuer,
+		"sub":       subject,
+		"aud":       audience,
+		"iat":       now.Unix(),
+		"nbf":       now.Unix(),
+		"exp":       exp.Unix(),
+		"jti":       random(16),
+		"client_id": subject,
+		"kind":      kind,
+		"uid":       uid,
+	})
+	t.Header["kid"] = s.signer.Kid
+	t.Header["typ"] = "at+jwt" // RFC 9068
+	signed, err := t.SignedString(s.signer.Private)
+	return signed, time.Unix(exp.Unix(), 0).UTC(), err
+}
+
+// Resources are the resources tokens are issued for, Kayra's own first
+// when the configuration names none.
+func (s *Server) Resources() []string { return slices.Clone(s.cfg.Resources) }
+
+// AllowedResource tells whether a token may be issued for resource: one
+// of the resources, or a URL under one.
+func (s *Server) AllowedResource(resource string) bool { return s.allowedResource(resource) }

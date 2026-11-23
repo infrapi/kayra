@@ -9,6 +9,7 @@ import (
 	"github.com/infrapi/lib/pkg/auth"
 
 	"github.com/infrapi/kayra/internal/httpapi"
+	"github.com/infrapi/kayra/internal/identity"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
@@ -35,6 +36,9 @@ func (r *Repository) IsSysadmin(callerGroups []string) bool {
 // the built-in sysadmin binding's, and the cluster roles of every global
 // binding of a global cluster group the caller is a member of.
 func (r *Repository) ClusterRules(userID string, callerGroups []string) ([]Rule, error) {
+	if identity.IsReserved(userID) {
+		return nil, nil // a service account holds nothing cluster-scoped
+	}
 	if r.IsSysadmin(callerGroups) {
 		return []Rule{all}, nil
 	}

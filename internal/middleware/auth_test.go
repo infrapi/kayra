@@ -192,6 +192,7 @@ func TestAuthenticatorPATUsesSnapshotForClaimsBackend(t *testing.T) {
 		Authorization:      "okta",
 		Provider:           "okta",
 		CreatedAt:          time.Now().Unix(),
+		ExpiresAt:          time.Now().Add(time.Hour).Unix(),
 		SnapshotGroups:     []string{"sandbox-core-sysadmin"},
 		SnapshotAttributes: map[string]string{"email": "jdoe@example.com"},
 	}

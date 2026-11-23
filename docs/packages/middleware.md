@@ -24,6 +24,11 @@ type AuthContext struct {
 	Authorization string
 	Attributes    map[string]string
 	Groups        []string
+	Audience      []string // a token of Kayra's authorization server: its aud
+	ClientID      string   // and its client_id
+	Kind          string   // identity.KindUser, or identity.KindServiceAccount
+	TokenID       string   // the personal access token's public id, if it is one
+	Scope         *crypto.PatScope // that token's scope, nil when unscoped
 }
 
 ac, ok := middleware.GetAuth(c) // read what a prior gate resolved
@@ -74,6 +79,24 @@ request time, never a snapshot taken when the token was minted. For a
 `claims`-backed one, there is no directory left to re-query by bare user
 id, so `resolvePAT` reads `SnapshotGroups`/`SnapshotAttributes` instead
 — whatever [tokenapi](tokenapi.md) captured when the PAT was minted.
+
+### Kayra's own identities
+
+A user id under the reserved `system:` prefix
+([identity](identity.md)) is refused, whatever provider resolved it, and
+the reserved groups are dropped from a human's groups. A JWT carrying a
+`kind` claim is one of Kayra's own identities: `Machine` resolves it (the
+router checks that the authorization server's signer signed it, then reads
+the service account from the store), and it is refused when `Machine` is
+nil.
+
+### Expiry and scope
+
+A PAT whose `ExpiresAt` has passed is refused. `last_used_at` in its index
+entry is updated at most once an hour. A scoped PAT sends only a request its
+scope grants: an `/apis/` path's API and verb, read as `/check` reads them,
+the check itself (which applies the scope to the request it decides), GET
+`/apis` and `/oauth2/userinfo`. Anything else gets a `403`.
 
 ## The sysadmin group
 

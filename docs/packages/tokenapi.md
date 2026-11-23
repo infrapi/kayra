@@ -1,6 +1,6 @@
 ---
 title: tokenapi
-description: Issues personal access tokens, which are opaque rather than JWTs.
+description: "A user's personal access tokens - opaque, expiring, optionally scoped - created, listed and revoked by their public id."
 weight: 140
 ---
 
@@ -10,38 +10,36 @@ weight: 140
 import "github.com/infrapi/kayra/internal/tokenapi"
 ```
 
-Issues personal access tokens: opaque, not JWTs, so their content is never
-visible from the etcd record alone — the spec's "Tokens" section.
+Serves a user's [personal access tokens](../architecture/tokens.md) at
+`/apis/authorization.infrapi.io/v1/tokens`. The tokens are opaque, not JWTs,
+so the store alone never reveals what they are.
 
 ```go
-tokenapi.RegisterRoutes(engine, authenticator.Middleware(), s, keys, &patKey.PublicKey, cfg)
+tokenapi.RegisterRoutes(engine, authenticator.Middleware(), tokenapi.Options{
+	Root: "/apis/" + rbac.AuthorizationAPI + "/v1", Store: s, Keys: keys, Pub: &patKey.PublicKey,
+	Config: cfg, TTLs: patTTLs, CanManageOthers: canManage,
+})
 ```
 
-`POST /api/v1/tokens` behind `gate` (normally
-[`middleware.Authenticator`](middleware.md#authenticator)): the caller must
-already be authenticated by any configured provider. Body `{"type": "pat"}`
-— `type` defaults to `"pat"` and nothing else is supported today, per the
-spec's "for now we only support personal => pat".
+| Route | |
+|---|---|
+| `POST …/tokens` | `{"name", "expires_in", "scope"}` → `201` with the token, shown once. |
+| `GET …/tokens` | The caller's tokens, never a secret. |
+| `DELETE …/tokens/{id}` | Revokes it: its record and its index entry are deleted. |
 
-```go
-{"type": "pat", "token": "pat_<base64url>"}
-```
-
-The token is [`crypto.GenerateToken`](crypto.md#pat-records)'s opaque
-value; the record behind it
-([`crypto.PatRecord`](crypto.md#pat-records): `UserID`, `Authorization`,
-`Provider`, `CreatedAt`) is encrypted under `pub` and stored at
-`keys.PatToken(crypto.HashToken(token))` — looked up by hash, never by the
-token value itself. The PAT always inherits every role of every group its
-holder is currently a member of, resolved live at use time by
-[`middleware.Authenticator`](middleware.md#authenticator) — never
-snapshotted into the record.
-
-The one exception: when the caller's own `ac.Authorization` names a
-`claims`-backed `authorizations.<name>` entry (see
-[config](config.md#claims-no-directory-at-all)), `cfg` is consulted to
-recognize that case, and the record also carries
-`SnapshotGroups`/`SnapshotAttributes` — a copy of this same request's
-already-resolved `ac.Groups`/`ac.Attributes` — since that backend has
-no directory left to re-query later by bare user id alone. Any other
-backend leaves both nil and keeps the "always live" behavior above.
+- **Who may create one:** only a user logged in. A PAT cannot create one
+  (`403 a personal access token creates no other`), and neither can one of
+  Kayra's own identities (`system:…`).
+- **Another user's tokens:** `?user=` on the list or the delete reads or
+  revokes another user's tokens when `CanManageOthers(ac, verb)` allows it.
+  `apiserver.Build` passes the cluster RBAC's `tokens` `list` or `delete`.
+- **The record:** [`crypto.PatRecord`](crypto.md#pat-records) is encrypted
+  under `Pub` at `keys.PatToken(crypto.HashToken(token))`. Its index entry
+  ([`crypto.PatIndexEntry`](crypto.md#pat-records)) lives at
+  `keys.PatIndex(user, id)`. Both are written with the token's TTL, so an
+  expired token leaves nothing behind.
+- **Roles:** the token always inherits its user's live roles, resolved at use
+  time by [`middleware.Authenticator`](middleware.md#authenticator). The one
+  exception is a `claims`-backed authorization backend (see
+  [config](config.md#claims-no-directory-at-all)), where the record keeps a
+  snapshot of the groups and attributes from the creation.

@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -24,216 +26,257 @@ type fakeAuthzBackend struct {
 
 func (f *fakeAuthzBackend) ResolveUser(userID string) (authz.UserInfo, error) { return f.info, nil }
 
-func TestCreateAndUsePAT(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+const tokens = "/apis/authorization.infrapi.io/v1/tokens"
 
+// rig is the token routes behind a gate that is the authenticator for a
+// bearer token, and the login (as) otherwise.
+type rig struct {
+	t      *testing.T
+	engine *gin.Engine
+	store  store.Store
+	keys   store.Keys
+	as     *middleware.AuthContext // the caller without a bearer token
+	opts   *Options
+}
+
+func newRig(t *testing.T, cfg *gconfig.Config, backends map[string]*authz.Cached, mutate ...func(*Options)) *rig {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
 	s, err := store.NewLocalStore(t.TempDir())
 	if err != nil {
-		t.Fatalf("NewLocalStore: %v", err)
+		t.Fatal(err)
 	}
-	defer func() { _ = s.Close() }()
+	t.Cleanup(func() { _ = s.Close() })
 	keys := store.NewKeys("")
-
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		t.Fatalf("GenerateKey: %v", err)
+		t.Fatal(err)
 	}
-
-	backend := &fakeAuthzBackend{info: authz.UserInfo{
-		ID:         "jdoe",
-		Attributes: map[string]string{"email": "jdoe@example.com"},
-		Groups:     []string{"tenant-group-apps"},
-	}}
-	cached := authz.NewCached(backend, s, keys, "idm")
-	cfg := &gconfig.Config{Authorizations: map[string]gconfig.AuthorizationBackend{"idm": {}}}
-
-	auth := &middleware.Authenticator{
-		Config:   cfg,
-		Backends: map[string]*authz.Cached{"idm": cached},
-		Store:    s,
-		Keys:     keys,
-		PatKey:   priv,
+	if backends == nil {
+		backends = map[string]*authz.Cached{"idm": authz.NewCached(&fakeAuthzBackend{info: authz.UserInfo{
+			ID: "jdoe", Attributes: map[string]string{"email": "jdoe@example.com"}, Groups: []string{"tenant-group-apps"},
+		}}, s, keys, "idm")}
 	}
-
-	engine := gin.New()
-	// A fake "already authenticated" gate stands in for a real bearer-JWT
-	// login, since this test only exercises PAT issuance and PAT reuse.
-	fakeLoginGate := func(c *gin.Context) {
-		c.Set("kayra.auth", &middleware.AuthContext{UserID: "jdoe", Authorization: "idm", Provider: "okta"})
+	auth := &middleware.Authenticator{Config: cfg, Backends: backends, Store: s, Keys: keys, PatKey: priv}
+	r := &rig{t: t, store: s, keys: keys, as: &middleware.AuthContext{UserID: "jdoe", Authorization: "idm", Provider: "okta", Kind: "user"}}
+	gate := func(c *gin.Context) {
+		if c.GetHeader("Authorization") != "" {
+			auth.Middleware()(c)
+			return
+		}
+		middleware.SetAuth(c, r.as)
 	}
-	RegisterRoutes(engine, fakeLoginGate, s, keys, &priv.PublicKey, cfg)
-
-	engine.GET("/whoami", auth.Middleware(), func(c *gin.Context) {
+	opts := Options{Root: "/apis/authorization.infrapi.io/v1", Store: s, Keys: keys, Pub: &priv.PublicKey, Config: cfg,
+		TTLs: gconfig.PatDurations{Default: 720 * time.Hour, Max: 2160 * time.Hour}}
+	for _, m := range mutate {
+		m(&opts)
+	}
+	r.opts = &opts
+	r.engine = gin.New()
+	RegisterRoutes(r.engine, gate, opts)
+	whoami := func(c *gin.Context) {
 		ac, _ := middleware.GetAuth(c)
-		c.JSON(http.StatusOK, gin.H{"user_id": ac.UserID, "groups": ac.Groups})
-	})
+		c.JSON(http.StatusOK, gin.H{"user_id": ac.UserID, "groups": ac.Groups, "token_id": ac.TokenID})
+	}
+	r.engine.GET("/whoami", auth.Middleware(), whoami)
+	r.engine.Any("/apis/:api/:version/*rest", auth.Middleware(), whoami)
+	r.engine.GET("/oauth2/sessions", auth.Middleware(), whoami)
+	r.engine.GET("/oauth2/userinfo", auth.Middleware(), whoami)
+	r.engine.Any("/apis", auth.Middleware(), whoami)
+	return r
+}
 
-	// Issue the PAT.
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tokens", bytes.NewReader([]byte(`{}`)))
+func (r *rig) do(method, path, token, body string) (int, string) {
+	r.t.Helper()
+	req := httptest.NewRequest(method, path, bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create token: status %d, body %s", w.Code, w.Body.String())
+	r.engine.ServeHTTP(w, req)
+	return w.Code, w.Body.String()
+}
+
+func (r *rig) create(body string) created {
+	r.t.Helper()
+	code, out := r.do(http.MethodPost, tokens, "", body)
+	if code != http.StatusCreated {
+		r.t.Fatalf("create %s: %d %s", body, code, out)
+	}
+	var c created
+	_ = json.Unmarshal([]byte(out), &c)
+	return c
+}
+
+func idmConfig() *gconfig.Config {
+	return &gconfig.Config{Authorizations: map[string]gconfig.AuthorizationBackend{"idm": {}}}
+}
+
+func TestCreateListUseRevoke(t *testing.T) {
+	r := newRig(t, idmConfig(), nil)
+
+	c := r.create(`{"name": "laptop"}`)
+	if !gcrypto.IsToken(c.Secret) || c.ID == "" || c.Name != "laptop" || c.User != "jdoe" {
+		t.Fatalf("created = %+v", c)
+	}
+	if d := c.ExpiresAt.Sub(c.CreatedAt); d != 720*time.Hour {
+		t.Fatalf("lifetime %s, want the default 720h", d)
 	}
 
-	var created struct {
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if !gcrypto.IsToken(created.Token) {
-		t.Fatalf("created token %q does not look like a PAT", created.Token)
+	// used: the user, their groups live, the token's id; its last use noted
+	code, out := r.do(http.MethodGet, "/whoami", c.Secret, "")
+	if code != http.StatusOK || !strings.Contains(out, `"user_id":"jdoe"`) || !strings.Contains(out, `"tenant-group-apps"`) || !strings.Contains(out, c.ID) {
+		t.Fatalf("whoami: %d %s", code, out)
 	}
 
-	// Use the PAT against an unrelated authenticated route.
-	req = httptest.NewRequest(http.MethodGet, "/whoami", nil)
-	req.Header.Set("Authorization", "Bearer "+created.Token)
-	w = httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("whoami with PAT: status %d, body %s", w.Code, w.Body.String())
+	// listed, its secret never
+	code, out = r.do(http.MethodGet, tokens, "", "")
+	if code != http.StatusOK || !strings.Contains(out, c.ID) || strings.Contains(out, c.Secret) || strings.Contains(out, "hash") || !strings.Contains(out, "last_used_at") {
+		t.Fatalf("list: %d %s", code, out)
 	}
 
-	var who struct {
-		UserID string   `json:"user_id"`
-		Groups []string `json:"groups"`
+	// a token creates no other, but lists its user's
+	if code, out := r.do(http.MethodPost, tokens, c.Secret, `{"name": "more"}`); code != http.StatusForbidden || !strings.Contains(out, "creates no other") {
+		t.Fatalf("a PAT creating a PAT: %d %s", code, out)
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &who); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
+	if code, _ := r.do(http.MethodGet, tokens, c.Secret, ""); code != http.StatusOK {
+		t.Fatalf("a PAT listing: %d", code)
 	}
-	if who.UserID != "jdoe" {
-		t.Fatalf("UserID = %q, want jdoe", who.UserID)
+
+	// revoked by its id
+	if code, _ := r.do(http.MethodDelete, tokens+"/nope", "", ""); code != http.StatusNotFound {
+		t.Fatalf("revoke a missing one: %d", code)
 	}
-	if len(who.Groups) != 1 || who.Groups[0] != "tenant-group-apps" {
-		t.Fatalf("Groups = %v, want [tenant-group-apps] (resolved live, not snapshotted)", who.Groups)
+	if code, _ := r.do(http.MethodDelete, tokens+"/"+c.ID, "", ""); code != http.StatusNoContent {
+		t.Fatalf("revoke: %d", code)
+	}
+	if code, _ := r.do(http.MethodGet, "/whoami", c.Secret, ""); code != http.StatusUnauthorized {
+		t.Fatalf("revoked, still used: %d", code)
+	}
+	if _, out := r.do(http.MethodGet, tokens, "", ""); out != "[]" {
+		t.Fatalf("list after revocation: %s", out)
 	}
 }
 
-// TestCreateAndUsePATSnapshotsGroupsForClaimsBackend confirms a PAT
-// minted while authenticated via a claims-backed authorizations.<name>
-// entry (Okta, say — no LDAP, no a.Backends entry at all) captures the
-// caller's own already-resolved Groups/Attributes into the record at
-// creation time, and that resolving the PAT later reads that snapshot
-// back rather than attempting a live lookup that has nowhere to go.
-func TestCreateAndUsePATSnapshotsGroupsForClaimsBackend(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	s, err := store.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewLocalStore: %v", err)
+func TestCreateRefusals(t *testing.T) {
+	r := newRig(t, idmConfig(), nil)
+	for body, want := range map[string]string{
+		`{}`:                                   "name",
+		`{"name": "  "}`:                       "name",
+		`{"name": "x", "expires_in": "2161h"}`: "more than the 2160h0m0s",
+		`{"name": "x", "expires_in": "later"}`: "a duration",
+		`{"name": "x", "scope": {"apis": []}}`: "scope",
+		`{"name": "x", "scope": {"apis": ["compute.infrapi.io"], "verbs": [""]}}`: "scope",
+		`not json`: "invalid",
+	} {
+		if code, out := r.do(http.MethodPost, tokens, "", body); code != http.StatusBadRequest || !strings.Contains(out, want) {
+			t.Errorf("%s: %d %s, want 400 %q", body, code, out, want)
+		}
 	}
-	defer func() { _ = s.Close() }()
-	keys := store.NewKeys("")
-
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("GenerateKey: %v", err)
+	r.as = &middleware.AuthContext{UserID: "system:serviceaccount:core:deployer"}
+	if code, _ := r.do(http.MethodPost, tokens, "", `{"name": "x"}`); code != http.StatusForbidden {
+		t.Fatalf("a service account's PAT: %d", code)
 	}
+}
 
-	cfg := &gconfig.Config{
-		Authorizations: map[string]gconfig.AuthorizationBackend{
-			"okta": {Claims: &gconfig.ClaimsAuthzConfig{From: "token", GroupsField: "MemberOf"}},
-		},
+func TestExpired(t *testing.T) {
+	r := newRig(t, idmConfig(), nil, func(o *Options) { o.Now = func() time.Time { return time.Now().Add(-2 * time.Hour) } })
+	c := r.create(`{"name": "old", "expires_in": "1h"}`)
+	if code, out := r.do(http.MethodGet, "/whoami", c.Secret, ""); code != http.StatusUnauthorized || !strings.Contains(out, "expired") {
+		t.Fatalf("expired: %d %s", code, out)
 	}
+}
 
-	// Deliberately no "okta" entry: a claims-backed authorizations.<name>
-	// never gets one (see apiserver.Build), so any attempt to use it
-	// would fail outright — this test is only meaningful if resolving the
-	// PAT below truly never reaches a.Backends.
-	auth := &middleware.Authenticator{
-		Config:   cfg,
-		Backends: map[string]*authz.Cached{},
-		Store:    s,
-		Keys:     keys,
-		PatKey:   priv,
+// TestScope: a scoped token sends only what its scope grants, read from
+// the request as /check reads it.
+func TestScope(t *testing.T) {
+	r := newRig(t, idmConfig(), nil)
+	c := r.create(`{"name": "ro", "scope": {"apis": ["compute.infrapi.io"], "verbs": ["get", "list"]}}`)
+	for _, tt := range []struct {
+		method, path string
+		code         int
+	}{
+		{http.MethodGet, "/apis/compute.infrapi.io/v1/namespaces/core/vms", http.StatusOK},
+		{http.MethodGet, "/apis/compute.infrapi.io/v1/namespaces/core/vms/web-1", http.StatusOK},
+		{http.MethodGet, "/apis/compute.infrapi.io/v1/flavors", http.StatusOK},
+		{http.MethodPost, "/apis/compute.infrapi.io/v1/namespaces/core/vms", http.StatusForbidden},
+		{http.MethodDelete, "/apis/compute.infrapi.io/v1/namespaces/core/vms/web-1", http.StatusForbidden},
+		{http.MethodGet, "/apis/vault.infrapi.io/v1/namespaces/core/secrets", http.StatusForbidden},
+		{http.MethodGet, tokens, http.StatusForbidden}, // another api: authorization's
+		{http.MethodPost, "/apis/authorization.infrapi.io/v1/check", http.StatusOK},
+		{http.MethodGet, "/oauth2/userinfo", http.StatusOK},
+		{http.MethodGet, "/apis", http.StatusOK},
+		{http.MethodPost, "/apis", http.StatusForbidden},
+		{http.MethodGet, "/oauth2/sessions", http.StatusForbidden},
+		{http.MethodGet, "/whoami", http.StatusForbidden},
+		{http.MethodGet, "/apis/compute.infrapi.io/v1/", http.StatusForbidden},
+	} {
+		if code, out := r.do(tt.method, tt.path, c.Secret, ""); code != tt.code {
+			t.Errorf("%s %s: %d %s, want %d", tt.method, tt.path, code, out, tt.code)
+		}
 	}
-
-	engine := gin.New()
-	fakeLoginGate := func(c *gin.Context) {
-		c.Set("kayra.auth", &middleware.AuthContext{
-			UserID: "jdoe", Authorization: "okta", Provider: "okta",
-			Groups:     []string{"sandbox-core-sysadmin"},
-			Attributes: map[string]string{"email": "jdoe@example.com"},
-		})
+	// the unscoped one: everything its user may
+	all := r.create(`{"name": "all"}`)
+	if code, _ := r.do(http.MethodDelete, "/apis/compute.infrapi.io/v1/namespaces/core/vms/web-1", all.Secret, ""); code != http.StatusOK {
+		t.Fatalf("unscoped: %d", code)
 	}
-	RegisterRoutes(engine, fakeLoginGate, s, keys, &priv.PublicKey, cfg)
+}
 
-	engine.GET("/whoami", auth.Middleware(), func(c *gin.Context) {
-		ac, _ := middleware.GetAuth(c)
-		c.JSON(http.StatusOK, gin.H{"user_id": ac.UserID, "groups": ac.Groups})
+func TestOtherUsersTokens(t *testing.T) {
+	var verbs []string
+	r := newRig(t, idmConfig(), nil, func(o *Options) {
+		o.CanManageOthers = func(ac *middleware.AuthContext, verb string) bool {
+			verbs = append(verbs, verb)
+			return ac.UserID == "root"
+		}
 	})
+	c := r.create(`{"name": "laptop"}`)
+	r.as = &middleware.AuthContext{UserID: "mallory", Kind: "user"}
+	if code, _ := r.do(http.MethodGet, tokens+"?user=jdoe", "", ""); code != http.StatusForbidden {
+		t.Fatalf("another's list: %d", code)
+	}
+	if code, _ := r.do(http.MethodDelete, tokens+"/"+c.ID+"?user=jdoe", "", ""); code != http.StatusForbidden {
+		t.Fatalf("another's revoke: %d", code)
+	}
+	if code, out := r.do(http.MethodGet, tokens, "", ""); code != http.StatusOK || out != "[]" {
+		t.Fatalf("their own: %d %s", code, out)
+	}
+	r.as = &middleware.AuthContext{UserID: "root", Kind: "user"}
+	if code, out := r.do(http.MethodGet, tokens+"?user=jdoe", "", ""); code != http.StatusOK || !strings.Contains(out, c.ID) {
+		t.Fatalf("root lists jdoe's: %d %s", code, out)
+	}
+	if code, _ := r.do(http.MethodDelete, tokens+"/"+c.ID+"?user=jdoe", "", ""); code != http.StatusNoContent {
+		t.Fatalf("root revokes jdoe's: %d", code)
+	}
+	if strings.Join(verbs, ",") != "list,delete,list,delete" {
+		t.Fatalf("verbs asked = %v", verbs)
+	}
+}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/tokens", bytes.NewReader([]byte(`{}`)))
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create token: status %d, body %s", w.Code, w.Body.String())
-	}
-
-	var created struct {
-		Token string `json:"token"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-
-	req = httptest.NewRequest(http.MethodGet, "/whoami", nil)
-	req.Header.Set("Authorization", "Bearer "+created.Token)
-	w = httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("whoami with PAT: status %d, body %s", w.Code, w.Body.String())
-	}
-
-	var who struct {
-		UserID string   `json:"user_id"`
-		Groups []string `json:"groups"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &who); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if len(who.Groups) != 1 || who.Groups[0] != "sandbox-core-sysadmin" {
-		t.Fatalf("Groups = %v, want the snapshot [sandbox-core-sysadmin] (no live backend exists to re-resolve from)", who.Groups)
+// TestSnapshotsGroupsForClaimsBackend: a token minted under a
+// claims-backed authorization backend keeps the groups resolved at its
+// creation, there being no directory to resolve them from later.
+func TestSnapshotsGroupsForClaimsBackend(t *testing.T) {
+	cfg := &gconfig.Config{Authorizations: map[string]gconfig.AuthorizationBackend{
+		"okta": {Claims: &gconfig.ClaimsAuthzConfig{From: "token", GroupsField: "MemberOf"}},
+	}}
+	r := newRig(t, cfg, map[string]*authz.Cached{})
+	r.as = &middleware.AuthContext{UserID: "jdoe", Authorization: "okta", Provider: "okta", Kind: "user",
+		Groups: []string{"sandbox-core-sysadmin"}, Attributes: map[string]string{"email": "jdoe@example.com"}}
+	c := r.create(`{"name": "laptop"}`)
+	if code, out := r.do(http.MethodGet, "/whoami", c.Secret, ""); code != http.StatusOK || !strings.Contains(out, `"groups":["sandbox-core-sysadmin"]`) {
+		t.Fatalf("whoami: %d %s", code, out)
 	}
 }
 
 func TestUnknownTokenRejected(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	s, err := store.NewLocalStore(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewLocalStore: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("GenerateKey: %v", err)
-	}
-
-	auth := &middleware.Authenticator{
-		Backends: map[string]*authz.Cached{},
-		Store:    s,
-		Keys:     store.NewKeys(""),
-		PatKey:   priv,
-	}
-
-	engine := gin.New()
-	engine.GET("/whoami", auth.Middleware(), func(c *gin.Context) {
-		c.Status(http.StatusOK)
-	})
-
+	r := newRig(t, idmConfig(), nil)
 	fake, err := gcrypto.GenerateToken()
 	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
+		t.Fatal(err)
 	}
-
-	req := httptest.NewRequest(http.MethodGet, "/whoami", nil)
-	req.Header.Set("Authorization", "Bearer "+fake)
-	w := httptest.NewRecorder()
-	engine.ServeHTTP(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", w.Code)
+	if code, _ := r.do(http.MethodGet, "/whoami", fake, ""); code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", code)
 	}
 }

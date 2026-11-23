@@ -1,6 +1,7 @@
 package rbac
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -121,6 +122,12 @@ func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFun
 		var req AuthorizeRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin, ""))
+			return
+		}
+		// a scoped personal access token: what its scope allows, whatever
+		// the roles of its user
+		if !ac.Scope.Allows(req.Api, req.Verb) {
+			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: false, Reason: fmt.Sprintf("your token's scope does not grant %q on api %q", req.Verb, req.Api)})
 			return
 		}
 		builtin := prechecks.Builtin != nil && prechecks.Builtin(req.Api)

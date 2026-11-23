@@ -4,18 +4,21 @@
 package apiserver
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/infrapi/kayra/internal/authn"
 	"github.com/infrapi/kayra/internal/authz"
 	"github.com/infrapi/kayra/internal/catalog"
 	gconfig "github.com/infrapi/kayra/internal/config"
 	gcrypto "github.com/infrapi/kayra/internal/crypto"
 	"github.com/infrapi/kayra/internal/discovery"
 	"github.com/infrapi/kayra/internal/httpapi"
+	"github.com/infrapi/kayra/internal/identity"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/oauth2server"
 	"github.com/infrapi/kayra/internal/oidc"
@@ -137,11 +140,16 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	rbacRepo := rbac.NewRepository(s, keys)
 	// Kayra's authorization server: tokens of its own, for infrapi-cli and
 	// MCP clients, renewed and revoked
+	saTokens := rbac.ServiceAccountTokens{}
+	if saTokens.DefaultTTL, saTokens.MaxTTL, err = serviceAccountTTLs(cfg); err != nil {
+		return nil, err
+	}
 	if cfg.OAuth2.Enabled {
 		as, err := oauth2server.New(cfg, authenticator, s, keys, baseURL)
 		if err != nil {
 			return nil, err
 		}
+		saTokens.Issuer = as
 		// another user's sessions: the cluster RBAC's, the sysadmin first
 		as.CanManageSessions = func(ac *middleware.AuthContext, verb string) bool {
 			ok, _, err := rbacRepo.AuthorizeCluster(ac.UserID, ac.Groups, rbac.AuthorizationAPI, "sessions", verb)
@@ -151,6 +159,32 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	}
 	rbacRepo.SetSysadmin(sysadminGroups)
 	catalogRepo := catalog.NewRepository(s, keys)
+	// a token of one of Kayra's own identities: signed by the authorization
+	// server's signer, never another provider's, and resolved from the
+	// store, the service account still there with the token's uid, in a
+	// namespace that still exists
+	signer := cmp.Or(cfg.OAuth2.Signer, "self")
+	authenticator.Machine = func(v *authn.Verified) (*middleware.AuthContext, error) {
+		if v.Provider != signer {
+			return nil, fmt.Errorf("apiserver: a token of one of Kayra's own identities, not signed by %s", signer)
+		}
+		if kind, _ := v.Claims["kind"].(string); kind != identity.KindServiceAccount {
+			return nil, fmt.Errorf("apiserver: unknown token kind %q", kind)
+		}
+		sub, _ := v.Claims.GetSubject()
+		uid, _ := v.Claims["uid"].(string)
+		ac, err := rbacRepo.ServiceAccountContext(sub, uid)
+		if err != nil {
+			return nil, err
+		}
+		if ns, _, _ := identity.ParseServiceAccount(sub); catalogRepo.CheckNamespace(ns) != nil {
+			return nil, fmt.Errorf("apiserver: namespace %q of %s does not exist", ns, sub)
+		}
+		ac.Provider = v.Provider
+		ac.Audience, _ = v.Claims.GetAudience()
+		ac.ClientID = sub
+		return ac, nil
+	}
 
 	userinfoHandler := func(c *gin.Context) {
 		ac, ok := middleware.GetAuth(c)
@@ -164,6 +198,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 			"provider":      ac.Provider,
 			"authorization": ac.Authorization,
 			"groups":        ac.Groups,
+			"kind":          ac.Kind,
 		}
 		for k, v := range ac.Attributes {
 			body[k] = v
@@ -192,6 +227,7 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	rbac.RegisterNamespaceRoutes(engine, rbacRepo, authenticator.Middleware(), func(rules []rbac.Rule) *liberrors.Error {
 		return catalogRepo.ValidateRoleRules(rules, appCfg.AppPlatform, appCfg.AppRegion)
 	})
+	rbac.RegisterServiceAccountRoutes(engine, rbacRepo, authenticator.Middleware(), saTokens)
 	// catalog.Reconciler (the namespace/subscription/api registration
 	// reconcile controller) deliberately does not run here: it's its own
 	// "kayra reconciler" CLI command/process (see cmd/kayra), not a
@@ -251,7 +287,19 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 		return routes
 	}, appCfg.AppPlatform, appCfg.AppRegion)
 
-	tokenapi.RegisterRoutes(engine, authenticator.Middleware(), s, keys, &patKey.PublicKey, cfg)
+	patTTLs, err := cfg.Tokens.Pat.Durations()
+	if err != nil {
+		return nil, err
+	}
+	// a user's personal access tokens; another user's: the cluster RBAC's,
+	// the sysadmin first
+	tokenapi.RegisterRoutes(engine, authenticator.Middleware(), tokenapi.Options{
+		Root: "/apis/" + rbac.AuthorizationAPI + "/v1", Store: s, Keys: keys, Pub: &patKey.PublicKey, Config: cfg, TTLs: patTTLs,
+		CanManageOthers: func(ac *middleware.AuthContext, verb string) bool {
+			ok, _, err := rbacRepo.AuthorizeCluster(ac.UserID, ac.Groups, rbac.AuthorizationAPI, "tokens", verb)
+			return ok && err == nil
+		},
+	})
 
 	return engine, nil
 }
@@ -266,4 +314,11 @@ func Roots() []string {
 		"/apis/" + catalog.CatalogAPI + "/v1",
 		"/apis/" + rbac.AuthorizationAPI + "/v1",
 	}
+}
+
+// serviceAccountTTLs are a service account token's default and longest
+// lifetimes, from serviceaccounts:.
+func serviceAccountTTLs(cfg *gconfig.Config) (time.Duration, time.Duration, error) {
+	d, err := cfg.ServiceAccounts.Durations()
+	return d.Default, d.Max, err
 }

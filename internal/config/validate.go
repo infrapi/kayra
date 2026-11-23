@@ -16,6 +16,12 @@ func (c *Config) Validate() error {
 	if err := c.OAuth2.validate(c); err != nil {
 		return err
 	}
+	if _, err := c.ServiceAccounts.Durations(); err != nil {
+		return err
+	}
+	if _, err := c.Tokens.Pat.Durations(); err != nil {
+		return err
+	}
 	if _, _, err := c.ActiveDatabase(); err != nil {
 		return err
 	}

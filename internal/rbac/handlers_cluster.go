@@ -93,6 +93,10 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateClusterGroup", "name is required"))
 			return
 		}
+		if err := validateGroupMembers(g, true, "rbac.CreateClusterGroup"); err != nil {
+			httpapi.Fail(c, err)
+			return
+		}
 		if err := repo.PutClusterGroup(&g); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateClusterGroup", ""))
 			return
@@ -131,6 +135,10 @@ func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc
 			return
 		}
 		g.Name = name
+		if err := validateGroupMembers(g, true, "rbac.UpdateClusterGroup"); err != nil {
+			httpapi.Fail(c, err)
+			return
+		}
 
 		if err := repo.PutClusterGroup(&g); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateClusterGroup", ""))

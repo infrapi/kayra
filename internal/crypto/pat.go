@@ -32,12 +32,45 @@ const tokenRandomBytes = 32
 // whatever tokenapi captured here at creation time instead. A token
 // minted under any other backend leaves both nil; its roles stay live.
 type PatRecord struct {
-	UserID             string            `json:"user_id"`
-	Authorization      string            `json:"authorization"`
-	Provider           string            `json:"provider"`
-	CreatedAt          int64             `json:"created_at"`
+	// ID is the token's public id: what lists and revokes it, never the
+	// token itself.
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	UserID        string `json:"user_id"`
+	Authorization string `json:"authorization"`
+	Provider      string `json:"provider"`
+	CreatedAt     int64  `json:"created_at"`
+	// ExpiresAt is when the token stops working, Unix seconds: every token
+	// expires.
+	ExpiresAt int64 `json:"expires_at"`
+	// Scope narrows what the token may do, nil for everything its user may.
+	Scope              *PatScope         `json:"scope,omitempty"`
 	SnapshotGroups     []string          `json:"snapshot_groups,omitempty"`
 	SnapshotAttributes map[string]string `json:"snapshot_attributes,omitempty"`
+}
+
+// PatScope is what a token may do, on top of what its user may: the
+// intersection of the two. Each list is wildcardable with "*"; an empty
+// one allows nothing.
+type PatScope struct {
+	// Apis are API groups, by their full name: compute.infrapi.io.
+	Apis []string `json:"apis"`
+	// Verbs are get, list, create, update, patch, delete.
+	Verbs []string `json:"verbs"`
+}
+
+// Allows tells whether s lets a token do verb on api.
+func (s *PatScope) Allows(api, verb string) bool {
+	return s == nil || (matches(s.Apis, api) && matches(s.Verbs, verb))
+}
+
+func matches(list []string, v string) bool {
+	for _, x := range list {
+		if x == "*" || x == v {
+			return true
+		}
+	}
+	return false
 }
 
 // patEnvelope is the on-disk hybrid-encryption format: the AES-256 key is
@@ -163,4 +196,18 @@ func DecryptRecord(priv *rsa.PrivateKey, data []byte) (PatRecord, error) {
 		return PatRecord{}, fmt.Errorf("pat: unmarshal record: %w", err)
 	}
 	return record, nil
+}
+
+// PatIndexEntry is a token as its user's index (Keys.PatIndex) lists it:
+// no secret, only the hash that names its record, so it is revoked by its
+// public id.
+type PatIndexEntry struct {
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	UserID     string    `json:"user_id"`
+	Hash       string    `json:"hash"`
+	CreatedAt  int64     `json:"created_at"`
+	ExpiresAt  int64     `json:"expires_at"`
+	Scope      *PatScope `json:"scope,omitempty"`
+	LastUsedAt int64     `json:"last_used_at,omitempty"`
 }

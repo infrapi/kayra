@@ -3,8 +3,10 @@ package rbac
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
+	"github.com/infrapi/kayra/internal/identity"
 	"github.com/infrapi/kayra/internal/store"
 )
 
@@ -87,6 +89,9 @@ func SetAPIDomain(domain string) {
 //
 // reason explains a false result; it is empty when allowed is true.
 func (r *Repository) CanManageNamespaceRBAC(userID string, callerGroups []string, namespace, api, resource, verb string) (allowed bool, reason string, err error) {
+	if identity.IsReserved(userID) {
+		return false, "a service account manages no RBAC, not even its own namespace's", nil
+	}
 	memberGroups, err := r.clusterGroupsMatching(userID, callerGroups)
 	if err != nil {
 		return false, "", err
@@ -140,6 +145,9 @@ func (r *Repository) CanManageNamespaceRBAC(userID string, callerGroups []string
 // match means one of callerGroups is listed in its own Groups, or
 // userID is listed in its Users.
 func (r *Repository) clusterGroupsMatching(userID string, callerGroups []string) ([]string, error) {
+	if identity.IsReserved(userID) {
+		return nil, nil // no cluster group ever counts one of Kayra's own identities
+	}
 	groups, err := r.ListClusterGroups()
 	if err != nil {
 		return nil, err
@@ -244,6 +252,9 @@ func (r *Repository) IsNamespaceMember(namespace, userID string, callerGroups []
 // scopedNamespaces are the namespaces a cluster group scoped to them
 // counts the caller in.
 func (r *Repository) scopedNamespaces(userID string, callerGroups []string) (map[string]bool, error) {
+	if identity.IsReserved(userID) {
+		return map[string]bool{}, nil
+	}
 	clusterGroups, err := r.ListClusterGroups()
 	if err != nil {
 		return nil, err
@@ -335,7 +346,19 @@ func (r *Repository) namespaceGroupsMatching(namespace, userID string, callerGro
 // one of callerGroups is listed in g.Groups, or userID is listed in
 // g.Users (both exact matches, wildcardable with "*" — see MatchesAny).
 // Either list, on its own, is enough.
+//
+// A service account is matched by a group of its own namespace only, by
+// name in ServiceAccounts or through its namespace's service accounts'
+// group in Groups, exactly: never by a wildcard, nor by any other
+// namespace's group or a cluster one (clusterGroupsMatching, ClusterRules
+// and scopedNamespaces skip it before ever calling this).
 func groupMatchesCaller(g Group, userID string, callerGroups []string) bool {
+	if ns, name, ok := identity.ParseServiceAccount(userID); ok {
+		if g.Metadata.Namespace != ns {
+			return false
+		}
+		return slices.Contains(g.ServiceAccounts, name) || slices.Contains(g.Groups, identity.NamespaceServiceAccounts(ns))
+	}
 	for _, cg := range callerGroups {
 		if cg != "" && MatchesAny(g.Groups, cg) {
 			return true

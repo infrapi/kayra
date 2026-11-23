@@ -1,6 +1,9 @@
 package store
 
-import "fmt"
+import (
+	"fmt"
+	"net/url"
+)
 
 // Keys builds every etcd/local key path Kayra uses, from a single
 // configured prefix (default "/kayra"), so the layout lives in one place.
@@ -106,6 +109,16 @@ func (k Keys) NamespaceRoleBindingPrefix(namespace string) string {
 	return fmt.Sprintf("%s/namespaces/%s/rolebindings/", k.Prefix, namespace)
 }
 
+// NamespaceServiceAccountConfig is a namespace's service account.
+func (k Keys) NamespaceServiceAccountConfig(namespace, name string) string {
+	return fmt.Sprintf("%s/namespaces/%s/serviceaccounts/%s/config", k.Prefix, namespace, name)
+}
+
+// NamespaceServiceAccountPrefix lists every service account in namespace.
+func (k Keys) NamespaceServiceAccountPrefix(namespace string) string {
+	return fmt.Sprintf("%s/namespaces/%s/serviceaccounts/", k.Prefix, namespace)
+}
+
 // ClusterApiRegistrationConfig is a cluster-level API registration's
 // definition, scoped by platform and region.
 func (k Keys) ClusterApiRegistrationConfig(platform, region, name string) string {
@@ -168,6 +181,17 @@ func (k Keys) NamespaceSubscriptionPrefix(namespace string) string {
 // by the hash of the opaque token value, never the token itself.
 func (k Keys) PatToken(hash string) string {
 	return fmt.Sprintf("%s/tokens/pat/%s", k.Prefix, hash)
+}
+
+// PatIndex is a user's token, by its public id: what lists and revokes
+// it, holding no secret (the token's hash names its record).
+func (k Keys) PatIndex(userID, id string) string {
+	return fmt.Sprintf("%s/users/%s/tokens/%s", k.Prefix, url.PathEscape(userID), id)
+}
+
+// PatIndexPrefix lists a user's tokens.
+func (k Keys) PatIndexPrefix(userID string) string {
+	return fmt.Sprintf("%s/users/%s/tokens/", k.Prefix, url.PathEscape(userID))
 }
 
 // PatKeypair is where the auto-generated PAT encryption keypair is persisted

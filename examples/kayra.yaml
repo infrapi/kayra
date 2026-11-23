@@ -191,6 +191,19 @@ sysadmin:
     - sandbox-core-sysadmin
     - sandbox-platform-admins
 
+# Personal access tokens: every one expires (docs/architecture/tokens.md).
+tokens:
+  pat:
+    ttl: 720h      # when a request names none
+    max_ttl: 2160h # the longest one may last
+
+# A namespace's service accounts' tokens, signed by the authorization
+# server (oauth2.enabled): at most 24h, a CI asks for a new one
+# (docs/architecture/service-accounts.md).
+serviceaccounts:
+  token_ttl: 1h
+  max_token_ttl: 24h
+
 reconciler:
   # caps how many reconcile/activate operations `kayra reconciler`
   # runs at once (its goroutine pool size); omit/0 defaults to 30.

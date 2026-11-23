@@ -108,6 +108,7 @@ type Group struct {
 	Metadata Metadata // Namespace, Region, Platform
 	Groups   []string // resolved group names, e.g. "sandbox-core-sysadmin"
 	Users    []string // resolved user ids, e.g. "ahdemir"
+	ServiceAccounts []string // a namespace group only: its own namespace's service accounts, by name
 }
 type Role struct {
 	Name     string
@@ -129,6 +130,15 @@ copies of the same three objects — see [rbac](../packages/rbac.md#types)
 for the full field reference. A `RoleBinding`'s `Role` and every `Group`
 it names must share its exact `Metadata` (region/platform/namespace),
 checked at creation time.
+
+Besides humans, a namespace group can name the namespace's own
+[service accounts](service-accounts.md), Kayra's machine identities
+(`system:serviceaccount:<namespace>:<name>`). The `system:` prefix is
+reserved for them: a user id an identity provider resolves under it is
+refused, and so is a `system:` entry in a group's `users`. A cluster group
+names no service account, and no group outside a service account's namespace
+ever counts it. [Personal access tokens](tokens.md) act as their user, within
+their scope.
 
 A cluster object is **global** when its `metadata.namespace` is `""`:
 it grants cluster-scoped resources only. Otherwise it is **scoped to that

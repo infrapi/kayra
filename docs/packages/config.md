@@ -274,10 +274,27 @@ type TokensConfig struct {
 type PatConfig struct {
 	PrivateKeyPath string // empty: generate once, persist in the store
 	PublicKeyPath  string
+	TTL            string // a token's default lifetime: 720h
+	MaxTTL         string // the longest it may last: 2160h
 }
 ```
 
-See [crypto](crypto.md#pat-keypair).
+See [crypto](crypto.md#pat-keypair) and
+[Personal access tokens](../architecture/tokens.md).
+
+## Service accounts
+
+```go
+type ServiceAccountsConfig struct {
+	TokenTTL    string // a token's lifetime when the request names none: 1h
+	MaxTokenTTL string // the longest it may last: 24h, never more
+}
+```
+
+The lifetimes of the tokens a namespace's
+[service accounts](../architecture/service-accounts.md) are issued.
+`max_token_ttl` above 24h is refused: a CI asks for a new token rather than
+keeping a long one.
 
 ## Sysadmin
 

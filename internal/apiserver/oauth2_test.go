@@ -116,6 +116,7 @@ type oauth2Rig struct {
 	okta   *fakeOkta
 	gitlab *fakeOkta    // a second provider, with oauth2: a choice
 	client *http.Client // follows no redirect
+	cfg    *gconfig.Config
 }
 
 func newOAuth2Rig(t *testing.T, withGitlab ...bool) *oauth2Rig {
@@ -171,7 +172,7 @@ func newOAuth2Rig(t *testing.T, withGitlab ...bool) *oauth2Rig {
 	srv.Config.Handler = engine
 	srv.Start()
 	t.Cleanup(srv.Close)
-	return &oauth2Rig{t: t, kayra: srv.URL, okta: okta, gitlab: gitlab,
+	return &oauth2Rig{t: t, kayra: srv.URL, okta: okta, gitlab: gitlab, cfg: cfg,
 		client: &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 

@@ -233,3 +233,38 @@ func (r *Repository) DeleteNamespaceRoleBinding(namespace, name string) error {
 	}
 	return nil
 }
+
+// PutNamespaceServiceAccount writes a service account of namespace.
+func (r *Repository) PutNamespaceServiceAccount(namespace string, sa *ServiceAccount) error {
+	return store.PutObject(r.store, r.keys.NamespaceServiceAccountConfig(namespace, sa.Name), sa)
+}
+
+// GetNamespaceServiceAccount reads a service account of namespace.
+func (r *Repository) GetNamespaceServiceAccount(namespace, name string) (ServiceAccount, error) {
+	var sa ServiceAccount
+	err := getJSON(r.store, r.keys.NamespaceServiceAccountConfig(namespace, name), &sa)
+	return sa, err
+}
+
+// ListNamespaceServiceAccounts lists namespace's service accounts.
+func (r *Repository) ListNamespaceServiceAccounts(namespace string) ([]ServiceAccount, error) {
+	raw, err := listConfigValues(r.store, r.keys.NamespaceServiceAccountPrefix(namespace))
+	if err != nil {
+		return nil, err
+	}
+	sas := make([]ServiceAccount, len(raw))
+	for i, data := range raw {
+		if err := json.Unmarshal(data, &sas[i]); err != nil {
+			return nil, fmt.Errorf("rbac: unmarshal service account: %w", err)
+		}
+	}
+	return sas, nil
+}
+
+// DeleteNamespaceServiceAccount removes a service account of namespace.
+func (r *Repository) DeleteNamespaceServiceAccount(namespace, name string) error {
+	if err := r.store.Delete(r.keys.NamespaceServiceAccountConfig(namespace, name)); err != nil {
+		return fmt.Errorf("rbac: delete service account %s/%s: %w", namespace, name, err)
+	}
+	return nil
+}

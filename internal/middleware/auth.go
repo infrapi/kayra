@@ -5,8 +5,10 @@ package middleware
 
 import (
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,8 +19,10 @@ import (
 	"github.com/infrapi/kayra/internal/config"
 	gcrypto "github.com/infrapi/kayra/internal/crypto"
 	"github.com/infrapi/kayra/internal/httpapi"
+	"github.com/infrapi/kayra/internal/identity"
 	"github.com/infrapi/kayra/internal/oidc"
 	"github.com/infrapi/kayra/internal/store"
+	libauth "github.com/infrapi/lib/pkg/auth"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
@@ -40,6 +44,15 @@ type AuthContext struct {
 	// Empty for any other token.
 	Audience []string
 	ClientID string
+	// Kind is the caller's: identity.KindUser, a human, or one of Kayra's
+	// own identities (identity.KindServiceAccount).
+	Kind string
+	// TokenID is the personal access token's public id the caller
+	// authenticated with, "" for any other token.
+	TokenID string
+	// Scope is that token's, nil when it has none: what the caller may do
+	// is what both their rights and it allow.
+	Scope *gcrypto.PatScope
 }
 
 // GetAuth reads the AuthContext a prior Authenticator.Middleware call set.
@@ -76,6 +89,11 @@ type Authenticator struct {
 	// revoked (internal/oauth2server): its jti, or its session (sid). None
 	// is when nil.
 	Revoked func(claims map[string]any) (bool, error)
+	// Machine resolves a token carrying a kind claim, one of Kayra's own
+	// identities (a service account): only the authorization server signs
+	// those, so it checks the provider is its signer, then the identity in
+	// the store. Such a token is refused when nil.
+	Machine func(v *authn.Verified) (*AuthContext, error)
 }
 
 // Resolve authenticates token as Middleware does: a PAT, or a JWT of a
@@ -105,6 +123,11 @@ func (a *Authenticator) Middleware() gin.HandlerFunc {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusUnauthorized, "middleware.Authenticate", ""))
 			return
 		}
+		if !scopeAllows(ac.Scope, c.Request) {
+			httpapi.Fail(c, liberrors.New(http.StatusForbidden, "middleware.Authenticate", "%s %s: outside the token's scope", c.Request.Method, c.Request.URL.Path).
+				WithSolution("use a token whose scope covers it, or log in"))
+			return
+		}
 
 		c.Set(contextKey, ac)
 		c.Next()
@@ -129,6 +152,13 @@ func (a *Authenticator) resolveJWT(token string) (*AuthContext, error) {
 		if revoked {
 			return nil, fmt.Errorf("middleware: the token is revoked")
 		}
+	}
+
+	if _, ok := v.Claims["kind"]; ok {
+		if a.Machine == nil || len(provider.Local) == 0 {
+			return nil, fmt.Errorf("middleware: a token of one of Kayra's own identities, which this server does not issue")
+		}
+		return a.Machine(v)
 	}
 
 	return a.ResolveVerified(v, nil)
@@ -157,6 +187,9 @@ func (a *Authenticator) ResolveVerified(v *authn.Verified, userID *config.UserID
 	user, err := authn.ResolveUserID(v, userIDCfg, remoteURL, proxy)
 	if err != nil {
 		return nil, err
+	}
+	if identity.IsReserved(user) {
+		return nil, fmt.Errorf("middleware: user id %q: the %q prefix is Kayra's own identities'", user, identity.Reserved)
 	}
 
 	authzCfg, ok := a.Config.Authorizations[provider.Authorization]
@@ -195,7 +228,8 @@ func (a *Authenticator) ResolveVerified(v *authn.Verified, userID *config.UserID
 		Provider:      v.Provider,
 		Authorization: provider.Authorization,
 		Attributes:    attributes,
-		Groups:        groups,
+		Groups:        humanGroups(groups),
+		Kind:          identity.KindUser,
 	}
 	// a token of Kayra's authorization server: one of its own, issued to a
 	// client
@@ -219,6 +253,14 @@ func (a *Authenticator) resolvePAT(token string) (*AuthContext, error) {
 	if err != nil {
 		return nil, err
 	}
+	if identity.IsReserved(record.UserID) {
+		return nil, fmt.Errorf("middleware: a personal access token of %q, one of Kayra's own identities", record.UserID)
+	}
+	now := time.Now()
+	if record.ExpiresAt == 0 || now.Unix() >= record.ExpiresAt {
+		return nil, fmt.Errorf("middleware: the token expired")
+	}
+	a.touchPAT(record, now)
 
 	authzCfg, ok := a.Config.Authorizations[record.Authorization]
 	if !ok {
@@ -251,8 +293,69 @@ func (a *Authenticator) resolvePAT(token string) (*AuthContext, error) {
 		Provider:      record.Provider,
 		Authorization: record.Authorization,
 		Attributes:    attributes,
-		Groups:        groups,
+		Groups:        humanGroups(groups),
+		Kind:          identity.KindUser,
+		TokenID:       record.ID,
+		Scope:         record.Scope,
 	}, nil
+}
+
+// touchPAT records when a token was last used, at most once an hour: a
+// write per request would be one too many. Best effort: a failure leaves
+// the date older.
+func (a *Authenticator) touchPAT(record gcrypto.PatRecord, now time.Time) {
+	key := a.Keys.PatIndex(record.UserID, record.ID)
+	var e gcrypto.PatIndexEntry
+	if err := store.GetJSON(a.Store, key, &e); err != nil || now.Unix()-e.LastUsedAt < 3600 {
+		return
+	}
+	e.LastUsedAt = now.Unix()
+	if data, err := json.Marshal(e); err == nil {
+		_ = a.Store.PutTTL(key, data, time.Until(time.Unix(e.ExpiresAt, 0)))
+	}
+}
+
+// scopeAllows tells whether a token's scope lets it send r: an API
+// request whose api and verb it grants, read as /check reads them; the
+// authorization check itself, which decides with the scope (rbac's
+// /check); userinfo; the discovery, GET /apis. Anything else, sessions say, is no scoped token's.
+func scopeAllows(scope *gcrypto.PatScope, r *http.Request) bool {
+	if scope == nil {
+		return true
+	}
+	// who it is, and the discovery of the APIs (what a client resolves a
+	// resource with before any request)
+	if r.URL.Path == "/oauth2/userinfo" || (r.Method == http.MethodGet && (r.URL.Path == "/apis" || r.URL.Path == "/apis/")) {
+		return true
+	}
+	rest, ok := strings.CutPrefix(r.URL.Path, "/apis/")
+	if !ok {
+		return false
+	}
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if len(parts) < 3 {
+		return false
+	}
+	api, resource := parts[0], parts[2:]
+	if strings.HasPrefix(api, "authorization.") && len(resource) == 1 && resource[0] == "check" {
+		return true
+	}
+	if resource[0] == "namespaces" && len(resource) > 2 {
+		resource = resource[2:]
+	}
+	_, hasID, err := libauth.ParseResource(strings.Join(resource, "/"))
+	if err != nil {
+		return false
+	}
+	verb, err := libauth.VerbFor(r.Method, hasID)
+	return err == nil && scope.Allows(api, verb)
+}
+
+// humanGroups are a human's resolved groups without the reserved ones: a
+// directory group named like Kayra's own (system:serviceaccounts:core)
+// never makes its members one of its service accounts.
+func humanGroups(groups []string) []string {
+	return slices.DeleteFunc(slices.Clone(groups), identity.IsReserved)
 }
 
 func extractBearer(header string) (string, error) {

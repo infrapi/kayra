@@ -7,7 +7,12 @@
 // separate dotenv file, and hands them off via NewConfigFromMap.
 package config
 
-import "gopkg.in/yaml.v3"
+import (
+	"fmt"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
 
 // Config is the root of the Kayra YAML configuration file.
 type Config struct {
@@ -19,6 +24,7 @@ type Config struct {
 	Reconciler        ReconcilerConfig                `yaml:"reconciler"`
 	Sysadmin          SysadminConfig                  `yaml:"sysadmin"`
 	OAuth2            OAuth2ServerConfig              `yaml:"oauth2"`
+	ServiceAccounts   ServiceAccountsConfig           `yaml:"serviceaccounts"`
 }
 
 // AppConfig is the app: block of the Kayra YAML file — the shared
@@ -302,6 +308,41 @@ type TokensConfig struct {
 type PatConfig struct {
 	PrivateKeyPath string `yaml:"private_key_path"`
 	PublicKeyPath  string `yaml:"public_key_path"`
+	// TTL is a token's lifetime when its request names none: 720h.
+	TTL string `yaml:"ttl"`
+	// MaxTTL is the longest a token may last: 2160h (90 days).
+	MaxTTL string `yaml:"max_ttl"`
+}
+
+// PatDurations are a personal access token's default and longest
+// lifetimes.
+type PatDurations struct{ Default, Max time.Duration }
+
+// Durations parses the lifetimes, their defaults when unset, the default
+// within the maximum.
+func (p PatConfig) Durations() (PatDurations, error) {
+	var d PatDurations
+	for _, f := range []struct {
+		name, raw, def string
+		into           *time.Duration
+	}{
+		{"ttl", p.TTL, "720h", &d.Default},
+		{"max_ttl", p.MaxTTL, "2160h", &d.Max},
+	} {
+		raw := f.raw
+		if raw == "" {
+			raw = f.def
+		}
+		v, err := time.ParseDuration(raw)
+		if err != nil || v <= 0 {
+			return d, fmt.Errorf("tokens.pat.%s %q: a duration", f.name, f.raw)
+		}
+		*f.into = v
+	}
+	if d.Default > d.Max {
+		return d, fmt.Errorf("tokens.pat.ttl %s: more than max_ttl %s", d.Default, d.Max)
+	}
+	return d, nil
 }
 
 // ReconcilerConfig configures `kayra reconciler` (catalog.Reconciler).
