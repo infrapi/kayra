@@ -7,7 +7,9 @@ weight: 20
 # RBAC & auth
 
 How a request becomes "this is `jdoe`, authenticated via `okta`", and how
-Kayra then decides what `jdoe` is allowed to do. Package references:
+Kayra then decides what `jdoe` is allowed to do. To choose how a person, a
+CI job or an API should authenticate, start with
+[Authentication and authorization](auth.md). Package references:
 [authn](../packages/authn.md), [authz](../packages/authz.md),
 [oidc](../packages/oidc.md), [crypto](../packages/crypto.md),
 [middleware](../packages/middleware.md), [rbac](../packages/rbac.md).

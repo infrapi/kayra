@@ -6,6 +6,10 @@ weight: 25
 
 # Authorization server
 
+"Authorization server" is OAuth's name for what **issues** tokens: this
+page. What decides a caller's rights is the RBAC (see
+[Authentication and authorization](auth.md)).
+
 Kayra issues tokens of its own to a client — `infrapi-cli`, an MCP client
 such as Claude, a script — and renews and revokes them: OAuth 2.1, as the
 [MCP authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)

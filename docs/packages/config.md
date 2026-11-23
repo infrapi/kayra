@@ -121,6 +121,10 @@ database:
 
 ## Authorizations
 
+Despite its name, `authorizations:` decides no access: it resolves a user's
+**groups** and attributes, which the RBAC then binds to roles (see
+[Authentication and authorization](../architecture/auth.md#terms)).
+
 At least one entry is required; each is exactly one of `ldap`, `local`
 or `claims`. `ldap` describes a real directory
 ([`authz.LDAPAuthorizer`](authz.md)): host/port/bind credentials, TLS,
@@ -193,6 +197,11 @@ instead, reading straight out of the self-signed token's own claims
 already embeds).
 
 ## Authentifications
+
+The providers whose tokens Kayra accepts: a token of one names a **user**,
+the person it was issued to. A CI job whose token is accepted here acts as
+the user who ran it; to act as a machine of a namespace instead, see
+[federation](../architecture/federation.md).
 
 At least one entry is required, each naming which `authorizations.<name>`
 it resolves users against, and exactly one of:

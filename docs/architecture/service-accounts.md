@@ -6,11 +6,21 @@ weight: 22
 
 # Service accounts
 
-A service account is a machine identity that belongs to one namespace: a CI
-pipeline, a script, an operator. Its subject is
-`system:serviceaccount:<namespace>:<name>`. It holds no secret: you ask Kayra
-for a token when you need one, and the token lasts 24 hours at most. As in
-Kubernetes, a service account can act **only in its own namespace**.
+A service account is a machine identity that belongs to one namespace,
+what a CI pipeline, a script or an operator acts as. Its subject is
+`system:serviceaccount:<namespace>:<name>`. As in Kubernetes, a service
+account can act **only in its own namespace**.
+
+A service account is an identity, not a way to log in. It holds no secret
+of its own; a workload proves it is the service account in one of three
+ways (see [Authentication and authorization](auth.md#a-service-account-and-how-it-logs-in)):
+
+- **[federation](federation.md):** its platform's identity token, GitLab CI's,
+  GitHub Actions', Kubernetes': no secret anywhere, a 15-minute token;
+- **[its own key](federation.md#a-key-of-its-own-instead-private_key_jwt):**
+  an assertion signed by a private key the workload holds;
+- **its token action** (step 3 below): a token Kayra signs on request, up to
+  24 hours, kept wherever it is used.
 
 The examples use [`infrapi-cli`](https://infrapi.github.io/cli/getting-started/#1-install)
 against a Kayra at `https://kayra.example.com`, with the `core` namespace. You
@@ -87,6 +97,9 @@ A service account **never** acts outside its namespace:
   directory account can pose as a service account.
 
 ## 3. Get a token
+
+This step is the token action: a token you keep. For a CI job or a pod,
+prefer [federation](federation.md), which keeps none.
 
 The token action is a permission of its own,
 `authorization.infrapi.io` / `serviceaccounts/token` / `create`. You can let a

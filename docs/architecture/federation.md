@@ -14,6 +14,12 @@ account's own token for 15 minutes (`client_credentials`). Azure's workload
 identity federation and GCP's work the same way. An API's app can use its
 platform's token the same way, as the [API's own identity](api-identity.md#on-kubernetes-without-a-key).
 
+Federation is a way to **log in as** a service account: the service account
+is the identity, with its rights in its namespace. It is not the same as
+accepting the platform's token as a provider's
+(`authentifications:`), where a CI job acts as the person who ran it, with
+their rights: see [A provider's token, or federation](auth.md#a-providers-token-or-federation).
+
 The examples use [`infrapi-cli`](https://infrapi.github.io/cli/getting-started/#1-install)
 and a Kayra at `https://kayra.example.com` with its
 [authorization server](oauth2-server.md) on. They use the `core` namespace's

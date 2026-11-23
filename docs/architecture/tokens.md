@@ -16,8 +16,8 @@ at rest. It follows these rules:
   scope allow.
 - **A token is listed and revoked by its public id,** never by its secret.
 - **Only a logged-in user creates one.** A PAT cannot create another, and a
-  [service account](service-accounts.md) gets none: it uses its own token
-  action.
+  [service account](service-accounts.md) gets none: it logs in its own ways
+  (see [Authentication and authorization](auth.md#a-service-account-and-how-it-logs-in)).
 
 The examples use [`infrapi-cli`](https://infrapi.github.io/cli/getting-started/#1-install),
 logged in to `https://kayra.example.com`.

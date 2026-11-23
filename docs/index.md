@@ -19,7 +19,8 @@ disabled records active.
 |---|---|
 | Run Kayra for the first time | [Getting started](getting-started.md) |
 | Understand how the pieces fit together | [Architecture overview](architecture/overview.md) |
-| See who can authenticate and who can manage what | [RBAC & auth](architecture/rbac-and-auth.md) |
+| Choose how a person, a CI job, a script or an API authenticates, and see what decides its rights | [Authentication and authorization](architecture/auth.md) |
+| See how a token is verified and how the RBAC decides | [RBAC & auth](architecture/rbac-and-auth.md) |
 | Give a CI or a script an identity of its own in a namespace | [Service accounts](architecture/service-accounts.md) |
 | Create, scope, list or revoke a personal access token | [Personal access tokens](architecture/tokens.md) |
 | Log a CI job in as a service account with its platform's token | [Federation](architecture/federation.md) |

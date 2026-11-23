@@ -72,7 +72,10 @@ check (`rbac.RequireClusterRBAC`); rbac has no knowledge of catalog at all.
 
 ## Authentication & authorization
 
-See [RBAC & Auth](rbac-and-auth.md) for the full story: how a bearer token
+[Authentication and authorization](auth.md) says which identities exist
+(users, service accounts, APIs), every way to authenticate and when to use
+each, and what decides access. See [RBAC & Auth](rbac-and-auth.md) for the
+mechanics: how a bearer token
 (JWT or PAT) is verified and resolved to a user, how the privileged
 `$platform-core-sysadmin` bootstrap credential is produced and checked, and
 how Kayra's own stored `Group`/`Role`/`RoleBinding` objects decide who can
