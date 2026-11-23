@@ -3,7 +3,11 @@
 // and "Create default rights on namespace side" sections describe.
 package rbac
 
-import "github.com/infrapi/kayra/internal/store"
+import (
+	"github.com/infrapi/kayra/internal/identity"
+	"github.com/infrapi/kayra/internal/oidc"
+	"github.com/infrapi/kayra/internal/store"
+)
 
 // Metadata is the region/platform/namespace scoping carried by every
 // group, role and role binding.
@@ -66,6 +70,13 @@ type ServiceAccount struct {
 	// it, so one of a deleted service account is refused even once
 	// another is created under the same name.
 	UID string `json:"uid" yaml:"uid"`
+	// JWKS are its own public keys, {"keys": [...]}: it signs an
+	// assertion with its private key for a token (client_credentials,
+	// private_key_jwt). None when empty.
+	JWKS *oidc.JWKSet `json:"jwks,omitempty" yaml:"jwks,omitempty"`
+	// FederatedCredentials trust a platform's identity tokens as it, a CI
+	// job's say: client_credentials with that token as the assertion.
+	FederatedCredentials []identity.FederatedCredential `json:"federated_credentials,omitempty" yaml:"federated_credentials,omitempty"`
 
 	// Timestamps (created_at/updated_at) are server-owned — set by
 	// store.PutObject on every write, never read from a request.

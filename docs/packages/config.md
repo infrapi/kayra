@@ -282,6 +282,21 @@ type PatConfig struct {
 See [crypto](crypto.md#pat-keypair) and
 [Personal access tokens](../architecture/tokens.md).
 
+## Federation
+
+```go
+type FederationConfig struct {
+	Issuers []FederationIssuer // Issuer, and JWKSURL when its discovery is not reachable
+	Proxy   string
+}
+```
+
+The issuers whose tokens a service account's `federated_credentials` may
+trust: a GitLab instance, GitHub Actions, a Kubernetes cluster. Only the
+admin lists them. Each one is an `https` URL, or `http` on a loopback address.
+See [Federation](../architecture/federation.md). `oauth2.client_credentials_ttl`
+(15m) is how long the token it gives lasts.
+
 ## Service accounts
 
 ```go

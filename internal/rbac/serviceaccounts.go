@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"time"
 
@@ -70,6 +71,64 @@ type ServiceAccountTokens struct {
 	Issuer     TokenIssuer
 	DefaultTTL time.Duration
 	MaxTTL     time.Duration
+	// TrustedIssuer tells an issuer of federation.issuers: a federated
+	// credential names one, or is refused. None is when nil.
+	TrustedIssuer func(issuer string) bool
+}
+
+// validateServiceAccount refuses keys that are no RSA or EC public key,
+// and a federated credential without a name (or one taken), naming an
+// issuer the admin does not trust, matching nothing (no subject, no
+// claim), an empty claim, or an audience that is no URL.
+func validateServiceAccount(sa ServiceAccount, tokens ServiceAccountTokens, origin string) *liberrors.Error {
+	if sa.JWKS != nil {
+		if len(sa.JWKS.Keys) == 0 {
+			return liberrors.New(http.StatusBadRequest, origin, "jwks: no key").WithSolution(`{"keys": [{"kty": "EC", "crv": "P-256", "kid": "…", "x": "…", "y": "…"}]}`)
+		}
+		for i, k := range sa.JWKS.Keys {
+			if _, err := k.Key(); err != nil {
+				return liberrors.New(http.StatusBadRequest, origin, "jwks.keys[%d]: %s", i, err)
+			}
+			if k.D != "" {
+				return liberrors.New(http.StatusBadRequest, origin, "jwks.keys[%d]: a private key: give the public one only", i)
+			}
+		}
+	}
+	names := map[string]bool{}
+	for i, f := range sa.FederatedCredentials {
+		switch {
+		case f.Name == "" || names[f.Name]:
+			return liberrors.New(http.StatusBadRequest, origin, "federated_credentials[%d]: a name, unique", i)
+		case tokens.TrustedIssuer == nil || !tokens.TrustedIssuer(f.Issuer):
+			return liberrors.New(http.StatusBadRequest, origin, "federated_credentials.%s: issuer %q is not one Kayra trusts", f.Name, f.Issuer).
+				WithSolution("ask Kayra's admin to add it to federation.issuers")
+		case f.Subject == "" && len(f.Claims) == 0:
+			return liberrors.New(http.StatusBadRequest, origin, "federated_credentials.%s: a subject or claims to match, or any token of the issuer would do", f.Name)
+		}
+		for k, v := range f.Claims {
+			if k == "" || v == "" {
+				return liberrors.New(http.StatusBadRequest, origin, "federated_credentials.%s: claims: a name and a value, neither empty", f.Name)
+			}
+		}
+		if f.Audience != "" {
+			if u, err := url.Parse(f.Audience); err != nil || u.Host == "" {
+				return liberrors.New(http.StatusBadRequest, origin, "federated_credentials.%s: audience %q: a URL", f.Name, f.Audience)
+			}
+		}
+		names[f.Name] = true
+	}
+	return nil
+}
+
+// ServiceAccountClient is a service account as a client of the token
+// endpoint (client_credentials): its uid, its keys and its federated
+// credentials. store.ErrNotFound when there is none.
+func (r *Repository) ServiceAccountClient(subject string) (ServiceAccount, error) {
+	namespace, name, ok := identity.ParseServiceAccount(subject)
+	if !ok {
+		return ServiceAccount{}, store.ErrNotFound
+	}
+	return r.GetNamespaceServiceAccount(namespace, name)
 }
 
 // tokenRequest is the body of the token action.
@@ -122,6 +181,10 @@ func RegisterServiceAccountRoutes(r gin.IRouter, repo *Repository, gate gin.Hand
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
 			return
 		}
+		if err := validateServiceAccount(sa, tokens, origin); err != nil {
+			httpapi.Fail(c, err)
+			return
+		}
 		sa.UID = rand.Text()
 		if err := repo.PutNamespaceServiceAccount(namespace, &sa); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
@@ -168,6 +231,10 @@ func RegisterServiceAccountRoutes(r gin.IRouter, repo *Repository, gate gin.Hand
 		}
 		// its identity is not the request's to change
 		sa.Name, sa.UID, sa.CreatedAt = name, old.UID, old.CreatedAt
+		if err := validateServiceAccount(sa, tokens, origin); err != nil {
+			httpapi.Fail(c, err)
+			return
+		}
 		if err := repo.PutNamespaceServiceAccount(namespace, &sa); err != nil {
 			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
 			return

@@ -22,6 +22,9 @@ func (c *Config) Validate() error {
 	if _, err := c.Tokens.Pat.Durations(); err != nil {
 		return err
 	}
+	if err := c.Federation.validate(); err != nil {
+		return err
+	}
 	if _, _, err := c.ActiveDatabase(); err != nil {
 		return err
 	}

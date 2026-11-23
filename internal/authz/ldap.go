@@ -69,7 +69,7 @@ func (a *LDAPAuthorizer) dial() (*ldap.Conn, error) {
 		// other way around (see LdapTLS).
 		tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: a.cfg.Connection.Host}
 		if a.cfg.Connection.TLS.InsecureSkipVerify {
-			tlsConfig.InsecureSkipVerify = true
+			tlsConfig.InsecureSkipVerify = true //#nosec G402 -- only when the operator sets ldap.connection.tls.insecure_skip_verify; verification is on by default
 		} else if a.cfg.Connection.TLS.CACert != "" {
 			caCert, readErr := os.ReadFile(a.cfg.Connection.TLS.CACert)
 			if readErr != nil {

@@ -8,6 +8,7 @@ package identity
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -66,4 +67,55 @@ func NamespaceServiceAccounts(namespace string) string {
 // in: every service account's, and its namespace's.
 func ServiceAccountGroups(namespace string) []string {
 	return []string{ServiceAccountsGroup, NamespaceServiceAccounts(namespace)}
+}
+
+// FederatedCredential trusts a platform's identity token as one of Kayra's
+// own identities (a service account): a GitLab CI job's id_token, a
+// GitHub Actions job's, a Kubernetes service account's. The token must
+// come from Issuer, one of federation.issuers, carry Audience (Kayra's URL
+// when empty) in its aud, and match Subject exactly and every Claims
+// value; no wildcard.
+type FederatedCredential struct {
+	// Name tells it apart: gitlab-main.
+	Name string `json:"name" yaml:"name"`
+	// Issuer is the token's iss: https://gitlab.example.com.
+	Issuer string `json:"issuer" yaml:"issuer"`
+	// Subject is its sub, exactly: project_path:infra/compute:ref_type:branch:ref:main.
+	Subject string `json:"subject,omitempty" yaml:"subject,omitempty"`
+	// Claims are other claims it must carry, each exactly (a boolean as
+	// "true"): {"project_path": "infra/compute", "ref_protected": "true"}.
+	Claims map[string]string `json:"claims,omitempty" yaml:"claims,omitempty"`
+	// Audience is what its aud must hold: Kayra's URL when empty.
+	Audience string `json:"audience,omitempty" yaml:"audience,omitempty"`
+}
+
+// Matches tells whether claims, a verified token's, are the credential's:
+// its sub and every claim, compared as strings.
+func (f FederatedCredential) Matches(claims map[string]any) bool {
+	if f.Subject != "" && claimString(claims["sub"]) != f.Subject {
+		return false
+	}
+	for k, v := range f.Claims {
+		if c, ok := claims[k]; !ok || claimString(c) != v {
+			return false
+		}
+	}
+	return f.Subject != "" || len(f.Claims) > 0
+}
+
+// claimString is a scalar claim as a string: "true" for a boolean, a
+// number's decimal; "" for anything else, which matches no value.
+func claimString(v any) string {
+	switch v := v.(type) {
+	case string:
+		return v
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	return ""
 }

@@ -81,10 +81,16 @@ type Server struct {
 	// CanManageSessions tells whether the cluster RBAC grants the caller
 	// verb on another user's sessions: only their own when nil.
 	CanManageSessions func(ac *middleware.AuthContext, verb string) bool
+	// Clients finds one of Kayra's own identities by its client id, for
+	// client_credentials (ErrNoClient for any other id): the grant is
+	// refused when nil.
+	Clients func(clientID string) (MachineClient, error)
 
-	mu       sync.Mutex // refresh rotation, in this process
-	docs     map[string]cachedDoc
-	docsLock sync.Mutex
+	mu   sync.Mutex // refresh rotation, in this process
+	docs map[string]cachedDoc
+	// federation caches the trusted issuers' keys
+	federation issuerKeys
+	docsLock   sync.Mutex
 }
 
 // New is the server cfg describes, its issuer baseURL. auth checks the login
@@ -125,6 +131,7 @@ func New(cfg *config.Config, auth *middleware.Authenticator, s store.Store, keys
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
+	srv.federation.now = srv.now
 	auth.Revoked = srv.Revoked
 	return srv, nil
 }
@@ -158,18 +165,19 @@ func (s *Server) RegisterRoutes(r gin.IRouter) {
 
 func (s *Server) metadata(c *gin.Context) {
 	m := gin.H{
-		"issuer":                                         s.issuer,
-		"authorization_endpoint":                         s.issuer + "/oauth2/authorize",
-		"token_endpoint":                                 s.issuer + "/oauth2/token",
-		"revocation_endpoint":                            s.issuer + "/oauth2/revoke",
-		"jwks_uri":                                       s.issuer + "/oauth2/discovery/keys",
-		"response_types_supported":                       []string{"code"},
-		"grant_types_supported":                          []string{"authorization_code", "refresh_token"},
-		"code_challenge_methods_supported":               []string{"S256"},
-		"token_endpoint_auth_methods_supported":          []string{"none"},
-		"revocation_endpoint_auth_methods_supported":     []string{"none"},
-		"authorization_response_iss_parameter_supported": true,
-		"client_id_metadata_document_supported":          len(s.cfg.MetadataDocumentHosts) > 0,
+		"issuer":                                s.issuer,
+		"authorization_endpoint":                s.issuer + "/oauth2/authorize",
+		"token_endpoint":                        s.issuer + "/oauth2/token",
+		"revocation_endpoint":                   s.issuer + "/oauth2/revoke",
+		"jwks_uri":                              s.issuer + "/oauth2/discovery/keys",
+		"response_types_supported":              []string{"code"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token", "client_credentials"},
+		"code_challenge_methods_supported":      []string{"S256"},
+		"token_endpoint_auth_methods_supported": []string{"none", "private_key_jwt"},
+		"token_endpoint_auth_signing_alg_values_supported": signingMethods,
+		"revocation_endpoint_auth_methods_supported":       []string{"none"},
+		"authorization_response_iss_parameter_supported":   true,
+		"client_id_metadata_document_supported":            len(s.cfg.MetadataDocumentHosts) > 0,
 	}
 	if s.cfg.DynamicRegistration.Enabled {
 		m["registration_endpoint"] = s.issuer + "/oauth2/register"

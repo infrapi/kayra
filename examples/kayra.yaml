@@ -204,6 +204,14 @@ serviceaccounts:
   token_ttl: 1h
   max_token_ttl: 24h
 
+# The CI platforms whose job tokens a service account may be trusted as
+# (its federated_credentials): no secret in the CI
+# (docs/architecture/federation.md).
+# federation:
+#   issuers:
+#     - issuer: https://gitlab.example.com
+#     - issuer: https://token.actions.githubusercontent.com
+
 reconciler:
   # caps how many reconcile/activate operations `kayra reconciler`
   # runs at once (its goroutine pool size); omit/0 defaults to 30.

@@ -16,21 +16,24 @@ func tokenError(c *gin.Context, status int, code, desc string) {
 	c.JSON(status, gin.H{"error": code, "error_description": desc})
 }
 
-// token is the token endpoint: authorization_code, refresh_token. Clients
-// are public: no client authentication, PKCE and the refresh token's
-// rotation stand for it.
+// token is the token endpoint: authorization_code, refresh_token, for
+// public clients, with no client authentication (PKCE and the refresh
+// token's rotation stand for it); client_credentials, for Kayra's own
+// identities, authenticated by a JWT assertion.
 func (s *Server) token(c *gin.Context) {
 	if c.PostForm("client_secret") != "" || c.GetHeader("Authorization") != "" {
 		tokenError(c, http.StatusUnauthorized, "invalid_client", "clients are public: no client authentication")
 		return
 	}
 	switch c.PostForm("grant_type") {
+	case "client_credentials":
+		s.clientCredentials(c)
 	case "authorization_code":
 		s.fromCode(c)
 	case "refresh_token":
 		s.fromRefresh(c)
 	default:
-		tokenError(c, http.StatusBadRequest, "unsupported_grant_type", "grant_type is authorization_code or refresh_token")
+		tokenError(c, http.StatusBadRequest, "unsupported_grant_type", "grant_type is authorization_code, refresh_token or client_credentials")
 	}
 }
 

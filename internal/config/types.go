@@ -25,6 +25,7 @@ type Config struct {
 	Sysadmin          SysadminConfig                  `yaml:"sysadmin"`
 	OAuth2            OAuth2ServerConfig              `yaml:"oauth2"`
 	ServiceAccounts   ServiceAccountsConfig           `yaml:"serviceaccounts"`
+	Federation        FederationConfig                `yaml:"federation"`
 }
 
 // AppConfig is the app: block of the Kayra YAML file — the shared

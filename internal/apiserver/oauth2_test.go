@@ -117,6 +117,7 @@ type oauth2Rig struct {
 	gitlab *fakeOkta    // a second provider, with oauth2: a choice
 	client *http.Client // follows no redirect
 	cfg    *gconfig.Config
+	ci     *fakeOkta // a CI platform's issuer: federation's only trusted one
 }
 
 func newOAuth2Rig(t *testing.T, withGitlab ...bool) *oauth2Rig {
@@ -155,6 +156,10 @@ func newOAuth2Rig(t *testing.T, withGitlab ...bool) *oauth2Rig {
 			OAuth2: &gconfig.OAuth2LoginConfig{ClientID: "gl-kayra", UserID: &gconfig.UserIDConfig{From: "token", Field: "sub", Filter: "^([^@]+)@"}},
 		}}
 	}
+	// a CI platform whose job tokens a service account may be trusted as
+	ci := newFakeOkta(t)
+	ci.kid = "ci-kid"
+	cfg.Federation.Issuers = []gconfig.FederationIssuer{{Issuer: ci.srv.URL}}
 	// infrapi-cli is built in
 	cfg.OAuth2 = gconfig.OAuth2ServerConfig{Enabled: true, Clients: []gconfig.OAuth2Client{
 		{ID: "tool", Name: "A tool", RedirectURIs: []string{"https://tool.example.com/cb"}},
@@ -172,7 +177,7 @@ func newOAuth2Rig(t *testing.T, withGitlab ...bool) *oauth2Rig {
 	srv.Config.Handler = engine
 	srv.Start()
 	t.Cleanup(srv.Close)
-	return &oauth2Rig{t: t, kayra: srv.URL, okta: okta, gitlab: gitlab, cfg: cfg,
+	return &oauth2Rig{t: t, kayra: srv.URL, okta: okta, gitlab: gitlab, cfg: cfg, ci: ci,
 		client: &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 

@@ -30,6 +30,10 @@ type OAuth2ServerConfig struct {
 	// RefreshTokenIdle is how long a refresh token lives unused: 168h (7
 	// days) when empty.
 	RefreshTokenIdle string `yaml:"refresh_token_idle"`
+	// ClientCredentialsTTL is a client_credentials token's lifetime, one
+	// of Kayra's own identities' (a service account's): 15m. No refresh
+	// token: the client asks again.
+	ClientCredentialsTTL string `yaml:"client_credentials_ttl"`
 	// Resources are the resources (RFC 8707) a token may be for, the
 	// apps' URLs: a resource must start with one of them. app.url, Kayra's
 	// own, when empty. A token's aud is its resource.
@@ -65,7 +69,7 @@ type DynamicRegistrationConfig struct {
 }
 
 // OAuth2Durations are a server's TTLs, its settings' or their defaults.
-type OAuth2Durations struct{ Access, Refresh, Idle time.Duration }
+type OAuth2Durations struct{ Access, Refresh, Idle, ClientCredentials time.Duration }
 
 // Durations parses the TTLs.
 func (o OAuth2ServerConfig) Durations() (OAuth2Durations, error) {
@@ -77,6 +81,7 @@ func (o OAuth2ServerConfig) Durations() (OAuth2Durations, error) {
 		{"access_token_ttl", o.AccessTokenTTL, "15m", &d.Access},
 		{"refresh_token_ttl", o.RefreshTokenTTL, "720h", &d.Refresh},
 		{"refresh_token_idle", o.RefreshTokenIdle, "168h", &d.Idle},
+		{"client_credentials_ttl", o.ClientCredentialsTTL, "15m", &d.ClientCredentials},
 	} {
 		raw := f.raw
 		if raw == "" {

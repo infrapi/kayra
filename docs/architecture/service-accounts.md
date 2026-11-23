@@ -129,6 +129,10 @@ curl -s -X POST https://kayra.example.com/apis/authorization.infrapi.io/v1/names
   `client_id=system:serviceaccount:core:deployer`. To revoke all of them,
   delete the service account.
 
+In a CI, or anywhere the platform issues an identity of its own (GitLab CI,
+GitHub Actions, Kubernetes), **don't keep a token at all**: log in with the
+platform's identity token instead. See [Federation](federation.md).
+
 ## 4. Use it
 
 The token is a bearer token like any other. Save it in a context of

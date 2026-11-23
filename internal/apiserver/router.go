@@ -5,6 +5,7 @@ package apiserver
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -140,7 +141,10 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 	rbacRepo := rbac.NewRepository(s, keys)
 	// Kayra's authorization server: tokens of its own, for infrapi-cli and
 	// MCP clients, renewed and revoked
-	saTokens := rbac.ServiceAccountTokens{}
+	saTokens := rbac.ServiceAccountTokens{TrustedIssuer: func(iss string) bool {
+		_, ok := cfg.Federation.Issuer(iss)
+		return ok
+	}}
 	if saTokens.DefaultTTL, saTokens.MaxTTL, err = serviceAccountTTLs(cfg); err != nil {
 		return nil, err
 	}
@@ -150,6 +154,22 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config) (*gin.Engine, error
 			return nil, err
 		}
 		saTokens.Issuer = as
+		// client_credentials: a service account, its keys and its
+		// federated credentials
+		as.Clients = func(clientID string) (oauth2server.MachineClient, error) {
+			sa, err := rbacRepo.ServiceAccountClient(clientID)
+			if errors.Is(err, store.ErrNotFound) {
+				return oauth2server.MachineClient{}, oauth2server.ErrNoClient
+			}
+			if err != nil {
+				return oauth2server.MachineClient{}, err
+			}
+			client := oauth2server.MachineClient{UID: sa.UID, Kind: identity.KindServiceAccount, Federated: sa.FederatedCredentials}
+			if sa.JWKS != nil {
+				client.Keys = sa.JWKS.Keys
+			}
+			return client, nil
+		}
 		// another user's sessions: the cluster RBAC's, the sysadmin first
 		as.CanManageSessions = func(ac *middleware.AuthContext, verb string) bool {
 			ok, _, err := rbacRepo.AuthorizeCluster(ac.UserID, ac.Groups, rbac.AuthorizationAPI, "sessions", verb)
