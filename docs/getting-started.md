@@ -13,46 +13,54 @@ block that follows it.
 
 ## 1. Install
 
-Two binaries: `kayra`, the server, published on every
-[Kayra release](https://github.com/infrapi/kayra/releases)
-(`kayra_<version>_<os>_<arch>`), and `infrapi-cli`, the client, on every
-[CLI release](https://github.com/infrapi/cli/releases). Install them with
-[bin](https://github.com/marcosnils/bin/), which picks the archive
-matching your OS/arch, extracts the binary onto your `PATH` and tracks
-it for later `bin update`:
+Two binaries: `kayra`, the server, published on every [Kayra
+release](https://github.com/infrapi/kayra/releases), and `infrapi-cli`, the
+client, on every [CLI release](https://github.com/infrapi/cli/releases): an
+archive per OS and architecture (`<binary>_<version>_<os>_<arch>`), with
+`checksums.txt`. Install them with [bin](https://github.com/marcosnils/bin/),
+which picks the archive matching your OS and architecture, puts the binary
+on your `PATH` and tracks it for `bin update`:
 
 ```bash
 bin install github.com/infrapi/kayra ~/.local/bin/kayra
 bin install github.com/infrapi/cli ~/.local/bin/infrapi-cli
-
-bin list    # both tracked, so `bin update` upgrades them together
+kayra --version
+infrapi-cli --version
 ```
 
-See [infrapi-cli's docs](https://infrapi.github.io/cli/) for the client.
+See [infrapi-cli's docs](https://infrapi.github.io/cli/getting-started/#1-install) for the client.
 
 ### Or the container image
 
 Every release also publishes an image, `ghcr.io/infrapi/kayra`, for
-`linux/amd64` and `linux/arm64`. It is tagged with the release's version
-(`<major>.<minor>.<patch>`), its minor (`<major>.<minor>`) and `latest`. Pin
-one of the first two in a deployment. It holds `kayra` and no
-configuration: mount yours at `/etc/kayra/kayra.yaml` (`KAYRA_CONFIG_FILE`).
-The entrypoint is `kayra`, and the default command `serve`:
+`linux/amd64` and `linux/arm64`, tagged with the version
+(`<major>.<minor>.<patch>`), its minor (`<major>.<minor>`) and `latest`: pin
+one of the first two in a deployment. It runs as an unprivileged user (uid
+10001). It holds `kayra` and no configuration: mount yours at
+`/etc/kayra/kayra.yaml` (`KAYRA_CONFIG_FILE`). The entrypoint is `kayra`,
+the default command `serve`, and `curl` is there for a healthcheck on
+`/apis/system.<domain>/v1/-/healthz`:
 
 ```bash
 podman run --rm -v ./kayra.yaml:/etc/kayra/kayra.yaml:ro,z -p 8080:8080 ghcr.io/infrapi/kayra:latest
 podman run --rm -v ./kayra.yaml:/etc/kayra/kayra.yaml:ro,z ghcr.io/infrapi/kayra:latest reconciler
 ```
 
-It runs as an unprivileged user (uid 10001) and carries `curl` for a
-healthcheck on `/apis/system.<domain>/v1/-/healthz`.
+### Or with Go
+
+With Go 1.27.4 or later:
+
+```bash
+go install github.com/infrapi/kayra/cmd/kayra@latest
+go install github.com/infrapi/cli/cmd/infrapi-cli@latest
+```
 
 <details>
 <summary>Building from source instead</summary>
 
 ```bash
+git clone https://github.com/infrapi/kayra && cd kayra
 go build -o kayra ./cmd/kayra
-go install github.com/infrapi/cli/cmd/infrapi-cli@latest
 ```
 
 </details>
@@ -60,7 +68,6 @@ go install github.com/infrapi/cli/cmd/infrapi-cli@latest
 `kayra` runs the server and its background jobs. `infrapi-cli` is the
 separate, portable client an end user logs in with — it never reads
 `kayra.yaml` or touches local config at all (see [CLI](cli.md)).
-
 ## 2. Write a config
 
 One YAML file covers everything. This one uses a local on-disk store
