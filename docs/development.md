@@ -30,6 +30,12 @@ make all
 | `test` | `go test` with coverage, writes `cover.out` and `coverage.html` |
 | `docs` | previews these pages in the InfraPI portal, see below |
 
+CI is [infrapi/ci](https://github.com/infrapi/ci)'s Go workflow, called by
+`.github/workflows/ci.yml`: gofmt, `go vet`, golangci-lint, gosec and
+`go test -race`, then, on `main`, the release: the archives and the image
+`ghcr.io/infrapi/kayra`. It fails when a file is not
+gofmt'ed, so run `make fmt` before pushing.
+
 ## Documentation
 
 These pages are published by the InfraPI developer portal,
@@ -73,8 +79,8 @@ Links between docs pages are relative `.md` paths too, with GitHub-style
 heading anchors. Links to another InfraPI repository's docs stay
 absolute (`https://infrapi.github.io/<repo>/...`).
 
-A push to `main` that changes `docs/` runs `.github/workflows/notify-docs.yml`,
-which asks the portal to rebuild, and so does every release; the portal also
+A push to `main` that changes `docs/` asks the portal to rebuild, and so does
+every release (infrapi/ci's workflow, `notify-docs: true`); the portal also
 rebuilds every night. There is no manual deploy step.
 
 ## Layout

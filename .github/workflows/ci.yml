@@ -1,3 +1,10 @@
+# Kayra's CI.
+# infrapi/ci's Go workflow: the checks on a push or a pull request; on a push
+# to main, go-semantic-release makes the version and the GitHub release from
+# the conventional commits, then GoReleaser adds the archives and pushes the
+# image ghcr.io/infrapi/kayra; the portal (infrapi/docs) and the org profile
+# (infrapi/.github) are told after a release, a change to docs/ or a manual
+# run. Its inputs: https://github.com/infrapi/ci
 name: CI
 
 on:
@@ -5,118 +12,20 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Install lint and security tools
-        run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
-
-      - name: Format
-        run: make fmt
-
-      - name: Check formatting
-        run: git diff --exit-code
-
-      - name: Lint
-        run: make lint
-
-      - name: Security
-        run: make security
-
-      - name: Test
-        run: make test
-
-  release:
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+  go:
+    uses: infrapi/ci/.github/workflows/go.yml@v1
     permissions:
-      contents: write
-      # the image, pushed to ghcr.io/infrapi/kayra by GoReleaser
-      packages: write
-    outputs:
-      version: ${{ steps.semrel.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - uses: go-semantic-release/action@v1
-        id: semrel
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          allow-initial-development-versions: true
-
-      # go-semantic-release creates the tag via the GitHub API using
-      # GITHUB_TOKEN — events from that token never cascade into other
-      # workflows (GitHub's own anti-loop protection), so a separate
-      # workflow listening for `push: tags` would never fire. Running
-      # GoReleaser right here, in the same job, sidesteps that entirely.
-      # semrel's own `version` output is empty when this push triggered
-      # no release (e.g. no releasable commits), so there's nothing to
-      # build.
-      - name: Fetch the tag semantic-release just created
-        if: steps.semrel.outputs.version != ''
-        run: git fetch --tags origin
-
-      # go-semantic-release leaves its own working notes (e.g.
-      # .generated-go-semantic-release-changelog.md, .semrel/) behind as
-      # untracked files — GoReleaser refuses to run against a dirty git
-      # state. -x also clears gitignored files, harmless here since
-      # nothing before GoReleaser's own build needs any of them.
-      - name: Clean up go-semantic-release's own working files
-        if: steps.semrel.outputs.version != ''
-        run: git clean -ffdx
-
-      - uses: actions/setup-go@v7
-        if: steps.semrel.outputs.version != ''
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      # GoReleaser builds the image for linux/amd64 and linux/arm64 with
-      # buildx (dockers_v2 in .goreleaser.yaml), and pushes it to ghcr.io
-      # as this repository, with this job's GITHUB_TOKEN.
-      - uses: docker/setup-qemu-action@v3
-        if: steps.semrel.outputs.version != ''
-
-      - uses: docker/setup-buildx-action@v3
-        if: steps.semrel.outputs.version != ''
-
-      - uses: docker/login-action@v3
-        if: steps.semrel.outputs.version != ''
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: goreleaser/goreleaser-action@v7
-        if: steps.semrel.outputs.version != ''
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # A new release: the portal (infrapi/docs) and the org profile
-  # (infrapi/.github) show each product's latest release, tell them.
-  notify:
-    needs: release
-    if: needs.release.outputs.version != ''
-    uses: ./.github/workflows/notify-docs.yml
+      contents: write   # the tag and the release
+      packages: write   # the image, on ghcr.io
+    with:
+      binary: kayra
+      release: semantic
+      docker: true
+      notify-docs: true
     secrets: inherit
