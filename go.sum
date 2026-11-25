@@ -126,8 +126,8 @@ github.com/hashicorp/go-secure-stdlib/strutil v0.1.2/go.mod h1:Gou2R9+il93BqX25L
 github.com/hashicorp/go-uuid v1.0.4 h1:ZrN80XjMzpRYk+2FxMDy2A2zz0d5QjJ7GMFSkZLj12A=
 github.com/hashicorp/go-uuid v1.0.4/go.mod h1:x2Ds7vSkQ2n/yQj8Synnxmt0zt1l26uCAjxIhChisLU=
 github.com/hashicorp/vault-client-go v0.4.3/go.mod h1:4tDw7Uhq5XOxS1fO+oMtotHL7j4sB9cp0T7U6m4FzDY=
-github.com/infrapi/lib v0.22.1 h1:TXsvdnw2dFBofu6JokFcz3kiEVhcuUJ1dwF2DfAbcDc=
-github.com/infrapi/lib v0.22.1/go.mod h1:bkR1T2GFzVfwAFdqOXDq/JT1m+STIHhsSTrMqzbVUN0=
+github.com/infrapi/lib v0.26.0 h1:2hd/cYKebCs5toyEEuOBaUdYPa71zoYedzd5WyoD+ew=
+github.com/infrapi/lib v0.26.0/go.mod h1:bkR1T2GFzVfwAFdqOXDq/JT1m+STIHhsSTrMqzbVUN0=
 github.com/jcmturner/aescts/v2 v2.0.0 h1:9YKLH6ey7H4eDBXW8khjYslgyqG2xZikXP0EQFKrle8=
 github.com/jcmturner/aescts/v2 v2.0.0/go.mod h1:AiaICIRyfYg35RUkr8yESTqvSy7csK90qZ5xfvvsoNs=
 github.com/jcmturner/dnsutils/v2 v2.0.0 h1:lltnkeZGL0wILNvrNiVCR6Ro5PGU/SeBvVO/8c/iPbo=
