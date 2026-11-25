@@ -3,12 +3,13 @@ module github.com/infrapi/kayra
 go 1.27.4
 
 require (
+	github.com/getkin/kin-openapi v0.153.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-uuid v1.0.4
-	github.com/infrapi/lib v0.21.0
+	github.com/infrapi/lib v0.22.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/urfave/cli/v3 v3.14.0
 	go.etcd.io/etcd/client/v3 v3.7.3
@@ -26,7 +27,6 @@ require (
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
-	github.com/getkin/kin-openapi v0.153.0 // indirect
 	github.com/gin-contrib/cors v1.7.11 // indirect
 	github.com/gin-contrib/sse v1.1.2 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
