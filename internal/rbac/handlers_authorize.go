@@ -2,11 +2,11 @@ package rbac
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-
+	"github.com/infrapi/kayra/api"
 	"github.com/infrapi/kayra/internal/audit"
 	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/middleware"
@@ -27,9 +27,9 @@ import (
 // RBAC (Repository.AuthorizeCluster), never a namespace's.
 type AuthorizeRequest struct {
 	Namespace string `json:"namespace"`
-	Api       string `json:"api" binding:"required"`
-	Resource  string `json:"resource" binding:"required"`
-	Verb      string `json:"verb" binding:"required"`
+	Api       string `json:"api"`
+	Resource  string `json:"resource"`
+	Verb      string `json:"verb"`
 	// RequestID, SourceIP and UserAgent are the original request's, as
 	// the app received it: the audit's. The app's own address and agent
 	// when empty.
@@ -81,12 +81,11 @@ type Prechecks struct {
 	MembersRead func(api, resource, verb string) bool
 }
 
-// RegisterAuthorizeRoute mounts the one route other apps built on
-// infrapi/lib call to authorize a request against this namespace's own
-// RBAC objects: POST /apis/authorization.infrapi.io/v1/check, gated by
-// gate (normally middleware.Authenticator, any configured provider) so
-// the caller's user id and groups come from this same request's own
-// resolved identity, not from the request body.
+// Check is the one route other apps built on infrapi/lib call to
+// authorize a request against Kayra's RBAC: POST
+// /apis/authorization.infrapi.io/v1/check, by any authenticated caller, its
+// user id and groups the request's own resolved identity, never the
+// body's.
 //
 // "check" sits in the same api group ("authorization.infrapi.io")
 // as the groups/roles/rolebindings it decides against, but is not
@@ -123,136 +122,146 @@ type Prechecks struct {
 // comes before roles, so a resource the app doesn't have is reported
 // as that, not as an RBAC denial. A precheck failure is an error
 // response; an RBAC denial (2, 8, 9) is a 200 with allowed:false and
-// the reason.
-func RegisterAuthorizeRoute(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, prechecks Prechecks, auditor *audit.Auditor) {
-	r.POST("/apis/"+AuthorizationAPI+"/v1/check", gate, func(c *gin.Context) {
-		const origin = "rbac.Authorize"
-		ac, ok := middleware.GetAuth(c)
-		if !ok {
-			httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, origin, "not authenticated"))
-			return
-		}
+// the reason. Every outcome is audited.
+func (s *Server) Check(ctx context.Context, body api.CheckRequest) (api.CheckResponse, error) {
+	const origin = "rbac.Authorize"
+	ac, err := Caller(ctx, origin)
+	if err != nil {
+		return api.CheckResponse{}, err
+	}
+	req, err := fromAPI[AuthorizeRequest](body, origin)
+	if err != nil {
+		return api.CheckResponse{}, err
+	}
+	if req.Api == "" || req.Resource == "" || req.Verb == "" {
+		return api.CheckResponse{}, liberrors.New(http.StatusBadRequest, origin, "api, resource and verb are required")
+	}
+	// every outcome is answered through answer or fail, and audited
+	var (
+		rec  audit.Record
+		out  api.CheckResponse
+		ferr error
+	)
+	answer := func(allowed bool, reason string) {
+		rec.Allowed, rec.Reason = allowed, reason
+		out = api.CheckResponse{Allowed: allowed, Reason: reason, User: ac.UserID}
+	}
+	fail := func(err *liberrors.Error) {
+		rec.Reason, rec.Status = err.Message, err.Code
+		ferr = err
+	}
+	defer func() { s.o.Auditor.Record(checkRecord(httpapi.RequestOf(ctx), ac, req, rec)) }()
+	s.decide(ac, req, answer, fail)
+	return out, ferr
+}
 
-		var req AuthorizeRequest
-		if err := c.ShouldBindJSON(&req); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin, ""))
-			return
-		}
-		// every outcome is answered through answer or fail, and audited
-		var rec audit.Record
-		answer := func(allowed bool, reason string) {
-			rec.Allowed, rec.Reason = allowed, reason
-			c.JSON(http.StatusOK, AuthorizeResponse{Allowed: allowed, Reason: reason, User: ac.UserID})
-		}
-		fail := func(err *liberrors.Error) {
-			rec.Reason, rec.Status = err.Message, err.Code
-			httpapi.Fail(c, err)
-		}
-		defer func() { auditor.Record(checkRecord(c, ac, req, rec)) }()
-		// a scoped personal access token: what its scope allows, whatever
-		// the roles of its user
-		if !ac.Scope.Allows(req.Api, req.Verb) {
-			answer(false, fmt.Sprintf("your token's scope does not grant %q on api %q", req.Verb, req.Api))
-			return
-		}
-		builtin := prechecks.Builtin != nil && prechecks.Builtin(req.Api)
+// decide runs /check's steps for req, answering through answer or fail.
+func (s *Server) decide(ac *middleware.AuthContext, req AuthorizeRequest, answer func(allowed bool, reason string), fail func(*liberrors.Error)) {
+	const origin = "rbac.Authorize"
+	repo, prechecks := s.repo, s.o.Prechecks
+	// a scoped personal access token: what its scope allows, whatever
+	// the roles of its user
+	if !ac.Scope.Allows(req.Api, req.Verb) {
+		answer(false, fmt.Sprintf("your token's scope does not grant %q on api %q", req.Verb, req.Api))
+		return
+	}
+	builtin := prechecks.Builtin != nil && prechecks.Builtin(req.Api)
 
-		// a cluster-scoped resource: an API's implicit rules about itself,
-		// then the cluster RBAC
-		if req.Namespace == "" {
-			if ImplicitAPI(ac.UserID, req.Api, req.Resource, req.Verb, req.Name) {
-				answer(true, "")
-				return
-			}
-			if !builtin && prechecks.ClusterResource != nil {
-				if perr := prechecks.ClusterResource(req.Api, req.Resource, req.Verb); perr != nil {
-					fail(perr)
-					return
-				}
-			}
-			allowed, reason, err := repo.AuthorizeCluster(ac.UserID, ac.Groups, req.Api, req.Resource, req.Verb)
-			if err != nil {
-				fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeCluster", ""))
-				return
-			}
-			if !allowed && prechecks.MembersRead != nil && prechecks.MembersRead(req.Api, req.Resource, req.Verb) {
-				members, err := repo.MemberNamespaces(ac.UserID, ac.Groups)
-				if err != nil {
-					fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".MemberNamespaces", ""))
-					return
-				}
-				allowed = req.Verb == "list" || len(members) > 0
-				reason = ""
-				if !allowed {
-					reason = "you are a member of no namespace: neither your user id nor any of your groups is listed in any namespace's groups"
-				}
-			}
-			answer(allowed, reason)
+	// a cluster-scoped resource: an API's implicit rules about itself,
+	// then the cluster RBAC
+	if req.Namespace == "" {
+		if ImplicitAPI(ac.UserID, req.Api, req.Resource, req.Verb, req.Name) {
+			answer(true, "")
 			return
 		}
-
-		if prechecks.Namespace != nil {
-			if perr := prechecks.Namespace(req.Namespace); perr != nil {
+		if !builtin && prechecks.ClusterResource != nil {
+			if perr := prechecks.ClusterResource(req.Api, req.Resource, req.Verb); perr != nil {
 				fail(perr)
 				return
 			}
 		}
-
-		// Kayra's own apis in a namespace: as their routes decide them
-		if builtin {
-			allowed, reason, err := repo.CanManageNamespaceRBAC(ac.UserID, ac.Groups, req.Namespace, req.Api, req.Resource, req.Verb)
-			if err != nil {
-				fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".CanManageNamespaceRBAC", ""))
-				return
-			}
-			answer(allowed, reason)
-			return
-		}
-
-		memberGroups, reason, err := repo.NamespaceMembership(req.Namespace, ac.UserID, ac.Groups)
+		allowed, reason, err := repo.AuthorizeCluster(ac.UserID, ac.Groups, req.Api, req.Resource, req.Verb)
 		if err != nil {
-			fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".NamespaceMembership", ""))
+			fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeCluster", ""))
 			return
 		}
-		if reason != "" {
-			answer(false, reason)
-			return
-		}
-
-		if prechecks.Api != nil {
-			if perr := prechecks.Api(req.Namespace, req.Api); perr != nil {
-				fail(perr)
+		if !allowed && prechecks.MembersRead != nil && prechecks.MembersRead(req.Api, req.Resource, req.Verb) {
+			members, err := repo.MemberNamespaces(ac.UserID, ac.Groups)
+			if err != nil {
+				fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".MemberNamespaces", ""))
 				return
 			}
-		}
-		if prechecks.Resource != nil {
-			if perr := prechecks.Resource(req.Api, req.Resource, req.Verb); perr != nil {
-				fail(perr)
-				return
+			allowed = req.Verb == "list" || len(members) > 0
+			reason = ""
+			if !allowed {
+				reason = "you are a member of no namespace: neither your user id nor any of your groups is listed in any namespace's groups"
 			}
 		}
-
-		allowed, reason, err := repo.AuthorizeMember(req.Namespace, memberGroups, req.Api, req.Resource, req.Verb)
-		if err != nil {
-			fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeMember", ""))
-			return
-		}
-
 		answer(allowed, reason)
-	})
+		return
+	}
+
+	if prechecks.Namespace != nil {
+		if perr := prechecks.Namespace(req.Namespace); perr != nil {
+			fail(perr)
+			return
+		}
+	}
+
+	// Kayra's own apis in a namespace: as their routes decide them
+	if builtin {
+		allowed, reason, err := repo.CanManageNamespaceRBAC(ac.UserID, ac.Groups, req.Namespace, req.Api, req.Resource, req.Verb)
+		if err != nil {
+			fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".CanManageNamespaceRBAC", ""))
+			return
+		}
+		answer(allowed, reason)
+		return
+	}
+
+	memberGroups, reason, err := repo.NamespaceMembership(req.Namespace, ac.UserID, ac.Groups)
+	if err != nil {
+		fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".NamespaceMembership", ""))
+		return
+	}
+	if reason != "" {
+		answer(false, reason)
+		return
+	}
+
+	if prechecks.Api != nil {
+		if perr := prechecks.Api(req.Namespace, req.Api); perr != nil {
+			fail(perr)
+			return
+		}
+	}
+	if prechecks.Resource != nil {
+		if perr := prechecks.Resource(req.Api, req.Resource, req.Verb); perr != nil {
+			fail(perr)
+			return
+		}
+	}
+
+	allowed, reason, err := repo.AuthorizeMember(req.Namespace, memberGroups, req.Api, req.Resource, req.Verb)
+	if err != nil {
+		fail(liberrors.Wrap(err, http.StatusInternalServerError, origin+".AuthorizeMember", ""))
+		return
+	}
+
+	answer(allowed, reason)
 }
 
 // checkRecord is the audit record of a /check decision: the caller, the
 // request it asks about, as the app received it, and the outcome.
-func checkRecord(c *gin.Context, ac *middleware.AuthContext, req AuthorizeRequest, out audit.Record) audit.Record {
-	r := audit.Record{
-		Stage: audit.StageCheck, RequestID: req.RequestID, SourceIP: cmp.Or(req.SourceIP, c.ClientIP()),
-		UserAgent: cmp.Or(req.UserAgent, c.Request.UserAgent()),
+func checkRecord(r *httpapi.Request, ac *middleware.AuthContext, req AuthorizeRequest, out audit.Record) audit.Record {
+	rec := audit.Record{
+		Stage: audit.StageCheck, RequestID: req.RequestID, SourceIP: cmp.Or(req.SourceIP, r.ClientIP),
+		UserAgent: cmp.Or(req.UserAgent, r.UserAgent),
 		API:       req.Api, Namespace: req.Namespace, Resource: req.Resource, Name: req.Name, Verb: req.Verb,
 		Allowed: out.Allowed, Reason: out.Reason, Status: out.Status,
 	}
 	if ac != nil {
-		r.User, r.Groups, r.Kind, r.ClientID = ac.UserID, ac.Groups, ac.Kind, ac.ClientID
+		rec.User, rec.Groups, rec.Kind, rec.ClientID = ac.UserID, ac.Groups, ac.Kind, ac.ClientID
 	}
-	return r
+	return rec
 }

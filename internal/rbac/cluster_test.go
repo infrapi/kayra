@@ -9,7 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/infrapi/kayra/internal/httpapi"
 	liberrors "github.com/infrapi/lib/pkg/errors"
+	"github.com/infrapi/lib/pkg/server"
 )
 
 const (
@@ -95,9 +97,9 @@ func TestClusterRequest(t *testing.T) {
 	}
 }
 
-// The cluster routes are behind RequireCluster: a caller without a
-// global binding is refused, one with it is let in for what it grants.
-func TestRequireCluster(t *testing.T) {
+// The cluster routes decide with AuthorizeClusterRequest: a caller without
+// a global binding is refused, one with it is let in for what it grants.
+func TestAuthorizeClusterRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := newTestRepo(t)
 	repo.SetSysadmin([]string{testSysadminGroup})
@@ -108,10 +110,12 @@ func TestRequireCluster(t *testing.T) {
 		g := engine.Group("/"+name, fakeAuthGate(name, groups...))
 		g.Any("/apis/*rest", func(c *gin.Context) {
 			c.Request.URL.Path = "/apis" + c.Param("rest")
-			RequireCluster(repo)(c)
-			if !c.IsAborted() {
-				c.Status(http.StatusOK)
+			httpapi.WithRequest(c)
+			if err := repo.AuthorizeClusterRequest(c.Request.Context()); err != nil {
+				server.AbortError(c, err)
+				return
 			}
+			c.Status(http.StatusOK)
 		})
 	}
 	for _, c := range []struct {
@@ -141,8 +145,7 @@ func TestClusterEscalation(t *testing.T) {
 		{Apis: []string{computeAPI}, Resources: []string{"hosts"}, Verbs: []string{"get", "list", "update"}},
 	}
 	seedGlobal(t, repo, "rbac-delegates", "sandbox-delegates", delegated...)
-	engine := gin.New()
-	RegisterClusterRoutes(engine.Group("", fakeAuthGate("d", "sandbox-delegates")), repo, noopGate, nil)
+	engine := serve(NewServer(ServerOptions{Repo: repo}), fakeAuthGate("d", "sandbox-delegates"))
 
 	// a subset of what they hold: accepted
 	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/clusterroles", Role{
@@ -217,8 +220,7 @@ func TestNamespaceEscalation(t *testing.T) {
 	if err := repo.PutClusterRoleBinding(&RoleBinding{Name: "writers", Metadata: meta, Role: "writers", Groups: []string{"writers"}}); err != nil {
 		t.Fatal(err)
 	}
-	engine := gin.New()
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("w", "sandbox-writers"), nil)
+	engine := serve(NewServer(ServerOptions{Repo: repo}), fakeAuthGate("w", "sandbox-writers"))
 	path := "/apis/authorization.infrapi.io/v1/namespaces/" + testNamespace + "/roles"
 
 	if w := doJSON(t, engine, http.MethodPost, path, Role{Name: "read", Rules: []Rule{
@@ -234,8 +236,7 @@ func TestNamespaceEscalation(t *testing.T) {
 
 	// a namespace's admins (authorization *, so escalate): unaffected
 	seedClusterRBAC(t, repo, testAdminGroup, testNamespace)
-	admins := gin.New()
-	RegisterNamespaceRoutes(admins, repo, fakeAuthGate(testAdmin, testAdminGroup), nil)
+	admins := serve(NewServer(ServerOptions{Repo: repo}), fakeAuthGate(testAdmin, testAdminGroup))
 	if w := doJSON(t, admins, http.MethodPost, path, Role{Name: "all", Rules: []Rule{
 		{Apis: []string{computeAPI}, Resources: []string{"*"}, Verbs: []string{"*"}},
 	}}); w.Code != http.StatusCreated {
@@ -262,8 +263,7 @@ func TestCheckCluster(t *testing.T) {
 	}
 	check := func(groups []string, req AuthorizeRequest) AuthorizeResponse {
 		t.Helper()
-		engine := gin.New()
-		RegisterAuthorizeRoute(engine, repo, fakeAuthGate("u", groups...), prechecks, nil)
+		engine := serve(NewServer(ServerOptions{Repo: repo, Prechecks: prechecks}), fakeAuthGate("u", groups...))
 		w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/check", req)
 		if w.Code != http.StatusOK {
 			t.Fatalf("%+v: %d %s", req, w.Code, w.Body.String())
@@ -281,7 +281,7 @@ func TestCheckCluster(t *testing.T) {
 	if len(asked) != 2 || asked[0] != computeAPI+" hosts" {
 		t.Errorf("prechecks: %v", asked)
 	}
-	// Kayra's own api, in a namespace: as RequireClusterRBAC decides it
+	// Kayra's own api, in a namespace: as AuthorizeNamespaceRBAC decides it
 	if r := check([]string{testAdminGroup}, AuthorizeRequest{Namespace: testNamespace, Api: AuthorizationAPI, Resource: "roles", Verb: "create"}); !r.Allowed {
 		t.Errorf("a namespace's admin on its roles: %+v", r)
 	}

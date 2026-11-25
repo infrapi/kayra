@@ -256,9 +256,9 @@ func TestDiscoveryListsBuiltinGroups(t *testing.T) {
 		namespaced bool
 		verbs      string
 	}{
-		{"system.infrapi.io", "namespaces", false, "create,delete,get,list,update"},
+		{"system.infrapi.io", "namespaces", false, "create,delete,get,list"},
 		{"catalog.infrapi.io", "apiregistrations", false, "create,delete,get,list,update"},
-		{"catalog.infrapi.io", "subscriptions", true, "create,delete,get,list,update"},
+		{"catalog.infrapi.io", "subscriptions", true, "create,delete,get,list"},
 		{"authorization.infrapi.io", "clusterroles", false, "create,delete,get,list,update"},
 		{"authorization.infrapi.io", "roles", true, "create,delete,get,list,update"},
 	} {

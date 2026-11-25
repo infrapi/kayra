@@ -1,6 +1,6 @@
 ---
 title: middleware
-description: "The two gin middlewares every route sits behind: bearer authentication and the sysadmin gate."
+description: "The gin authentication middleware every route sits behind, the caller it puts in the request's context, and the sysadmin group."
 weight: 80
 ---
 
@@ -34,6 +34,17 @@ type AuthContext struct {
 ac, ok := middleware.GetAuth(c) // read what a prior gate resolved
 middleware.SetAuth(c, ac)       // set it directly — tests build a fixed-identity gate this way
 ```
+
+## AuthOf
+
+```go
+ac, ok := middleware.AuthOf(ctx)
+```
+
+The caller of a request, from its context: `SetAuth`, which the
+authenticator calls, puts the `AuthContext` both in the gin context
+(`GetAuth(c)`) and in the request's, for the handlers generated from the
+[contracts](../development.md#contracts), which get the context only.
 
 ## Authenticator
 
@@ -78,7 +89,7 @@ meaning a token "inherits all roles where I'm a member of group" at
 request time, never a snapshot taken when the token was minted. For a
 `claims`-backed one, there is no directory left to re-query by bare user
 id, so `resolvePAT` reads `SnapshotGroups`/`SnapshotAttributes` instead
-— whatever [tokenapi](tokenapi.md) captured when the PAT was minted.
+— whatever [rbac](rbac.md#personal-access-tokens) captured when the PAT was minted.
 
 ### Kayra's own identities
 
@@ -103,5 +114,5 @@ the check itself (which applies the scope to the request it decides), GET
 `SysadminGroupFor(platform)` is `"<platform>-core-sysadmin"`, the default
 group of the built-in sysadmin binding when `sysadmin.groups` is empty
 ([config](config.md)). There is no sysadmin middleware: what a caller may
-do on a cluster-scoped resource is [rbac](rbac.md#requirecluster)'s
+do on a cluster-scoped resource is [rbac](rbac.md#authorizeclusterrequest)'s
 cluster RBAC, the sysadmin binding first.

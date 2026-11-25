@@ -1,6 +1,7 @@
 package rbac
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -8,9 +9,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/gin-gonic/gin"
-
-	"github.com/infrapi/kayra/internal/httpapi"
+	"github.com/infrapi/kayra/api"
 	"github.com/infrapi/kayra/internal/identity"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/store"
@@ -106,180 +105,153 @@ func (r *Repository) ServiceAccountClient(subject string) (ServiceAccount, error
 	return r.GetNamespaceServiceAccount(namespace, name)
 }
 
-// tokenRequest is the body of the token action.
-type tokenRequest struct {
-	// ExpiresIn is the token's lifetime, a Go duration (1h): the
-	// configured default when empty.
-	ExpiresIn string `json:"expires_in"`
-	// Audience are the resources the token is for: the authorization
-	// server's first resource, Kayra, when empty.
-	Audience []string `json:"audience"`
+// A namespace's service accounts, /apis/authorization.infrapi.io/v1/
+// namespaces/:namespace/serviceaccounts, decided as its other RBAC objects
+// (CanManageNamespaceRBAC): create, list, get, update (its description,
+// keys and federated credentials), delete, and the token action, POST
+// .../serviceaccounts/:name/token, its own permission
+// (serviceaccounts/token, create), whoever holds it acting with the
+// service account's rights.
+
+const serviceAccounts = "serviceaccounts"
+
+func (s *Server) CreateServiceAccount(ctx context.Context, namespace string, body api.ServiceAccount) (api.ServiceAccount, error) {
+	const origin = "rbac.CreateServiceAccount"
+	if err := s.namespace(ctx, namespace, serviceAccounts, "create"); err != nil {
+		return api.ServiceAccount{}, err
+	}
+	sa, err := fromAPI[ServiceAccount](body, origin)
+	if err != nil {
+		return api.ServiceAccount{}, err
+	}
+	if !identity.ValidName(sa.Name) {
+		return api.ServiceAccount{}, liberrors.New(http.StatusBadRequest, origin, "name %q: a DNS label, lower case letters, digits and -", sa.Name)
+	}
+	if err := resolveNamespace(&sa.Metadata, namespace); err != nil {
+		return api.ServiceAccount{}, err
+	}
+	if _, err := s.repo.GetNamespaceServiceAccount(namespace, sa.Name); err == nil {
+		return api.ServiceAccount{}, liberrors.New(http.StatusConflict, origin, "service account %q exists in namespace %q", sa.Name, namespace)
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return api.ServiceAccount{}, internal(err, origin)
+	}
+	if err := validateServiceAccount(sa, s.o.Tokens, origin); err != nil {
+		return api.ServiceAccount{}, err
+	}
+	sa.UID = rand.Text()
+	if err := s.repo.PutNamespaceServiceAccount(namespace, &sa); err != nil {
+		return api.ServiceAccount{}, internal(err, origin)
+	}
+	return toAPI[api.ServiceAccount](sa, origin)
 }
 
-// tokenResponse is what the token action answers.
-type tokenResponse struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
+func (s *Server) ListServiceAccounts(ctx context.Context, namespace string) ([]api.ServiceAccount, error) {
+	const origin = "rbac.ListServiceAccounts"
+	if err := s.namespace(ctx, namespace, serviceAccounts, "list"); err != nil {
+		return nil, err
+	}
+	sas, err := s.repo.ListNamespaceServiceAccounts(namespace)
+	if err != nil {
+		return nil, internal(err, origin)
+	}
+	return toAPI[[]api.ServiceAccount](sas, origin)
 }
 
-// RegisterServiceAccountRoutes mounts a namespace's service accounts at
-// /apis/authorization.infrapi.io/v1/namespaces/:namespace/serviceaccounts,
-// behind gate then the same check as its other RBAC objects
-// (RequireClusterRBAC): create, list, get, update (its description),
-// delete, and the token action, POST .../serviceaccounts/:name/token,
-// its own permission (serviceaccounts/token, create), whoever holds it
-// acting with the service account's rights.
-func RegisterServiceAccountRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, tokens ServiceAccountTokens) {
-	group := r.Group("/apis/"+AuthorizationAPI+"/v1/namespaces/:namespace", gate)
-	const resource = "serviceaccounts"
+func (s *Server) GetServiceAccount(ctx context.Context, namespace, name string) (api.ServiceAccount, error) {
+	const origin = "rbac.GetServiceAccount"
+	if err := s.namespace(ctx, namespace, serviceAccounts, "get"); err != nil {
+		return api.ServiceAccount{}, err
+	}
+	sa, err := s.repo.GetNamespaceServiceAccount(namespace, name)
+	if err != nil {
+		return api.ServiceAccount{}, notFoundOrInternal(err, origin, "service account %q not found", name)
+	}
+	return toAPI[api.ServiceAccount](sa, origin)
+}
 
-	group.POST("/serviceaccounts", RequireClusterRBAC(repo, AuthorizationAPI, resource, "create"), func(c *gin.Context) {
-		const origin = "rbac.CreateServiceAccount"
-		namespace := c.Param("namespace")
-		var sa ServiceAccount
-		if err := c.ShouldBindJSON(&sa); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin, ""))
-			return
-		}
-		if !identity.ValidName(sa.Name) {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "name %q: a DNS label, lower case letters, digits and -", sa.Name))
-			return
-		}
-		if err := resolveNamespace(&sa.Metadata, namespace); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if _, err := repo.GetNamespaceServiceAccount(namespace, sa.Name); err == nil {
-			httpapi.Fail(c, liberrors.New(http.StatusConflict, origin, "service account %q exists in namespace %q", sa.Name, namespace))
-			return
-		} else if !errors.Is(err, store.ErrNotFound) {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
-			return
-		}
-		if err := validateServiceAccount(sa, tokens, origin); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		sa.UID = rand.Text()
-		if err := repo.PutNamespaceServiceAccount(namespace, &sa); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
-			return
-		}
-		c.JSON(http.StatusCreated, sa)
-	})
+func (s *Server) UpdateServiceAccount(ctx context.Context, namespace, name string, body api.ServiceAccount) (api.ServiceAccount, error) {
+	const origin = "rbac.UpdateServiceAccount"
+	if err := s.namespace(ctx, namespace, serviceAccounts, "update"); err != nil {
+		return api.ServiceAccount{}, err
+	}
+	old, err := s.repo.GetNamespaceServiceAccount(namespace, name)
+	if err != nil {
+		return api.ServiceAccount{}, notFoundOrInternal(err, origin, "service account %q not found", name)
+	}
+	sa, err := fromAPI[ServiceAccount](body, origin)
+	if err != nil {
+		return api.ServiceAccount{}, err
+	}
+	if err := resolveNamespace(&sa.Metadata, namespace); err != nil {
+		return api.ServiceAccount{}, err
+	}
+	// its identity is not the request's to change
+	sa.Name, sa.UID, sa.CreatedAt = name, old.UID, old.CreatedAt
+	if err := validateServiceAccount(sa, s.o.Tokens, origin); err != nil {
+		return api.ServiceAccount{}, err
+	}
+	if err := s.repo.PutNamespaceServiceAccount(namespace, &sa); err != nil {
+		return api.ServiceAccount{}, internal(err, origin)
+	}
+	return toAPI[api.ServiceAccount](sa, origin)
+}
 
-	group.GET("/serviceaccounts", RequireClusterRBAC(repo, AuthorizationAPI, resource, "list"), func(c *gin.Context) {
-		sas, err := repo.ListNamespaceServiceAccounts(c.Param("namespace"))
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.ListServiceAccounts", ""))
-			return
-		}
-		c.JSON(http.StatusOK, sas)
-	})
+func (s *Server) DeleteServiceAccount(ctx context.Context, namespace, name string) error {
+	const origin = "rbac.DeleteServiceAccount"
+	if err := s.namespace(ctx, namespace, serviceAccounts, "delete"); err != nil {
+		return err
+	}
+	if _, err := s.repo.GetNamespaceServiceAccount(namespace, name); err != nil {
+		return notFoundOrInternal(err, origin, "service account %q not found", name)
+	}
+	if err := s.repo.DeleteNamespaceServiceAccount(namespace, name); err != nil {
+		return internal(err, origin)
+	}
+	return nil
+}
 
-	group.GET("/serviceaccounts/:serviceaccount", RequireClusterRBAC(repo, AuthorizationAPI, resource, "get"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("serviceaccount")
-		sa, err := repo.GetNamespaceServiceAccount(namespace, name)
-		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.GetServiceAccount", "service account %q not found", name))
-			return
+// CreateServiceAccountToken is the token action: a token of the service
+// account, for its audience (the authorization server's first resource,
+// Kayra, when empty), lasting expires_in (the default when empty, at most
+// the longest).
+func (s *Server) CreateServiceAccountToken(ctx context.Context, namespace, name string, body api.ServiceAccountTokenRequest) (api.ServiceAccountToken, error) {
+	const origin = "rbac.ServiceAccountToken"
+	tokens := s.o.Tokens
+	if err := s.namespace(ctx, namespace, serviceAccounts+"/token", "create"); err != nil {
+		return api.ServiceAccountToken{}, err
+	}
+	if tokens.Issuer == nil {
+		return api.ServiceAccountToken{}, liberrors.New(http.StatusNotImplemented, origin, "service account tokens need Kayra's authorization server").
+			WithSolution("set oauth2.enabled in Kayra's configuration")
+	}
+	sa, err := s.repo.GetNamespaceServiceAccount(namespace, name)
+	if err != nil {
+		return api.ServiceAccountToken{}, notFoundOrInternal(err, origin, "service account %q not found", name)
+	}
+	ttl := tokens.DefaultTTL
+	if body.ExpiresIn != "" {
+		if ttl, err = time.ParseDuration(body.ExpiresIn); err != nil || ttl <= 0 {
+			return api.ServiceAccountToken{}, liberrors.New(http.StatusBadRequest, origin, "expires_in %q: a duration, like 1h", body.ExpiresIn)
 		}
-		c.JSON(http.StatusOK, sa)
-	})
-
-	group.PUT("/serviceaccounts/:serviceaccount", RequireClusterRBAC(repo, AuthorizationAPI, resource, "update"), func(c *gin.Context) {
-		const origin = "rbac.UpdateServiceAccount"
-		namespace, name := c.Param("namespace"), c.Param("serviceaccount")
-		old, err := repo.GetNamespaceServiceAccount(namespace, name)
-		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, origin, "service account %q not found", name))
-			return
+	}
+	if ttl > tokens.MaxTTL {
+		return api.ServiceAccountToken{}, liberrors.New(http.StatusBadRequest, origin, "expires_in %s: more than the %s a token may last", ttl, tokens.MaxTTL).
+			WithSolution("ask for a new token when it expires; a CI gets one from its platform's identity")
+	}
+	audience := body.Audience
+	if len(audience) == 0 {
+		audience = tokens.Issuer.Resources()[:1]
+	}
+	for _, a := range audience {
+		if !tokens.Issuer.AllowedResource(a) {
+			return api.ServiceAccountToken{}, liberrors.New(http.StatusBadRequest, origin, "audience %q: not one of the resources tokens are issued for (%v)", a, tokens.Issuer.Resources())
 		}
-		var sa ServiceAccount
-		if err := c.ShouldBindJSON(&sa); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin, ""))
-			return
-		}
-		if err := resolveNamespace(&sa.Metadata, namespace); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		// its identity is not the request's to change
-		sa.Name, sa.UID, sa.CreatedAt = name, old.UID, old.CreatedAt
-		if err := validateServiceAccount(sa, tokens, origin); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if err := repo.PutNamespaceServiceAccount(namespace, &sa); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
-			return
-		}
-		c.JSON(http.StatusOK, sa)
-	})
-
-	group.DELETE("/serviceaccounts/:serviceaccount", RequireClusterRBAC(repo, AuthorizationAPI, resource, "delete"), func(c *gin.Context) {
-		const origin = "rbac.DeleteServiceAccount"
-		namespace, name := c.Param("namespace"), c.Param("serviceaccount")
-		if _, err := repo.GetNamespaceServiceAccount(namespace, name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, origin, "service account %q not found", name))
-			return
-		}
-		if err := repo.DeleteNamespaceServiceAccount(namespace, name); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
-			return
-		}
-		c.Status(http.StatusNoContent)
-	})
-
-	group.POST("/serviceaccounts/:serviceaccount/token", RequireClusterRBAC(repo, AuthorizationAPI, resource+"/token", "create"), func(c *gin.Context) {
-		const origin = "rbac.ServiceAccountToken"
-		namespace, name := c.Param("namespace"), c.Param("serviceaccount")
-		if tokens.Issuer == nil {
-			httpapi.Fail(c, liberrors.New(http.StatusNotImplemented, origin, "service account tokens need Kayra's authorization server").
-				WithSolution("set oauth2.enabled in Kayra's configuration"))
-			return
-		}
-		sa, err := repo.GetNamespaceServiceAccount(namespace, name)
-		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, origin, "service account %q not found", name))
-			return
-		}
-		var req tokenRequest
-		if c.Request.ContentLength != 0 {
-			if err := c.ShouldBindJSON(&req); err != nil {
-				httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, origin, ""))
-				return
-			}
-		}
-		ttl := tokens.DefaultTTL
-		if req.ExpiresIn != "" {
-			if ttl, err = time.ParseDuration(req.ExpiresIn); err != nil || ttl <= 0 {
-				httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "expires_in %q: a duration, like 1h", req.ExpiresIn))
-				return
-			}
-		}
-		if ttl > tokens.MaxTTL {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "expires_in %s: more than the %s a token may last", ttl, tokens.MaxTTL).
-				WithSolution("ask for a new token when it expires; a CI gets one from its platform's identity"))
-			return
-		}
-		audience := req.Audience
-		if len(audience) == 0 {
-			audience = tokens.Issuer.Resources()[:1]
-		}
-		for _, a := range audience {
-			if !tokens.Issuer.AllowedResource(a) {
-				httpapi.Fail(c, liberrors.New(http.StatusBadRequest, origin, "audience %q: not one of the resources tokens are issued for (%v)", a, tokens.Issuer.Resources()))
-				return
-			}
-		}
-		token, expires, err := tokens.Issuer.IssueMachineToken(identity.ServiceAccount(namespace, name), sa.UID, identity.KindServiceAccount, slices.Clone(audience), ttl)
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
-			return
-		}
-		c.JSON(http.StatusCreated, tokenResponse{Token: token, ExpiresAt: expires})
-	})
+	}
+	token, expires, err := tokens.Issuer.IssueMachineToken(identity.ServiceAccount(namespace, name), sa.UID, identity.KindServiceAccount, slices.Clone(audience), ttl)
+	if err != nil {
+		return api.ServiceAccountToken{}, internal(err, origin)
+	}
+	return api.ServiceAccountToken{Token: token, ExpiresAt: expires}, nil
 }
 
 // ServiceAccountContext resolves a service account's token, its claims

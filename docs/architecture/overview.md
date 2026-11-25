@@ -67,8 +67,14 @@ three pages, since each has its own management story:
   them, plus `kayra reconciler`, the controller that activates and
   reconciles everything above.
 
-`internal/catalog` depends on [rbac](../packages/rbac.md) for exactly one
-check (`rbac.RequireClusterRBAC`); rbac has no knowledge of catalog at all.
+`internal/catalog` serves its group with `catalog.Server`, the `Handlers`
+generated from [its contract](../development.md#contracts), and
+[`internal/system`](../packages/system.md) the namespaces. Both depend on
+[rbac](../packages/rbac.md) for its checks only
+(`rbac.AuthorizeClusterRequest`, `rbac.AuthorizeNamespaceRBAC`); rbac has
+no knowledge of catalog at all. Each of Kayra's groups is browsable, its
+contract and the operations it serves, at `/apis/<group>/v1/-/docs`
+(`https://kayra.example.com/apis/catalog.infrapi.io/v1/-/docs`).
 
 ## Authentication & authorization
 

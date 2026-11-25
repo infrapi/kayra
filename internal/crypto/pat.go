@@ -29,7 +29,7 @@ const tokenRandomBytes = 32
 // backend (see config.ClaimsAuthzConfig): that backend has no directory
 // to re-query later by bare user id — there is no live session left by
 // the time this PAT gets used — so middleware.resolvePAT falls back to
-// whatever tokenapi captured here at creation time instead. A token
+// whatever rbac's CreateToken captured here at creation time instead. A token
 // minted under any other backend leaves both nil; its roles stay live.
 type PatRecord struct {
 	// ID is the token's public id: what lists and revokes it, never the

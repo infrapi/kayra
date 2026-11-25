@@ -2,6 +2,7 @@ package events
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,14 +10,13 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/infrapi/kayra/api"
 	"github.com/infrapi/kayra/internal/config"
 	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/identity"
@@ -25,7 +25,7 @@ import (
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
-// Options configure the routes.
+// Options configure the events API.
 type Options struct {
 	Store    store.Store
 	Keys     store.Keys
@@ -50,102 +50,133 @@ var receivedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 
 func init() { prometheus.MustRegister(receivedTotal) }
 
-type server struct {
-	o     Options
-	limit *limiter
-	outMu sync.Mutex
-}
-
-// Register mounts events.<domain> on r, behind gate (the authenticator):
+// Server is events.<domain>, the generated Handlers: Register mounts it,
+// behind the authenticator and httpapi.WithRequest.
 //
 //	POST  /apis/events.<domain>/v1/namespaces/:namespace/events      an event, or {"items": [...]}
 //	GET   /apis/events.<domain>/v1/namespaces/:namespace/events      filtered, newest first
 //	GET   /apis/events.<domain>/v1/namespaces/:namespace/events/:id
 //	PATCH /apis/events.<domain>/v1/namespaces/:namespace/events/:id  its series, by its reporter
 //
-// and the same without namespaces/:namespace, the cluster's. PUT and
-// DELETE are 405: an event is never changed but for its series.
-func Register(r gin.IRouter, gate gin.HandlerFunc, o Options) {
+// and the same without namespaces/:namespace, the cluster's. An event is
+// never replaced nor deleted: it expires.
+type Server struct {
+	o     Options
+	limit *limiter
+	outMu sync.Mutex
+}
+
+var _ Handlers = (*Server)(nil)
+
+// NewServer serves events as o configures.
+func NewServer(o Options) *Server {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	s := &server{o: o, limit: newLimiter(o.Settings.PerSecond, o.Settings.Burst, o.Now)}
-	root := r.Group("/apis/"+API+"/v1", gate)
-	for _, base := range []string{"/namespaces/:namespace/events", "/events"} {
-		root.POST(base, s.create)
-		root.GET(base, s.list)
-		root.GET(base+"/:id", s.get)
-		root.PATCH(base+"/:id", s.patch)
-		for _, m := range []string{http.MethodPut, http.MethodDelete} {
-			root.Handle(m, base+"/:id", notAllowed)
-			root.Handle(m, base, notAllowed)
-		}
-	}
+	return &Server{o: o, limit: newLimiter(o.Settings.PerSecond, o.Settings.Burst, o.Now)}
 }
 
-func notAllowed(c *gin.Context) {
-	c.Header("Allow", "GET, POST, PATCH")
-	httpapi.Fail(c, liberrors.New(http.StatusMethodNotAllowed, "events", "an event is never replaced nor deleted: it expires; PATCH changes its series only"))
+// CreateNamespaceEvents reports events in namespace.
+func (s *Server) CreateNamespaceEvents(ctx context.Context, namespace string, body map[string]any) (map[string]any, error) {
+	return s.create(ctx, namespace, body)
 }
 
-// caller is the request's caller and namespace, the namespace checked.
-func (s *server) caller(c *gin.Context) (*middleware.AuthContext, string, bool) {
-	ac, ok := middleware.GetAuth(c)
+// CreateEvents reports the cluster's events.
+func (s *Server) CreateEvents(ctx context.Context, body map[string]any) (map[string]any, error) {
+	return s.create(ctx, "", body)
+}
+
+// ListNamespaceEvents lists namespace's events.
+func (s *Server) ListNamespaceEvents(ctx context.Context, namespace, typeParam, reason, action, user, reporter, reportingController, regardingAPI, regardingResource, regardingName, since, until, limit string) ([]api.Event, error) {
+	return s.list(ctx, namespace, filterValues(typeParam, reason, action, user, reporter, reportingController, regardingAPI, regardingResource, regardingName), since, until, limit)
+}
+
+// ListEvents lists the cluster's events.
+func (s *Server) ListEvents(ctx context.Context, typeParam, reason, action, user, reporter, reportingController, regardingAPI, regardingResource, regardingName, since, until, limit string) ([]api.Event, error) {
+	return s.list(ctx, "", filterValues(typeParam, reason, action, user, reporter, reportingController, regardingAPI, regardingResource, regardingName), since, until, limit)
+}
+
+// GetNamespaceEvent is one of namespace's events.
+func (s *Server) GetNamespaceEvent(ctx context.Context, namespace, id string) (api.Event, error) {
+	return s.get(ctx, namespace, id)
+}
+
+// GetEvent is one of the cluster's events.
+func (s *Server) GetEvent(ctx context.Context, id string) (api.Event, error) {
+	return s.get(ctx, "", id)
+}
+
+// PatchNamespaceEvent changes the series of one of namespace's events.
+func (s *Server) PatchNamespaceEvent(ctx context.Context, namespace, id string, body api.EventPatch) (api.Event, error) {
+	return s.patch(ctx, namespace, id, body)
+}
+
+// PatchEvent changes the series of one of the cluster's events.
+func (s *Server) PatchEvent(ctx context.Context, id string, body api.EventPatch) (api.Event, error) {
+	return s.patch(ctx, "", id, body)
+}
+
+// caller is the request's caller, the namespace checked.
+func (s *Server) caller(ctx context.Context, ns string) (*middleware.AuthContext, error) {
+	ac, ok := middleware.AuthOf(ctx)
 	if !ok {
-		httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, "events", "not authenticated"))
-		return nil, "", false
+		return nil, liberrors.New(http.StatusUnauthorized, "events", "not authenticated")
 	}
-	ns := c.Param("namespace")
 	if ns != "" && s.o.Namespace != nil {
 		if err := s.o.Namespace(ns); err != nil {
-			httpapi.Fail(c, err)
-			return nil, "", false
+			return nil, err
 		}
 	}
-	return ac, ns, true
+	return ac, nil
 }
 
 // authorize decides verb by the RBAC, a 403 with its reason when denied.
-func (s *server) authorize(c *gin.Context, ac *middleware.AuthContext, ns, verb string) bool {
+func (s *Server) authorize(ac *middleware.AuthContext, ns, verb string) error {
 	allowed, reason, err := s.o.Authorize(ac, ns, verb)
 	if err != nil {
-		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "events", ""))
-		return false
+		return liberrors.Wrap(err, http.StatusInternalServerError, "events", "")
 	}
 	if !allowed {
-		httpapi.Fail(c, liberrors.New(http.StatusForbidden, "events", "not authorized to %s events: %s", verb, reason))
-		return false
+		return liberrors.New(http.StatusForbidden, "events", "not authorized to %s events: %s", verb, reason)
 	}
-	return true
+	return nil
 }
 
-func (s *server) create(c *gin.Context) {
-	ac, ns, ok := s.caller(c)
-	if !ok {
-		return
+// retryAfter sets the response's Retry-After to wait, in seconds.
+func retryAfter(ctx context.Context, wait time.Duration) {
+	httpapi.RequestOf(ctx).Header.Set("Retry-After", strconv.Itoa(int(wait.Round(time.Second)/time.Second)))
+}
+
+// create stores the body's events, one or a batch, and answers them in
+// the same shape.
+func (s *Server) create(ctx context.Context, ns string, body map[string]any) (map[string]any, error) {
+	ac, err := s.caller(ctx, ns)
+	if err != nil {
+		return nil, err
 	}
-	evs, batch, err := decodeEvents(c.Request.Body)
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return nil, liberrors.New(http.StatusBadRequest, "events", "%s", err)
+	}
+	evs, batch, err := decodeEvents(bytes.NewReader(raw))
 	if err != nil {
 		receivedTotal.WithLabelValues("invalid").Inc()
-		httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "events", "%s", err))
-		return
+		return nil, liberrors.New(http.StatusBadRequest, "events", "%s", err)
 	}
 	for i := range evs {
 		if err := evs[i].validate(ns); err != nil {
 			receivedTotal.WithLabelValues("invalid").Add(float64(len(evs)))
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "events", "items[%d]: %s", i, err))
-			return
+			return nil, liberrors.New(http.StatusBadRequest, "events", "items[%d]: %s", i, err)
 		}
 	}
-	if !s.mayReport(c, ac, ns, evs) {
+	if err := s.mayReport(ac, ns, evs); err != nil {
 		receivedTotal.WithLabelValues("denied").Add(float64(len(evs)))
-		return
+		return nil, err
 	}
 	if ok, wait := s.limit.take(ac.UserID, len(evs)); !ok {
 		receivedTotal.WithLabelValues("limited").Add(float64(len(evs)))
-		c.Header("Retry-After", strconv.Itoa(int(wait.Round(time.Second)/time.Second)))
-		httpapi.Fail(c, liberrors.New(http.StatusTooManyRequests, "events", "%s reports too many events: %g a second, %d at once", ac.UserID, s.o.Settings.PerSecond, s.o.Settings.Burst))
-		return
+		retryAfter(ctx, wait)
+		return nil, liberrors.New(http.StatusTooManyRequests, "events", "%s reports too many events: %g a second, %d at once", ac.UserID, s.o.Settings.PerSecond, s.o.Settings.Burst)
 	}
 
 	now := s.o.Now().UTC()
@@ -154,8 +185,7 @@ func (s *server) create(c *gin.Context) {
 		e := &evs[i]
 		id, err := uuid.NewV7()
 		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "events", ""))
-			return
+			return nil, liberrors.Wrap(err, http.StatusInternalServerError, "events", "")
 		}
 		e.ID, e.ReceivedAt, e.Reporter = id.String(), now, ac.UserID
 		if e.Time.IsZero() {
@@ -165,39 +195,40 @@ func (s *server) create(c *gin.Context) {
 		kvs = append(kvs, store.KV{Key: s.o.Keys.Event(ns, e.ID), Value: data})
 	}
 	if err := s.o.Store.PutBatchTTL(kvs, s.o.Settings.TTL); err != nil {
-		httpapi.Fail(c, liberrors.Wrap(err, http.StatusServiceUnavailable, "events", ""))
-		return
+		return nil, liberrors.Wrap(err, http.StatusServiceUnavailable, "events", "")
 	}
 	receivedTotal.WithLabelValues("accepted").Add(float64(len(evs)))
 	s.print(kvs)
+	var out any = evs[0]
 	if batch {
-		c.JSON(http.StatusCreated, gin.H{"items": evs})
-		return
+		out = map[string]any{"items": evs}
 	}
-	c.JSON(http.StatusCreated, evs[0])
+	res, err := httpapi.Convert[map[string]any](out)
+	if err != nil {
+		return nil, liberrors.Wrap(err, http.StatusInternalServerError, "events", "")
+	}
+	return res, nil
 }
 
 // mayReport decides who reports: an API about its own objects, in a
 // namespace subscribed to it (the cluster's events too); anyone else as the
 // RBAC grants create on events.
-func (s *server) mayReport(c *gin.Context, ac *middleware.AuthContext, ns string, evs []Event) bool {
+func (s *Server) mayReport(ac *middleware.AuthContext, ns string, evs []Event) error {
 	group, isAPI := identity.ParseAPI(ac.UserID)
 	if !isAPI {
-		return s.authorize(c, ac, ns, "create")
+		return s.authorize(ac, ns, "create")
 	}
 	for i, e := range evs {
 		if e.Regarding.API != group {
-			httpapi.Fail(c, liberrors.New(http.StatusForbidden, "events", "items[%d]: %s reports about its own objects only, not %q's", i, ac.UserID, e.Regarding.API))
-			return false
+			return liberrors.New(http.StatusForbidden, "events", "items[%d]: %s reports about its own objects only, not %q's", i, ac.UserID, e.Regarding.API)
 		}
 	}
 	if ns != "" && s.o.Subscribed != nil {
 		if err := s.o.Subscribed(ns, group); err != nil {
-			httpapi.Fail(c, liberrors.New(http.StatusForbidden, "events", "%s reports in the namespaces subscribed to it only: %s", ac.UserID, err.Message))
-			return false
+			return liberrors.New(http.StatusForbidden, "events", "%s reports in the namespaces subscribed to it only: %s", ac.UserID, err.Message)
 		}
 	}
-	return true
+	return nil
 }
 
 // decodeEvents reads one event, or {"items": [...]}: at most MaxBatch.
@@ -232,7 +263,7 @@ func decodeEvents(body io.Reader) ([]Event, bool, error) {
 	return []Event{e}, false, nil
 }
 
-func (s *server) print(kvs []store.KV) {
+func (s *Server) print(kvs []store.KV) {
 	if !s.o.Settings.Stdout || s.o.Stdout == nil {
 		return
 	}
@@ -243,20 +274,31 @@ func (s *server) print(kvs []store.KV) {
 	}
 }
 
-func (s *server) get(c *gin.Context) {
-	ac, ns, ok := s.caller(c)
-	if !ok || !s.authorize(c, ac, ns, "get") {
-		return
-	}
-	e, err := s.read(ns, c.Param("id"))
+func (s *Server) get(ctx context.Context, ns, id string) (api.Event, error) {
+	ac, err := s.caller(ctx, ns)
 	if err != nil {
-		httpapi.Fail(c, err)
-		return
+		return api.Event{}, err
 	}
-	c.JSON(http.StatusOK, e)
+	if err := s.authorize(ac, ns, "get"); err != nil {
+		return api.Event{}, err
+	}
+	e, ferr := s.read(ns, id)
+	if ferr != nil {
+		return api.Event{}, ferr
+	}
+	return wire(e)
 }
 
-func (s *server) read(ns, id string) (Event, *liberrors.Error) {
+// wire is e as the API answers it.
+func wire[T any](e T) (api.Event, error) {
+	out, err := httpapi.Convert[api.Event](e)
+	if err != nil {
+		return out, liberrors.Wrap(err, http.StatusInternalServerError, "events", "")
+	}
+	return out, nil
+}
+
+func (s *Server) read(ns, id string) (Event, *liberrors.Error) {
 	var e Event
 	data, err := s.o.Store.Get(s.o.Keys.Event(ns, id))
 	if errors.Is(err, store.ErrNotFound) {
@@ -272,49 +314,40 @@ func (s *server) read(ns, id string) (Event, *liberrors.Error) {
 }
 
 // patch changes an event's series, by its reporter only: the key written
-// again, so its ttl counts from now.
-func (s *server) patch(c *gin.Context) {
-	ac, ns, ok := s.caller(c)
-	if !ok {
-		return
+// again, so its ttl counts from now. The contract refuses any other field
+// (additionalProperties: false).
+func (s *Server) patch(ctx context.Context, ns, id string, body api.EventPatch) (api.Event, error) {
+	ac, err := s.caller(ctx, ns)
+	if err != nil {
+		return api.Event{}, err
 	}
-	e, ferr := s.read(ns, c.Param("id"))
+	e, ferr := s.read(ns, id)
 	if ferr != nil {
-		httpapi.Fail(c, ferr)
-		return
+		return api.Event{}, ferr
 	}
 	if e.Reporter != ac.UserID {
-		httpapi.Fail(c, liberrors.New(http.StatusForbidden, "events", "only its reporter, %s, changes event %q", e.Reporter, e.ID))
-		return
+		return api.Event{}, liberrors.New(http.StatusForbidden, "events", "only its reporter, %s, changes event %q", e.Reporter, e.ID)
 	}
-	var body struct {
-		Series *Series `json:"series"`
+	series := Series{Count: int(body.Series.Count), LastObserved: body.Series.LastObserved}
+	if series.Count == 0 && series.LastObserved.IsZero() {
+		return api.Event{}, liberrors.New(http.StatusBadRequest, "events", `{"series": {"count": <n>, "last_observed": "<time>"}}, nothing else`)
 	}
-	d := json.NewDecoder(io.LimitReader(c.Request.Body, 1<<16))
-	d.DisallowUnknownFields()
-	if err := d.Decode(&body); err != nil || body.Series == nil {
-		httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "events", `{"series": {"count": <n>, "last_observed": "<time>"}}, nothing else`))
-		return
-	}
-	if body.Series.Count < 1 || (e.Series != nil && body.Series.Count < e.Series.Count) {
-		httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "events", "series.count: 1 or more, never less than it was"))
-		return
+	if series.Count < 1 || (e.Series != nil && series.Count < e.Series.Count) {
+		return api.Event{}, liberrors.New(http.StatusBadRequest, "events", "series.count: 1 or more, never less than it was")
 	}
 	if ok, wait := s.limit.take(ac.UserID, 1); !ok {
-		c.Header("Retry-After", strconv.Itoa(int(wait.Round(time.Second)/time.Second)))
-		httpapi.Fail(c, liberrors.New(http.StatusTooManyRequests, "events", "%s reports too many events", ac.UserID))
-		return
+		retryAfter(ctx, wait)
+		return api.Event{}, liberrors.New(http.StatusTooManyRequests, "events", "%s reports too many events", ac.UserID)
 	}
-	if body.Series.LastObserved.IsZero() {
-		body.Series.LastObserved = s.o.Now().UTC()
+	if series.LastObserved.IsZero() {
+		series.LastObserved = s.o.Now().UTC()
 	}
-	e.Series = body.Series
+	e.Series = &series
 	data, _ := json.Marshal(e)
 	if err := s.o.Store.PutBatchTTL([]store.KV{{Key: s.o.Keys.Event(ns, e.ID), Value: data}}, s.o.Settings.TTL); err != nil {
-		httpapi.Fail(c, liberrors.Wrap(err, http.StatusServiceUnavailable, "events", ""))
-		return
+		return api.Event{}, liberrors.Wrap(err, http.StatusServiceUnavailable, "events", "")
 	}
-	c.JSON(http.StatusOK, e)
+	return wire(e)
 }
 
 // filters are list's query parameters, matched exactly.
@@ -350,45 +383,48 @@ const (
 	maxLimit   = 1000
 )
 
-// list is the namespace's events, newest received first: since and until
-// (RFC 3339, or a duration back from now: 1h) bound the reception, limit
-// (100, at most 1000) their number, the other parameters match exactly.
-func (s *server) list(c *gin.Context) {
-	ac, ns, ok := s.caller(c)
-	if !ok || !s.authorize(c, ac, ns, "list") {
-		return
-	}
-	q := c.Request.URL.Query()
-	for k := range q {
-		if !contains(filters, k) && k != "since" && k != "until" && k != "limit" {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "events", "unknown filter %q: %s, since, until or limit", k, strings.Join(filters, ", ")))
-			return
+// filterValues are list's filters by name, those given.
+func filterValues(values ...string) map[string]string {
+	q := map[string]string{}
+	for i, f := range filters {
+		if values[i] != "" {
+			q[f] = values[i]
 		}
 	}
+	return q
+}
+
+// list is the namespace's events, newest received first: since and until
+// (RFC 3339, or a duration back from now: 1h) bound the reception, limit
+// (100, at most 1000) their number, the filters match exactly.
+func (s *Server) list(ctx context.Context, ns string, q map[string]string, since, until, limitParam string) ([]api.Event, error) {
+	ac, err := s.caller(ctx, ns)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authorize(ac, ns, "list"); err != nil {
+		return nil, err
+	}
 	limit := 100
-	if v := q.Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
+	if limitParam != "" {
+		n, err := strconv.Atoi(limitParam)
 		if err != nil || n < 1 || n > maxLimit {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "events", "limit: 1 to %d", maxLimit))
-			return
+			return nil, liberrors.New(http.StatusBadRequest, "events", "limit: 1 to %d", maxLimit)
 		}
 		limit = n
 	}
 	prefix := s.o.Keys.EventsPrefix(ns)
 	from, to := prefix, prefix+"~"
 	for _, b := range []struct {
-		name  string
-		into  *string
-		upper bool
-	}{{"since", &from, false}, {"until", &to, true}} {
-		v := q.Get(b.name)
-		if v == "" {
+		name, value string
+		into        *string
+	}{{"since", since, &from}, {"until", until, &to}} {
+		if b.value == "" {
 			continue
 		}
-		t, err := s.when(v)
+		t, err := s.when(b.value)
 		if err != nil {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "events", "%s %q: a time (RFC 3339) or a duration back from now (1h)", b.name, v))
-			return
+			return nil, liberrors.New(http.StatusBadRequest, "events", "%s %q: a time (RFC 3339) or a duration back from now (1h)", b.name, b.value)
 		}
 		*b.into = prefix + idAt(t)
 	}
@@ -398,8 +434,7 @@ func (s *server) list(c *gin.Context) {
 	for len(out) < limit && scanned < maxScanned {
 		page, err := s.o.Store.Range(from, to, pageSize, true)
 		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusServiceUnavailable, "events", ""))
-			return
+			return nil, liberrors.Wrap(err, http.StatusServiceUnavailable, "events", "")
 		}
 		for _, kv := range page {
 			var e Event
@@ -420,10 +455,14 @@ func (s *server) list(c *gin.Context) {
 		}
 		to = page[len(page)-1].Key
 	}
-	c.JSON(http.StatusOK, out)
+	res, err := httpapi.Convert[[]api.Event](out)
+	if err != nil {
+		return nil, liberrors.Wrap(err, http.StatusInternalServerError, "events", "")
+	}
+	return res, nil
 }
 
-func (s *server) when(v string) (time.Time, error) {
+func (s *Server) when(v string) (time.Time, error) {
 	if t, err := time.Parse(time.RFC3339, v); err == nil {
 		return t, nil
 	}
@@ -440,20 +479,11 @@ func idAt(t time.Time) string {
 	return fmt.Sprintf("%08x-%04x-0000-0000-000000000000", ms>>16, ms&0xffff)
 }
 
-func matches(e Event, q map[string][]string) bool {
-	for _, f := range filters {
-		if v, ok := q[f]; ok && len(v) > 0 && e.field(f) != v[0] {
+func matches(e Event, q map[string]string) bool {
+	for f, v := range q {
+		if e.field(f) != v {
 			return false
 		}
 	}
 	return true
-}
-
-func contains(l []string, s string) bool {
-	for _, v := range l {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }

@@ -59,8 +59,7 @@ func TestAuthorizeRouteOrder(t *testing.T) {
 		if tc.member {
 			seedNamespaceRBAC(t, repo, "alice-group", "core", "compute.infrapi.io", "vm", "list")
 		}
-		engine := gin.New()
-		RegisterAuthorizeRoute(engine, repo, fakeAuthGate("alice", "alice-group"), prechecks(tc.nsErr, tc.apiErr), nil)
+		engine := serve(NewServer(ServerOptions{Repo: repo, Prechecks: prechecks(tc.nsErr, tc.apiErr)}), fakeAuthGate("alice", "alice-group"))
 		w := postCheck(engine)
 		if w.Code != tc.wantCode || !bytes.Contains(w.Body.Bytes(), []byte(tc.wantBody)) {
 			t.Errorf("%s: status %d body %s, want %d containing %s", tc.desc, w.Code, w.Body.String(), tc.wantCode, tc.wantBody)

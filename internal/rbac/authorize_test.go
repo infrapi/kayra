@@ -42,7 +42,7 @@ func TestAllows(t *testing.T) {
 // seedNamespaceRBAC writes the namespace group/role/rolebinding that
 // grants anyone resolved with callerGroup rights to verb on resource for
 // api, within namespace — what a namespace's own admins create via
-// RegisterNamespaceRoutes once CanManageNamespaceRBAC lets them in.
+// the namespace routes once CanManageNamespaceRBAC lets them in.
 // Authorize's match against the caller's resolved groups succeeds
 // without any membership sync.
 func seedNamespaceRBAC(t *testing.T, repo *Repository, callerGroup, namespace, api, resource, verb string) {

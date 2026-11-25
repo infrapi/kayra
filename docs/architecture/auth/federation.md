@@ -198,7 +198,8 @@ curl -s -X POST https://kayra.example.com/oauth2/token \
 ## A key of its own instead (private_key_jwt)
 
 A workload whose platform issues no identity can hold a key pair. Put the
-public half in the service account's `jwks`; private keys are refused:
+public half in the service account's `jwks`; private keys are refused
+(`400`: a key with `d`, which the contract's `JWK` does not allow):
 
 ```bash
 infrapi-cli update serviceaccounts deployer -n core -d '{"jwks": {"keys": [

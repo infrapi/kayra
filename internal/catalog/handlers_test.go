@@ -8,12 +8,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/rbac"
 	"github.com/infrapi/kayra/internal/store"
 )
-
-func noopGate(c *gin.Context) {}
 
 // fakeAuthGate stands in for middleware.Authenticator.Middleware: it
 // trusts userID/groups outright instead of verifying a bearer token.
@@ -30,7 +29,22 @@ const (
 	testAdminGroup     = "sandbox-myns-sysadmin"
 	testDeployPlatform = "sandbox"
 	testDeployRegion   = "eu-west-1"
+	// testSysadminGroup is the built-in sysadmin binding's group: the
+	// apiregistrations, decided on the cluster RBAC, let testAdmin in by it.
+	testSysadminGroup = "sandbox-core-sysadmin"
 )
+
+// subscriptionCreateRequest is a subscription's create body.
+type subscriptionCreateRequest struct {
+	ApiName string `json:"api"`
+}
+
+// mount registers the catalog API on engine, behind gate (the
+// authenticator's stand-in) and httpapi.WithRequest, as apiserver.Build
+// does.
+func mount(engine *gin.Engine, repo *Repository, rbacRepo *rbac.Repository, gate gin.HandlerFunc) {
+	Register(engine.Group("", gate, httpapi.WithRequest), NewServer(repo, rbacRepo, testDeployPlatform, testDeployRegion))
+}
 
 func newTestRepo(t *testing.T) *Repository {
 	t.Helper()
@@ -80,7 +94,7 @@ func seedClusterRBAC(t *testing.T, repo *rbac.Repository, callerGroup, namespace
 // newTestEngine builds a catalog.Repository and an rbac.Repository
 // against the same underlying store (exactly as apiserver.Build wires
 // them), seeds testAdmin with full cluster rbac rights in testNamespace,
-// and registers every catalog route.
+// makes it a sysadmin, and registers the catalog API.
 func newTestEngine(t *testing.T) (*gin.Engine, *Repository) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
@@ -94,12 +108,11 @@ func newTestEngine(t *testing.T) (*gin.Engine, *Repository) {
 
 	catalogRepo := NewRepository(s, keys)
 	rbacRepo := rbac.NewRepository(s, keys)
+	rbacRepo.SetSysadmin([]string{testSysadminGroup})
 	seedClusterRBAC(t, rbacRepo, testAdminGroup, testNamespace)
 
 	engine := gin.New()
-	RegisterApiRegistrationRoutes(engine, catalogRepo, noopGate, testDeployPlatform, testDeployRegion)
-	RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, fakeAuthGate(testAdmin, testAdminGroup), testDeployPlatform, testDeployRegion)
-	RegisterNamespaceCollectionRoutes(engine, engine, catalogRepo, nil)
+	mount(engine, catalogRepo, rbacRepo, fakeAuthGate(testAdmin, testAdminGroup, testSysadminGroup))
 	return engine, catalogRepo
 }
 

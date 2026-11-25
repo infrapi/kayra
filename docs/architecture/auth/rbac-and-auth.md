@@ -269,8 +269,9 @@ what is granted is covered only by a `*` in what is held.
 Any app built on `infrapi/lib` exposing routes shaped
 `/apis/compute.infrapi.io/v1/namespaces/:namespace/<resource>` can
 authorize a request against **that namespace's own**
-`Group`/`Role`/`RoleBinding` objects (the ones its admins create via
-`RegisterNamespaceRoutes`, once `CanManageNamespaceRBAC` let them in) by
+`Group`/`Role`/`RoleBinding` objects (the ones its admins create at
+`…/namespaces/{namespace}/{groups,roles,rolebindings}`, once
+`CanManageNamespaceRBAC` let them in) by
 calling Kayra's `POST /apis/authorization.infrapi.io/v1/check`,
 gated by `Authenticator` like every other namespace-scoped route:
 

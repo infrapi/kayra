@@ -73,10 +73,10 @@ curl -s http://localhost:8080/apis/system.infrapi.io/v1/namespaces/acme \
 `/check`, and so `infrapi-cli auth can-i`, agree: `list` on `namespaces` is
 allowed to anyone, `get` to a member of at least one.
 
-`PUT` is a no-op confirmation kept for API shape compatibility: the path
-segment is the only thing that ever identified a namespace, and
-name/active are both fixed/computed, so there is nothing left in the
-body a caller could legitimately change.
+A namespace has no update: the path segment is the only thing that ever
+identifies it, and `active` is computed (`readOnly` in the
+[contract](../development.md#contracts): a request sending it is a `400`),
+so there is nothing a caller could change.
 
 ## Active is computed
 

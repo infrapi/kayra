@@ -1,4 +1,4 @@
-package tokenapi
+package rbac
 
 import (
 	"bytes"
@@ -13,9 +13,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/infrapi/kayra/api"
 	"github.com/infrapi/kayra/internal/authz"
 	gconfig "github.com/infrapi/kayra/internal/config"
 	gcrypto "github.com/infrapi/kayra/internal/crypto"
+	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/store"
 )
@@ -26,7 +28,7 @@ type fakeAuthzBackend struct {
 
 func (f *fakeAuthzBackend) ResolveUser(userID string) (authz.UserInfo, error) { return f.info, nil }
 
-const tokens = "/apis/authorization.infrapi.io/v1/tokens"
+const tokensPath = "/apis/authorization.infrapi.io/v1/tokens"
 
 // rig is the token routes behind a gate that is the authenticator for a
 // bearer token, and the login (as) otherwise.
@@ -36,10 +38,10 @@ type rig struct {
 	store  store.Store
 	keys   store.Keys
 	as     *middleware.AuthContext // the caller without a bearer token
-	opts   *Options
+	opts   *PATOptions
 }
 
-func newRig(t *testing.T, cfg *gconfig.Config, backends map[string]*authz.Cached, mutate ...func(*Options)) *rig {
+func newRig(t *testing.T, cfg *gconfig.Config, backends map[string]*authz.Cached, mutate ...func(*PATOptions)) *rig {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	s, err := store.NewLocalStore(t.TempDir())
@@ -66,14 +68,15 @@ func newRig(t *testing.T, cfg *gconfig.Config, backends map[string]*authz.Cached
 		}
 		middleware.SetAuth(c, r.as)
 	}
-	opts := Options{Root: "/apis/authorization.infrapi.io/v1", Store: s, Keys: keys, Pub: &priv.PublicKey, Config: cfg,
+	opts := PATOptions{Store: s, Keys: keys, Pub: &priv.PublicKey, Config: cfg,
 		TTLs: gconfig.PatDurations{Default: 720 * time.Hour, Max: 2160 * time.Hour}}
 	for _, m := range mutate {
 		m(&opts)
 	}
 	r.opts = &opts
 	r.engine = gin.New()
-	RegisterRoutes(r.engine, gate, opts)
+	server := NewServer(ServerOptions{Repo: NewRepository(s, keys), PATs: opts})
+	Register(r.engine.Group("", httpapi.WithRequest, gate), server)
 	whoami := func(c *gin.Context) {
 		ac, _ := middleware.GetAuth(c)
 		c.JSON(http.StatusOK, gin.H{"user_id": ac.UserID, "groups": ac.Groups, "token_id": ac.TokenID})
@@ -98,13 +101,13 @@ func (r *rig) do(method, path, token, body string) (int, string) {
 	return w.Code, w.Body.String()
 }
 
-func (r *rig) create(body string) created {
+func (r *rig) create(body string) api.Token {
 	r.t.Helper()
-	code, out := r.do(http.MethodPost, tokens, "", body)
+	code, out := r.do(http.MethodPost, tokensPath, "", body)
 	if code != http.StatusCreated {
 		r.t.Fatalf("create %s: %d %s", body, code, out)
 	}
-	var c created
+	var c api.Token
 	_ = json.Unmarshal([]byte(out), &c)
 	return c
 }
@@ -117,7 +120,7 @@ func TestCreateListUseRevoke(t *testing.T) {
 	r := newRig(t, idmConfig(), nil)
 
 	c := r.create(`{"name": "laptop"}`)
-	if !gcrypto.IsToken(c.Secret) || c.ID == "" || c.Name != "laptop" || c.User != "jdoe" {
+	if !gcrypto.IsToken(c.Token) || c.ID == "" || c.Name != "laptop" || c.User != "jdoe" {
 		t.Fatalf("created = %+v", c)
 	}
 	if d := c.ExpiresAt.Sub(c.CreatedAt); d != 720*time.Hour {
@@ -125,36 +128,45 @@ func TestCreateListUseRevoke(t *testing.T) {
 	}
 
 	// used: the user, their groups live, the token's id; its last use noted
-	code, out := r.do(http.MethodGet, "/whoami", c.Secret, "")
+	code, out := r.do(http.MethodGet, "/whoami", c.Token, "")
 	if code != http.StatusOK || !strings.Contains(out, `"user_id":"jdoe"`) || !strings.Contains(out, `"tenant-group-apps"`) || !strings.Contains(out, c.ID) {
 		t.Fatalf("whoami: %d %s", code, out)
 	}
 
 	// listed, its secret never
-	code, out = r.do(http.MethodGet, tokens, "", "")
-	if code != http.StatusOK || !strings.Contains(out, c.ID) || strings.Contains(out, c.Secret) || strings.Contains(out, "hash") || !strings.Contains(out, "last_used_at") {
+	code, out = r.do(http.MethodGet, tokensPath, "", "")
+	if code != http.StatusOK || !strings.Contains(out, c.ID) || strings.Contains(out, c.Token) || strings.Contains(out, "hash") || !strings.Contains(out, "last_used_at") {
 		t.Fatalf("list: %d %s", code, out)
 	}
 
+	// read by its id, its secret never
+	code, out = r.do(http.MethodGet, tokensPath+"/"+c.ID, "", "")
+	if code != http.StatusOK || !strings.Contains(out, `"name":"laptop"`) || strings.Contains(out, c.Token) {
+		t.Fatalf("get: %d %s", code, out)
+	}
+	if code, _ := r.do(http.MethodGet, tokensPath+"/nope", "", ""); code != http.StatusNotFound {
+		t.Fatalf("get a missing one: %d", code)
+	}
+
 	// a token creates no other, but lists its user's
-	if code, out := r.do(http.MethodPost, tokens, c.Secret, `{"name": "more"}`); code != http.StatusForbidden || !strings.Contains(out, "creates no other") {
+	if code, out := r.do(http.MethodPost, tokensPath, c.Token, `{"name": "more"}`); code != http.StatusForbidden || !strings.Contains(out, "creates no other") {
 		t.Fatalf("a PAT creating a PAT: %d %s", code, out)
 	}
-	if code, _ := r.do(http.MethodGet, tokens, c.Secret, ""); code != http.StatusOK {
+	if code, _ := r.do(http.MethodGet, tokensPath, c.Token, ""); code != http.StatusOK {
 		t.Fatalf("a PAT listing: %d", code)
 	}
 
 	// revoked by its id
-	if code, _ := r.do(http.MethodDelete, tokens+"/nope", "", ""); code != http.StatusNotFound {
+	if code, _ := r.do(http.MethodDelete, tokensPath+"/nope", "", ""); code != http.StatusNotFound {
 		t.Fatalf("revoke a missing one: %d", code)
 	}
-	if code, _ := r.do(http.MethodDelete, tokens+"/"+c.ID, "", ""); code != http.StatusNoContent {
+	if code, _ := r.do(http.MethodDelete, tokensPath+"/"+c.ID, "", ""); code != http.StatusNoContent {
 		t.Fatalf("revoke: %d", code)
 	}
-	if code, _ := r.do(http.MethodGet, "/whoami", c.Secret, ""); code != http.StatusUnauthorized {
+	if code, _ := r.do(http.MethodGet, "/whoami", c.Token, ""); code != http.StatusUnauthorized {
 		t.Fatalf("revoked, still used: %d", code)
 	}
-	if _, out := r.do(http.MethodGet, tokens, "", ""); out != "[]" {
+	if _, out := r.do(http.MethodGet, tokensPath, "", ""); out != "[]" {
 		t.Fatalf("list after revocation: %s", out)
 	}
 }
@@ -170,20 +182,20 @@ func TestCreateRefusals(t *testing.T) {
 		`{"name": "x", "scope": {"apis": ["compute.infrapi.io"], "verbs": [""]}}`: "scope",
 		`not json`: "invalid",
 	} {
-		if code, out := r.do(http.MethodPost, tokens, "", body); code != http.StatusBadRequest || !strings.Contains(out, want) {
+		if code, out := r.do(http.MethodPost, tokensPath, "", body); code != http.StatusBadRequest || !strings.Contains(out, want) {
 			t.Errorf("%s: %d %s, want 400 %q", body, code, out, want)
 		}
 	}
 	r.as = &middleware.AuthContext{UserID: "system:serviceaccount:core:deployer"}
-	if code, _ := r.do(http.MethodPost, tokens, "", `{"name": "x"}`); code != http.StatusForbidden {
+	if code, _ := r.do(http.MethodPost, tokensPath, "", `{"name": "x"}`); code != http.StatusForbidden {
 		t.Fatalf("a service account's PAT: %d", code)
 	}
 }
 
 func TestExpired(t *testing.T) {
-	r := newRig(t, idmConfig(), nil, func(o *Options) { o.Now = func() time.Time { return time.Now().Add(-2 * time.Hour) } })
+	r := newRig(t, idmConfig(), nil, func(o *PATOptions) { o.Now = func() time.Time { return time.Now().Add(-2 * time.Hour) } })
 	c := r.create(`{"name": "old", "expires_in": "1h"}`)
-	if code, out := r.do(http.MethodGet, "/whoami", c.Secret, ""); code != http.StatusUnauthorized || !strings.Contains(out, "expired") {
+	if code, out := r.do(http.MethodGet, "/whoami", c.Token, ""); code != http.StatusUnauthorized || !strings.Contains(out, "expired") {
 		t.Fatalf("expired: %d %s", code, out)
 	}
 }
@@ -203,8 +215,8 @@ func TestScope(t *testing.T) {
 		{http.MethodPost, "/apis/compute.infrapi.io/v1/namespaces/core/vms", http.StatusForbidden},
 		{http.MethodDelete, "/apis/compute.infrapi.io/v1/namespaces/core/vms/web-1", http.StatusForbidden},
 		{http.MethodGet, "/apis/vault.infrapi.io/v1/namespaces/core/secrets", http.StatusForbidden},
-		{http.MethodGet, tokens, http.StatusForbidden}, // another api: authorization's
-		{http.MethodPost, "/apis/authorization.infrapi.io/v1/check", http.StatusOK},
+		{http.MethodGet, tokensPath, http.StatusForbidden},                          // another api: authorization's
+		{http.MethodPost, "/apis/authorization.infrapi.io/v1/check", http.StatusOK}, // Kayra's own /check, by any caller
 		{http.MethodGet, "/oauth2/userinfo", http.StatusOK},
 		{http.MethodGet, "/apis", http.StatusOK},
 		{http.MethodPost, "/apis", http.StatusForbidden},
@@ -212,20 +224,24 @@ func TestScope(t *testing.T) {
 		{http.MethodGet, "/whoami", http.StatusForbidden},
 		{http.MethodGet, "/apis/compute.infrapi.io/v1/", http.StatusForbidden},
 	} {
-		if code, out := r.do(tt.method, tt.path, c.Secret, ""); code != tt.code {
+		body := ""
+		if strings.HasSuffix(tt.path, "/check") {
+			body = `{"api": "compute.infrapi.io", "resource": "vms", "verb": "get"}`
+		}
+		if code, out := r.do(tt.method, tt.path, c.Token, body); code != tt.code {
 			t.Errorf("%s %s: %d %s, want %d", tt.method, tt.path, code, out, tt.code)
 		}
 	}
 	// the unscoped one: everything its user may
 	all := r.create(`{"name": "all"}`)
-	if code, _ := r.do(http.MethodDelete, "/apis/compute.infrapi.io/v1/namespaces/core/vms/web-1", all.Secret, ""); code != http.StatusOK {
+	if code, _ := r.do(http.MethodDelete, "/apis/compute.infrapi.io/v1/namespaces/core/vms/web-1", all.Token, ""); code != http.StatusOK {
 		t.Fatalf("unscoped: %d", code)
 	}
 }
 
 func TestOtherUsersTokens(t *testing.T) {
 	var verbs []string
-	r := newRig(t, idmConfig(), nil, func(o *Options) {
+	r := newRig(t, idmConfig(), nil, func(o *PATOptions) {
 		o.CanManageOthers = func(ac *middleware.AuthContext, verb string) bool {
 			verbs = append(verbs, verb)
 			return ac.UserID == "root"
@@ -233,23 +249,26 @@ func TestOtherUsersTokens(t *testing.T) {
 	})
 	c := r.create(`{"name": "laptop"}`)
 	r.as = &middleware.AuthContext{UserID: "mallory", Kind: "user"}
-	if code, _ := r.do(http.MethodGet, tokens+"?user=jdoe", "", ""); code != http.StatusForbidden {
+	if code, _ := r.do(http.MethodGet, tokensPath+"?user=jdoe", "", ""); code != http.StatusForbidden {
 		t.Fatalf("another's list: %d", code)
 	}
-	if code, _ := r.do(http.MethodDelete, tokens+"/"+c.ID+"?user=jdoe", "", ""); code != http.StatusForbidden {
+	if code, _ := r.do(http.MethodGet, tokensPath+"/"+c.ID+"?user=jdoe", "", ""); code != http.StatusForbidden {
+		t.Fatalf("another's get: %d", code)
+	}
+	if code, _ := r.do(http.MethodDelete, tokensPath+"/"+c.ID+"?user=jdoe", "", ""); code != http.StatusForbidden {
 		t.Fatalf("another's revoke: %d", code)
 	}
-	if code, out := r.do(http.MethodGet, tokens, "", ""); code != http.StatusOK || out != "[]" {
+	if code, out := r.do(http.MethodGet, tokensPath, "", ""); code != http.StatusOK || out != "[]" {
 		t.Fatalf("their own: %d %s", code, out)
 	}
 	r.as = &middleware.AuthContext{UserID: "root", Kind: "user"}
-	if code, out := r.do(http.MethodGet, tokens+"?user=jdoe", "", ""); code != http.StatusOK || !strings.Contains(out, c.ID) {
+	if code, out := r.do(http.MethodGet, tokensPath+"?user=jdoe", "", ""); code != http.StatusOK || !strings.Contains(out, c.ID) {
 		t.Fatalf("root lists jdoe's: %d %s", code, out)
 	}
-	if code, _ := r.do(http.MethodDelete, tokens+"/"+c.ID+"?user=jdoe", "", ""); code != http.StatusNoContent {
+	if code, _ := r.do(http.MethodDelete, tokensPath+"/"+c.ID+"?user=jdoe", "", ""); code != http.StatusNoContent {
 		t.Fatalf("root revokes jdoe's: %d", code)
 	}
-	if strings.Join(verbs, ",") != "list,delete,list,delete" {
+	if strings.Join(verbs, ",") != "list,get,delete,list,delete" {
 		t.Fatalf("verbs asked = %v", verbs)
 	}
 }
@@ -265,7 +284,7 @@ func TestSnapshotsGroupsForClaimsBackend(t *testing.T) {
 	r.as = &middleware.AuthContext{UserID: "jdoe", Authorization: "okta", Provider: "okta", Kind: "user",
 		Groups: []string{"sandbox-core-sysadmin"}, Attributes: map[string]string{"email": "jdoe@example.com"}}
 	c := r.create(`{"name": "laptop"}`)
-	if code, out := r.do(http.MethodGet, "/whoami", c.Secret, ""); code != http.StatusOK || !strings.Contains(out, `"groups":["sandbox-core-sysadmin"]`) {
+	if code, out := r.do(http.MethodGet, "/whoami", c.Token, ""); code != http.StatusOK || !strings.Contains(out, `"groups":["sandbox-core-sysadmin"]`) {
 		t.Fatalf("whoami: %d %s", code, out)
 	}
 }

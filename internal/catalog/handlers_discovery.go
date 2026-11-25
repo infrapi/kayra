@@ -35,15 +35,12 @@ type DiscoveryGroup struct {
 // builtinOwner is what Kayra's own groups list as their owner.
 const builtinOwner = "kayra"
 
-// RegisterDiscoveryRoutes mounts, behind gate (normally
-// middleware.Authenticator: any authenticated caller — a namespace's users need it
-// to see what they can subscribe to; the resources themselves stay
-// gated as they are):
-//
-//   - GET /apis: every api group and its resources (DiscoveryGroup),
-//     Kayra's own first;
-//   - GET /apis/catalog.<domain>/v1/apiregistrations/{name}/openapi.json:
-//     a registration's stored spec, exactly as the app served it.
+// RegisterDiscoveryRoutes mounts GET /apis, behind gate (normally
+// middleware.Authenticator: any authenticated caller — a namespace's users
+// need it to see what they can subscribe to; the resources themselves stay
+// gated as they are): every api group and its resources (DiscoveryGroup),
+// Kayra's own first. A registration's stored spec is the catalog API's,
+// Server.GetAPIRegistrationSpec.
 //
 // routes returns Kayra's own route table (engine.Routes()), read per
 // request so it always matches what this server actually serves.
@@ -79,25 +76,6 @@ func RegisterDiscoveryRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFu
 		sort.Slice(registered, func(i, j int) bool { return registered[i].Api < registered[j].Api })
 
 		c.JSON(http.StatusOK, append(groups, registered...))
-	})
-
-	r.GET("/apis/"+CatalogAPI+"/v1/apiregistrations/:name/openapi.json", gate, func(c *gin.Context) {
-		const origin = "catalog.GetApiSpec"
-		name := c.Param("name")
-		if _, err := repo.GetClusterApiRegistration(deploymentPlatform, deploymentRegion, name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, origin, "api registration %q not found", name))
-			return
-		}
-		spec, err := repo.GetApiSpec(deploymentPlatform, deploymentRegion, name)
-		if err != nil {
-			lerr := notFoundOrInternal(err, origin, "no openapi spec stored for api %q yet", name)
-			if lerr.Code == http.StatusNotFound {
-				lerr = lerr.WithSolution("the spec is fetched from the app at its next sync: bump the registration's sync_id, and check the reconciler's logs if it still doesn't appear")
-			}
-			httpapi.Fail(c, lerr)
-			return
-		}
-		c.Data(http.StatusOK, "application/json", spec.Spec)
 	})
 }
 

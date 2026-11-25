@@ -1,12 +1,11 @@
 package rbac
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-
+	"github.com/infrapi/kayra/api"
 	"github.com/infrapi/kayra/internal/httpapi"
-	"github.com/infrapi/kayra/internal/middleware"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
@@ -49,377 +48,313 @@ func validateNamespaceRoleBinding(repo *Repository, namespace string, rb RoleBin
 	return nil
 }
 
-// RequireClusterRBAC gates one namespace route on repo.CanManageNamespaceRBAC:
-// the caller's own user id or resolved groups (set by the preceding auth
-// gate) must match a cluster Group bound to a cluster Role granting api +
-// verb on resource, scoped to this request's :namespace. This is what
-// closes the gap where any authenticated caller could manage RBAC
-// objects in any namespace regardless of their actual cluster-level
-// rights. api is AuthorizationAPI for this package's own groups/roles/
-// rolebindings routes, catalog.CatalogAPI for internal/catalog's
-// Subscription routes.
-func RequireClusterRBAC(repo *Repository, api, resource, verb string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ac, ok := middleware.GetAuth(c)
-		if !ok {
-			httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, "rbac.RequireClusterRBAC", "not authenticated"))
-			return
-		}
-
-		namespace := c.Param("namespace")
-		allowed, reason, err := repo.CanManageNamespaceRBAC(ac.UserID, ac.Groups, namespace, api, resource, verb)
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.RequireClusterRBAC", ""))
-			return
-		}
-		if !allowed {
-			httpapi.Fail(c, liberrors.New(http.StatusForbidden, "rbac.RequireClusterRBAC",
-				"not authorized to %s rbac %s in namespace %q: %s", verb, resource, namespace, reason))
-			return
-		}
-
-		c.Next()
-	}
-}
-
 // grantNamespace refuses a namespace role, or a binding to one, granting
 // what the caller does not hold in namespace (NamespaceRules), unless
 // they hold escalate on roles, or bind on rolebindings: the
 // anti-escalation rule, in a namespace.
-func grantNamespace(c *gin.Context, repo *Repository, namespace string, rules []Rule, resource, verb, origin string) bool {
-	ac, ok := middleware.GetAuth(c)
-	if !ok {
-		httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, origin, "not authenticated"))
-		return false
-	}
-	have, err := repo.NamespaceRules(ac.UserID, ac.Groups, namespace)
+func (s *Server) grantNamespace(ctx context.Context, namespace string, rules []Rule, resource, verb, origin string) error {
+	ac, err := Caller(ctx, origin)
 	if err != nil {
-		httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
-		return false
+		return err
 	}
-	if err := checkGrant(have, rules, resource, verb, origin); err != nil {
-		httpapi.Fail(c, err)
-		return false
+	have, err := s.repo.NamespaceRules(ac.UserID, ac.Groups, namespace)
+	if err != nil {
+		return internal(err, origin)
 	}
-	return true
+	return httpapi.Err(checkGrant(have, rules, resource, verb, origin))
 }
 
-// RegisterNamespaceRoutes mounts full CRUD for the per-namespace default
-// groups/roles/rolebindings resources at
-// /apis/authorization.infrapi.io/v1/namespaces/:namespace/{groups,
-// roles,rolebindings} — Kayra's own authorization management plane,
-// its own API group exactly like any other app's own
-// /apis/<app>.infrapi.io/v1/namespaces/:namespace/<resource> routes —
-// behind gate (normally middleware.Authenticator, any configured
-// provider) followed by RequireClusterRBAC, so only a caller whose
-// cluster-level group membership grants them AuthorizationAPI rights
-// in this specific namespace — the spec's bootstrap flow — can act on
-// it. RequireClusterRBAC is exported so internal/catalog can gate its
-// own namespace-scoped Subscription routes through the exact same check,
-// against catalog.CatalogAPI instead. The namespace resource itself
-// (Kayra's unit of isolation) and the infra catalog
-// (ApiRegistration/Subscription) are registered separately, by
-// internal/catalog's own RegisterClusterRoutes/RegisterNamespaceRoutes/
-// RegisterNamespaceCollectionRoutes.
-//
-// validateRules, when non-nil, vets a namespace Role's rules before it's
-// created or updated (in practice catalog.Repository.ValidateRoleRules:
-// every api registered, every resource and verb one its OpenAPI spec
-// serves); its error is returned as-is. Injected as a function since the
-// dependency runs catalog -> rbac, never the other way.
-func RegisterNamespaceRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, validateRules func([]Rule) *liberrors.Error) {
-	group := r.Group("/apis/"+AuthorizationAPI+"/v1/namespaces/:namespace", gate)
+// The namespace RBAC objects, /apis/authorization.infrapi.io/v1/
+// namespaces/:namespace/{groups,roles,rolebindings}: what a namespace's
+// members may do there. Only a caller whose cluster group membership
+// grants them AuthorizationAPI rights in this namespace manages them
+// (CanManageNamespaceRBAC), the spec's bootstrap flow. ValidateRoleRules
+// vets a namespace role's rules before it is written: every api
+// registered, every resource and verb one its OpenAPI spec serves.
 
-	// --- groups ---
+// --- groups ---
 
-	group.POST("/groups", RequireClusterRBAC(repo, AuthorizationAPI, "groups", "create"), func(c *gin.Context) {
-		namespace := c.Param("namespace")
+func (s *Server) CreateGroup(ctx context.Context, namespace string, body api.Group) (api.Group, error) {
+	const origin = "rbac.CreateNamespaceGroup"
+	if err := s.namespace(ctx, namespace, "groups", "create"); err != nil {
+		return api.Group{}, err
+	}
+	g, err := fromAPI[Group](body, origin)
+	if err != nil {
+		return api.Group{}, err
+	}
+	if g.Name == "" {
+		return api.Group{}, liberrors.New(http.StatusBadRequest, origin, "name is required")
+	}
+	if err := s.writeGroup(namespace, &g, origin); err != nil {
+		return api.Group{}, err
+	}
+	return toAPI[api.Group](g, origin)
+}
 
-		var g Group
-		if err := c.ShouldBindJSON(&g); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.CreateNamespaceGroup", ""))
-			return
-		}
-		if g.Name == "" {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateNamespaceGroup", "name is required"))
-			return
-		}
-		if err := resolveNamespace(&g.Metadata, namespace); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if err := validateGroupMembers(g, false, "rbac.CreateNamespaceGroup"); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
+// writeGroup resolves g's namespace, validates its members, and writes it.
+func (s *Server) writeGroup(namespace string, g *Group, origin string) error {
+	if err := resolveNamespace(&g.Metadata, namespace); err != nil {
+		return err
+	}
+	if err := validateGroupMembers(*g, false, origin); err != nil {
+		return err
+	}
+	if err := s.repo.PutNamespaceGroup(namespace, g); err != nil {
+		return internal(err, origin)
+	}
+	return nil
+}
 
-		if err := repo.PutNamespaceGroup(namespace, &g); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateNamespaceGroup", ""))
-			return
-		}
-		c.JSON(http.StatusCreated, g)
-	})
+func (s *Server) ListGroups(ctx context.Context, namespace string) ([]api.Group, error) {
+	const origin = "rbac.ListNamespaceGroups"
+	if err := s.namespace(ctx, namespace, "groups", "list"); err != nil {
+		return nil, err
+	}
+	groups, err := s.repo.ListNamespaceGroups(namespace)
+	if err != nil {
+		return nil, internal(err, origin)
+	}
+	return toAPI[[]api.Group](groups, origin)
+}
 
-	group.GET("/groups", RequireClusterRBAC(repo, AuthorizationAPI, "groups", "list"), func(c *gin.Context) {
-		groups, err := repo.ListNamespaceGroups(c.Param("namespace"))
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.ListNamespaceGroups", ""))
-			return
-		}
-		c.JSON(http.StatusOK, groups)
-	})
+func (s *Server) GetGroup(ctx context.Context, namespace, name string) (api.Group, error) {
+	const origin = "rbac.GetNamespaceGroup"
+	if err := s.namespace(ctx, namespace, "groups", "get"); err != nil {
+		return api.Group{}, err
+	}
+	g, err := s.repo.GetNamespaceGroup(namespace, name)
+	if err != nil {
+		return api.Group{}, notFoundOrInternal(err, origin, "group %q not found", name)
+	}
+	return toAPI[api.Group](g, origin)
+}
 
-	group.GET("/groups/:group", RequireClusterRBAC(repo, AuthorizationAPI, "groups", "get"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("group")
-		g, err := repo.GetNamespaceGroup(namespace, name)
-		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.GetNamespaceGroup", "group %q not found", name))
-			return
-		}
-		c.JSON(http.StatusOK, g)
-	})
+func (s *Server) UpdateGroup(ctx context.Context, namespace, name string, body api.Group) (api.Group, error) {
+	const origin = "rbac.UpdateNamespaceGroup"
+	if err := s.namespace(ctx, namespace, "groups", "update"); err != nil {
+		return api.Group{}, err
+	}
+	if _, err := s.repo.GetNamespaceGroup(namespace, name); err != nil {
+		return api.Group{}, notFoundOrInternal(err, origin, "group %q not found", name)
+	}
+	g, err := fromAPI[Group](body, origin)
+	if err != nil {
+		return api.Group{}, err
+	}
+	g.Name = name
+	if err := s.writeGroup(namespace, &g, origin); err != nil {
+		return api.Group{}, err
+	}
+	return toAPI[api.Group](g, origin)
+}
 
-	group.PUT("/groups/:group", RequireClusterRBAC(repo, AuthorizationAPI, "groups", "update"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("group")
-		if _, err := repo.GetNamespaceGroup(namespace, name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.UpdateNamespaceGroup", "group %q not found", name))
-			return
-		}
+func (s *Server) DeleteGroup(ctx context.Context, namespace, name string) error {
+	const origin = "rbac.DeleteNamespaceGroup"
+	if err := s.namespace(ctx, namespace, "groups", "delete"); err != nil {
+		return err
+	}
+	if _, err := s.repo.GetNamespaceGroup(namespace, name); err != nil {
+		return notFoundOrInternal(err, origin, "group %q not found", name)
+	}
+	if err := s.repo.DeleteNamespaceGroup(namespace, name); err != nil {
+		return internal(err, origin)
+	}
+	return nil
+}
 
-		var g Group
-		if err := c.ShouldBindJSON(&g); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.UpdateNamespaceGroup", ""))
-			return
-		}
-		g.Name = name
-		if err := resolveNamespace(&g.Metadata, namespace); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if err := validateGroupMembers(g, false, "rbac.UpdateNamespaceGroup"); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
+// --- roles ---
 
-		if err := repo.PutNamespaceGroup(namespace, &g); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateNamespaceGroup", ""))
-			return
-		}
-		c.JSON(http.StatusOK, g)
-	})
+func (s *Server) CreateRole(ctx context.Context, namespace string, body api.Role) (api.Role, error) {
+	const origin = "rbac.CreateNamespaceRole"
+	if err := s.namespace(ctx, namespace, "roles", "create"); err != nil {
+		return api.Role{}, err
+	}
+	role, err := fromAPI[Role](body, origin)
+	if err != nil {
+		return api.Role{}, err
+	}
+	if role.Name == "" {
+		return api.Role{}, liberrors.New(http.StatusBadRequest, origin, "name is required")
+	}
+	if err := s.writeRole(ctx, namespace, &role, origin); err != nil {
+		return api.Role{}, err
+	}
+	return toAPI[api.Role](role, origin)
+}
 
-	group.DELETE("/groups/:group", RequireClusterRBAC(repo, AuthorizationAPI, "groups", "delete"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("group")
-		if _, err := repo.GetNamespaceGroup(namespace, name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.DeleteNamespaceGroup", "group %q not found", name))
-			return
+// writeRole resolves role's namespace, vets its rules, checks them against
+// the caller's, and writes it.
+func (s *Server) writeRole(ctx context.Context, namespace string, role *Role, origin string) error {
+	if err := resolveNamespace(&role.Metadata, namespace); err != nil {
+		return err
+	}
+	if s.o.ValidateRoleRules != nil {
+		if err := s.o.ValidateRoleRules(role.Rules); err != nil {
+			return err
 		}
-		if err := repo.DeleteNamespaceGroup(namespace, name); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.DeleteNamespaceGroup", ""))
-			return
-		}
-		c.Status(http.StatusNoContent)
-	})
+	}
+	if err := s.grantNamespace(ctx, namespace, role.Rules, "roles", VerbEscalate, origin); err != nil {
+		return err
+	}
+	if err := s.repo.PutNamespaceRole(namespace, role); err != nil {
+		return internal(err, origin)
+	}
+	return nil
+}
 
-	// --- roles ---
+func (s *Server) ListRoles(ctx context.Context, namespace string) ([]api.Role, error) {
+	const origin = "rbac.ListNamespaceRoles"
+	if err := s.namespace(ctx, namespace, "roles", "list"); err != nil {
+		return nil, err
+	}
+	roles, err := s.repo.ListNamespaceRoles(namespace)
+	if err != nil {
+		return nil, internal(err, origin)
+	}
+	return toAPI[[]api.Role](roles, origin)
+}
 
-	group.POST("/roles", RequireClusterRBAC(repo, AuthorizationAPI, "roles", "create"), func(c *gin.Context) {
-		namespace := c.Param("namespace")
+func (s *Server) GetRole(ctx context.Context, namespace, name string) (api.Role, error) {
+	const origin = "rbac.GetNamespaceRole"
+	if err := s.namespace(ctx, namespace, "roles", "get"); err != nil {
+		return api.Role{}, err
+	}
+	role, err := s.repo.GetNamespaceRole(namespace, name)
+	if err != nil {
+		return api.Role{}, notFoundOrInternal(err, origin, "role %q not found", name)
+	}
+	return toAPI[api.Role](role, origin)
+}
 
-		var role Role
-		if err := c.ShouldBindJSON(&role); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.CreateNamespaceRole", ""))
-			return
-		}
-		if role.Name == "" {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateNamespaceRole", "name is required"))
-			return
-		}
-		if err := resolveNamespace(&role.Metadata, namespace); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if validateRules != nil {
-			if err := validateRules(role.Rules); err != nil {
-				httpapi.Fail(c, err)
-				return
-			}
-		}
-		if !grantNamespace(c, repo, namespace, role.Rules, "roles", VerbEscalate, "rbac.CreateNamespaceRole") {
-			return
-		}
+func (s *Server) UpdateRole(ctx context.Context, namespace, name string, body api.Role) (api.Role, error) {
+	const origin = "rbac.UpdateNamespaceRole"
+	if err := s.namespace(ctx, namespace, "roles", "update"); err != nil {
+		return api.Role{}, err
+	}
+	if _, err := s.repo.GetNamespaceRole(namespace, name); err != nil {
+		return api.Role{}, notFoundOrInternal(err, origin, "role %q not found", name)
+	}
+	role, err := fromAPI[Role](body, origin)
+	if err != nil {
+		return api.Role{}, err
+	}
+	role.Name = name
+	if err := s.writeRole(ctx, namespace, &role, origin); err != nil {
+		return api.Role{}, err
+	}
+	return toAPI[api.Role](role, origin)
+}
 
-		if err := repo.PutNamespaceRole(namespace, &role); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateNamespaceRole", ""))
-			return
-		}
-		c.JSON(http.StatusCreated, role)
-	})
+func (s *Server) DeleteRole(ctx context.Context, namespace, name string) error {
+	const origin = "rbac.DeleteNamespaceRole"
+	if err := s.namespace(ctx, namespace, "roles", "delete"); err != nil {
+		return err
+	}
+	if _, err := s.repo.GetNamespaceRole(namespace, name); err != nil {
+		return notFoundOrInternal(err, origin, "role %q not found", name)
+	}
+	if err := s.repo.DeleteNamespaceRole(namespace, name); err != nil {
+		return internal(err, origin)
+	}
+	return nil
+}
 
-	group.GET("/roles", RequireClusterRBAC(repo, AuthorizationAPI, "roles", "list"), func(c *gin.Context) {
-		roles, err := repo.ListNamespaceRoles(c.Param("namespace"))
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.ListNamespaceRoles", ""))
-			return
-		}
-		c.JSON(http.StatusOK, roles)
-	})
+// --- rolebindings ---
 
-	group.GET("/roles/:role", RequireClusterRBAC(repo, AuthorizationAPI, "roles", "get"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("role")
-		role, err := repo.GetNamespaceRole(namespace, name)
-		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.GetNamespaceRole", "role %q not found", name))
-			return
-		}
-		c.JSON(http.StatusOK, role)
-	})
+func (s *Server) CreateRoleBinding(ctx context.Context, namespace string, body api.RoleBinding) (api.RoleBinding, error) {
+	const origin = "rbac.CreateNamespaceRoleBinding"
+	if err := s.namespace(ctx, namespace, "rolebindings", "create"); err != nil {
+		return api.RoleBinding{}, err
+	}
+	rb, err := fromAPI[RoleBinding](body, origin)
+	if err != nil {
+		return api.RoleBinding{}, err
+	}
+	if rb.Name == "" || rb.Role == "" {
+		return api.RoleBinding{}, liberrors.New(http.StatusBadRequest, origin, "name and role are required")
+	}
+	if err := s.writeRoleBinding(ctx, namespace, &rb, origin); err != nil {
+		return api.RoleBinding{}, err
+	}
+	return toAPI[api.RoleBinding](rb, origin)
+}
 
-	group.PUT("/roles/:role", RequireClusterRBAC(repo, AuthorizationAPI, "roles", "update"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("role")
-		if _, err := repo.GetNamespaceRole(namespace, name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.UpdateNamespaceRole", "role %q not found", name))
-			return
-		}
+// writeRoleBinding resolves rb's namespace, validates it, checks what its
+// role grants against the caller's, and writes it.
+func (s *Server) writeRoleBinding(ctx context.Context, namespace string, rb *RoleBinding, origin string) error {
+	if err := resolveNamespace(&rb.Metadata, namespace); err != nil {
+		return err
+	}
+	if err := validateNamespaceRoleBinding(s.repo, namespace, *rb); err != nil {
+		return err
+	}
+	role, _ := s.repo.GetNamespaceRole(namespace, rb.Role)
+	if err := s.grantNamespace(ctx, namespace, role.Rules, "rolebindings", VerbBind, origin); err != nil {
+		return err
+	}
+	if err := s.repo.PutNamespaceRoleBinding(namespace, rb); err != nil {
+		return internal(err, origin)
+	}
+	return nil
+}
 
-		var role Role
-		if err := c.ShouldBindJSON(&role); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.UpdateNamespaceRole", ""))
-			return
-		}
-		role.Name = name
-		if err := resolveNamespace(&role.Metadata, namespace); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if validateRules != nil {
-			if err := validateRules(role.Rules); err != nil {
-				httpapi.Fail(c, err)
-				return
-			}
-		}
-		if !grantNamespace(c, repo, namespace, role.Rules, "roles", VerbEscalate, "rbac.UpdateNamespaceRole") {
-			return
-		}
+func (s *Server) ListRoleBindings(ctx context.Context, namespace string) ([]api.RoleBinding, error) {
+	const origin = "rbac.ListNamespaceRoleBindings"
+	if err := s.namespace(ctx, namespace, "rolebindings", "list"); err != nil {
+		return nil, err
+	}
+	bindings, err := s.repo.ListNamespaceRoleBindings(namespace)
+	if err != nil {
+		return nil, internal(err, origin)
+	}
+	return toAPI[[]api.RoleBinding](bindings, origin)
+}
 
-		if err := repo.PutNamespaceRole(namespace, &role); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateNamespaceRole", ""))
-			return
-		}
-		c.JSON(http.StatusOK, role)
-	})
+func (s *Server) GetRoleBinding(ctx context.Context, namespace, name string) (api.RoleBinding, error) {
+	const origin = "rbac.GetNamespaceRoleBinding"
+	if err := s.namespace(ctx, namespace, "rolebindings", "get"); err != nil {
+		return api.RoleBinding{}, err
+	}
+	rb, err := s.repo.GetNamespaceRoleBinding(namespace, name)
+	if err != nil {
+		return api.RoleBinding{}, notFoundOrInternal(err, origin, "rolebinding %q not found", name)
+	}
+	return toAPI[api.RoleBinding](rb, origin)
+}
 
-	group.DELETE("/roles/:role", RequireClusterRBAC(repo, AuthorizationAPI, "roles", "delete"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("role")
-		if _, err := repo.GetNamespaceRole(namespace, name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.DeleteNamespaceRole", "role %q not found", name))
-			return
-		}
-		if err := repo.DeleteNamespaceRole(namespace, name); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.DeleteNamespaceRole", ""))
-			return
-		}
-		c.Status(http.StatusNoContent)
-	})
+func (s *Server) UpdateRoleBinding(ctx context.Context, namespace, name string, body api.RoleBinding) (api.RoleBinding, error) {
+	const origin = "rbac.UpdateNamespaceRoleBinding"
+	if err := s.namespace(ctx, namespace, "rolebindings", "update"); err != nil {
+		return api.RoleBinding{}, err
+	}
+	if _, err := s.repo.GetNamespaceRoleBinding(namespace, name); err != nil {
+		return api.RoleBinding{}, notFoundOrInternal(err, origin, "rolebinding %q not found", name)
+	}
+	rb, err := fromAPI[RoleBinding](body, origin)
+	if err != nil {
+		return api.RoleBinding{}, err
+	}
+	rb.Name = name
+	if rb.Role == "" {
+		return api.RoleBinding{}, liberrors.New(http.StatusBadRequest, origin, "role is required")
+	}
+	if err := s.writeRoleBinding(ctx, namespace, &rb, origin); err != nil {
+		return api.RoleBinding{}, err
+	}
+	return toAPI[api.RoleBinding](rb, origin)
+}
 
-	// --- rolebindings ---
-
-	group.POST("/rolebindings", RequireClusterRBAC(repo, AuthorizationAPI, "rolebindings", "create"), func(c *gin.Context) {
-		namespace := c.Param("namespace")
-
-		var rb RoleBinding
-		if err := c.ShouldBindJSON(&rb); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.CreateNamespaceRoleBinding", ""))
-			return
-		}
-		if rb.Name == "" || rb.Role == "" {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateNamespaceRoleBinding", "name and role are required"))
-			return
-		}
-		if err := resolveNamespace(&rb.Metadata, namespace); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if err := validateNamespaceRoleBinding(repo, namespace, rb); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if role, _ := repo.GetNamespaceRole(namespace, rb.Role); !grantNamespace(c, repo, namespace, role.Rules, "rolebindings", VerbBind, "rbac.CreateNamespaceRoleBinding") {
-			return
-		}
-
-		if err := repo.PutNamespaceRoleBinding(namespace, &rb); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateNamespaceRoleBinding", ""))
-			return
-		}
-		c.JSON(http.StatusCreated, rb)
-	})
-
-	group.GET("/rolebindings", RequireClusterRBAC(repo, AuthorizationAPI, "rolebindings", "list"), func(c *gin.Context) {
-		bindings, err := repo.ListNamespaceRoleBindings(c.Param("namespace"))
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.ListNamespaceRoleBindings", ""))
-			return
-		}
-		c.JSON(http.StatusOK, bindings)
-	})
-
-	group.GET("/rolebindings/:rolebinding", RequireClusterRBAC(repo, AuthorizationAPI, "rolebindings", "get"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("rolebinding")
-		rb, err := repo.GetNamespaceRoleBinding(namespace, name)
-		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.GetNamespaceRoleBinding", "rolebinding %q not found", name))
-			return
-		}
-		c.JSON(http.StatusOK, rb)
-	})
-
-	group.PUT("/rolebindings/:rolebinding", RequireClusterRBAC(repo, AuthorizationAPI, "rolebindings", "update"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("rolebinding")
-		if _, err := repo.GetNamespaceRoleBinding(namespace, name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.UpdateNamespaceRoleBinding", "rolebinding %q not found", name))
-			return
-		}
-
-		var rb RoleBinding
-		if err := c.ShouldBindJSON(&rb); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.UpdateNamespaceRoleBinding", ""))
-			return
-		}
-		rb.Name = name
-		if rb.Role == "" {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.UpdateNamespaceRoleBinding", "role is required"))
-			return
-		}
-		if err := resolveNamespace(&rb.Metadata, namespace); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if err := validateNamespaceRoleBinding(repo, namespace, rb); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if role, _ := repo.GetNamespaceRole(namespace, rb.Role); !grantNamespace(c, repo, namespace, role.Rules, "rolebindings", VerbBind, "rbac.UpdateNamespaceRoleBinding") {
-			return
-		}
-
-		if err := repo.PutNamespaceRoleBinding(namespace, &rb); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateNamespaceRoleBinding", ""))
-			return
-		}
-		c.JSON(http.StatusOK, rb)
-	})
-
-	group.DELETE("/rolebindings/:rolebinding", RequireClusterRBAC(repo, AuthorizationAPI, "rolebindings", "delete"), func(c *gin.Context) {
-		namespace, name := c.Param("namespace"), c.Param("rolebinding")
-		if _, err := repo.GetNamespaceRoleBinding(namespace, name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.DeleteNamespaceRoleBinding", "rolebinding %q not found", name))
-			return
-		}
-		if err := repo.DeleteNamespaceRoleBinding(namespace, name); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.DeleteNamespaceRoleBinding", ""))
-			return
-		}
-		c.Status(http.StatusNoContent)
-	})
+func (s *Server) DeleteRoleBinding(ctx context.Context, namespace, name string) error {
+	const origin = "rbac.DeleteNamespaceRoleBinding"
+	if err := s.namespace(ctx, namespace, "rolebindings", "delete"); err != nil {
+		return err
+	}
+	if _, err := s.repo.GetNamespaceRoleBinding(namespace, name); err != nil {
+		return notFoundOrInternal(err, origin, "rolebinding %q not found", name)
+	}
+	if err := s.repo.DeleteNamespaceRoleBinding(namespace, name); err != nil {
+		return internal(err, origin)
+	}
+	return nil
 }

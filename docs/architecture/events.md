@@ -124,7 +124,7 @@ recorder sends them in batches.
   sends `PATCH .../events/<id>` with `{"series": {"count": 30,
   "last_observed": "…"}}`, nothing else. Only its reporter may, and the count
   never decreases. Its `ttl` counts from then.
-- **Never changed otherwise:** `PUT` and `DELETE` are `405`. An event expires.
+- **Never changed otherwise:** there is no `PUT` nor `DELETE` (a `404`). An event expires.
 - **Rate:** each reporter may send `events.rate.per_second` events (50), and
   `burst` at once (200). Beyond that Kayra answers `429` with `Retry-After`,
   which the recorder waits out.

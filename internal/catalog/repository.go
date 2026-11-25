@@ -116,7 +116,7 @@ func (r *Repository) GetNamespace(name string) (Namespace, error) {
 }
 
 // ActivateNamespace marks namespace active. The public API
-// (RegisterNamespaceCollectionRoutes) never calls this — it always writes
+// (system.Server.CreateNamespace) never calls this — it always writes
 // namespaces disabled — so this is the only path that can ever flip Active
 // to true; only trusted in-process code (the Reconciler) should call it.
 func (r *Repository) ActivateNamespace(name string) error {

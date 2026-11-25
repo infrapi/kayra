@@ -5,12 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"github.com/infrapi/lib/pkg/auth"
 
-	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/identity"
-	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
@@ -112,39 +109,6 @@ func ClusterRequest(path, method string) (api, resource, verb string, err error)
 	}
 	verb, err = auth.VerbFor(method, hasID)
 	return parts[0], resource, verb, err
-}
-
-// RequireCluster gates a cluster-scoped route on AuthorizeCluster, its
-// api, resource and verb read from the request as /check reads them: the
-// same decision `infrapi-cli auth can-i` gets for it.
-func RequireCluster(repo *Repository) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		const origin = "rbac.RequireCluster"
-		ac, ok := middleware.GetAuth(c)
-		if !ok {
-			httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, origin, "not authenticated"))
-			return
-		}
-		api, resource, verb, err := ClusterRequest(c.Request.URL.Path, c.Request.Method)
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusNotFound, origin, ""))
-			return
-		}
-		if ImplicitAPI(ac.UserID, api, resource, verb, c.Param("name")) {
-			c.Next()
-			return
-		}
-		allowed, reason, err := repo.AuthorizeCluster(ac.UserID, ac.Groups, api, resource, verb)
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
-			return
-		}
-		if !allowed {
-			httpapi.Fail(c, liberrors.New(http.StatusForbidden, origin, "not authorized to %s %s of api %q: %s", verb, resource, api, reason))
-			return
-		}
-		c.Next()
-	}
 }
 
 // Uncovered is the first permission want grants that have does not, as

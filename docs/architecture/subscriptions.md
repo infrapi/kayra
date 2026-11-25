@@ -76,9 +76,11 @@ so a sync that keeps failing never loops.
 
 ## Managing one
 
-Full CRUD at `/apis/catalog.infrapi.io/v1/namespaces/:namespace/subscriptions{,/:api}`,
-gated by [`Authenticator`](auth/rbac-and-auth.md#who-decides) plus
-[`rbac.RequireClusterRBAC(repo, "subscriptions", verb)`](../packages/rbac.md#requireclusterrbac)
+Create, list, get and delete at
+`/apis/catalog.infrapi.io/v1/namespaces/{namespace}/subscriptions{,/{api}}`
+(a subscription has nothing to update), and its sync action, behind the
+[`Authenticator`](auth/rbac-and-auth.md#who-decides), decided by
+[`rbac.AuthorizeNamespaceRBAC(ctx, namespace, catalog.CatalogAPI, "subscriptions", verb)`](../packages/rbac.md#authorizenamespacerbac)
 — "subscriptions" is just another `resource` value checked against the
 same cluster `Role.Rules` [RBAC & auth](auth/rbac-and-auth.md#who-can-manage-a-namespaces-rbac-objects)
 describes, so an existing sysadmin role using `resources: ["*"]` already
@@ -106,9 +108,10 @@ name** (`compute.infrapi.io`) — a short name is refused (`400`, the
 error names the long one to use when a registration has that
 `short_name`); subscribing to an api registration that doesn't exist in
 this deployment's scope is rejected (`404`).
-`PUT .../subscriptions/:api` is a no-op confirmation — `api` is
-fixed by the path and `active`/`state`/`current_sync_id` are computed, so
-there's nothing left in the body a caller could legitimately change.
+A subscription has no update: `api` is fixed by the path and
+`active`/`state`/`current_sync_id` are computed (`readOnly` in the
+[contract](../development.md#contracts): a request sending one is a
+`400`), so there's nothing a caller could change.
 
 ### Forcing a re-sync
 
@@ -136,10 +139,9 @@ change to the subscription — sees `current_sync_id` no longer matches
 "re-run" action to call.
 
 Gated on its own `resource` value, `"subscriptions/sync"` + verb
-`"patch"` — not `"subscriptions"` + `"update"` like the no-op `PUT
-.../subscriptions/:api` above — so a role can grant one without the
+`"patch"` — not `"subscriptions"` — so a role can grant one without the
 other: resetting a sync is a meaningfully different capability from
-editing a subscription, and `resources: ["*"]` still covers both for an
+managing subscriptions, and `resources: ["*"]` still covers both for an
 existing sysadmin role.
 
 ## Active/State/CurrentSyncID are computed

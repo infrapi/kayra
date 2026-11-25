@@ -33,10 +33,11 @@ defer sink.Close(ctx)                          // the api backend sends what is 
   - `API`: a queue and a worker, batches of `{"items": [...]}`, retried on a
     `5xx`, a `429` or a network error;
   - `None`.
-- **Where it is written:** `/check` (`rbac.RegisterAuthorizeRoute`) after
+- **Where it is written:** `/check` (`rbac.Server.Check`) after
   each decision, and `apiserver`'s middleware on Kayra's own groups and
-  `/oauth2/sessions`, once served. `httpapi.Failure` gives it the error a
-  denial answered.
+  `/oauth2/sessions`, once served. The error a denial answered comes from
+  `httpapi.Failure` (a gin middleware's) or infrapi/lib's `server.ErrorOf`
+  (a generated handler's).
 - **Metrics:** `kayra_audit_records_total{backend}`,
   `kayra_audit_dropped_total{reason}`, `kayra_audit_send_errors_total`, in the
   default Prometheus registry that lib's `-/metrics` serves.

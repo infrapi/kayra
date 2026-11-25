@@ -36,7 +36,10 @@ global binding granting `apiregistrations` on `catalog.infrapi.io`.
 
 `identity` gives the app behind it an identity of its own,
 `system:api:<name>`, to get tokens and act as the API: see
-[API identity](auth/api-identity.md). `uid` is set by Kayra.
+[API identity](auth/api-identity.md). `uid`, `platform`, `region` and
+`canary_namespaces` are set by Kayra: the
+[contract](../development.md#contracts) marks them `readOnly`, and a
+request sending one is a `400`.
 
 `allowed_namespaces` restricts who may subscribe to it, and use it: every
 namespace when empty. A namespace left out is refused at subscription,

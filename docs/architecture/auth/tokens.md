@@ -69,12 +69,13 @@ on.
 - **Always allowed:** `/oauth2/userinfo` and the discovery, `GET /apis`.
   Anything else outside `/apis` is refused, sessions included.
 
-## 3. List and revoke
+## 3. List, read and revoke
 
 **infrapi-cli**
 
 ```bash
 infrapi-cli get tokens -o yaml
+infrapi-cli get tokens qpmtejrtcysnbiilcuh7gch36f -o yaml
 infrapi-cli delete tokens qpmtejrtcysnbiilcuh7gch36f
 ```
 
@@ -82,16 +83,18 @@ infrapi-cli delete tokens qpmtejrtcysnbiilcuh7gch36f
 
 ```bash
 curl -s https://kayra.example.com/apis/authorization.infrapi.io/v1/tokens -H "Authorization: Bearer $TOKEN"
+curl -s https://kayra.example.com/apis/authorization.infrapi.io/v1/tokens/qpmtejrtcysnbiilcuh7gch36f -H "Authorization: Bearer $TOKEN"
 curl -s -X DELETE https://kayra.example.com/apis/authorization.infrapi.io/v1/tokens/qpmtejrtcysnbiilcuh7gch36f -H "Authorization: Bearer $TOKEN"
 ```
 
-- **What a list shows:** each token's id, name, dates, scope and
-  `last_used_at` (updated at most once an hour), never its secret.
+- **What a list or a read shows:** each token's id, name, dates, scope and
+  `last_used_at` (updated at most once an hour), never its secret. A token
+  that does not exist, or no longer does, is a `404`.
 - **Revoking:** a revoked token gets a 401 at once. An expired one disappears
   by itself.
-- **Another user's tokens:** add `?user=<id>` to the list or the delete. It
-  needs `authorization.infrapi.io` / `tokens` / `list` or `delete` in a global
-  cluster role; the [sysadmin](rbac-and-auth.md#the-sysadmin-binding) has
+- **Another user's tokens:** add `?user=<id>` to the list, the read or the
+  delete. It needs `authorization.infrapi.io` / `tokens` / `list`, `get` or
+  `delete` in a global cluster role; the [sysadmin](rbac-and-auth.md#the-sysadmin-binding) has
   them.
 
 ## Where the roles come from

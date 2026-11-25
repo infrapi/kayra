@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/rbac"
 	"github.com/infrapi/kayra/internal/store"
@@ -136,10 +137,10 @@ func TestCheckRouteOrder(t *testing.T) {
 		group = "core-devs"
 	)
 	engine := gin.New()
-	rbac.RegisterAuthorizeRoute(engine, rbacRepo, func(c *gin.Context) {
+	rbac.Register(engine.Group("", func(c *gin.Context) {
 		middleware.SetAuth(c, &middleware.AuthContext{UserID: "alice", Groups: []string{group}})
 		c.Next()
-	}, rbac.Prechecks{
+	}, httpapi.WithRequest), rbac.NewServer(rbac.ServerOptions{Repo: rbacRepo, Prechecks: rbac.Prechecks{
 		Namespace: catalogRepo.CheckNamespace,
 		Api: func(namespace, api string) *liberrors.Error {
 			return catalogRepo.CheckApiSubscription(namespace, api, testDeployPlatform, testDeployRegion)
@@ -147,7 +148,7 @@ func TestCheckRouteOrder(t *testing.T) {
 		Resource: func(api, resource, verb string) *liberrors.Error {
 			return catalogRepo.CheckApiResource(api, resource, verb, testDeployPlatform, testDeployRegion)
 		},
-	}, nil)
+	}}))
 
 	resource := "dashboards"
 	check := func(verb string) (int, string) {

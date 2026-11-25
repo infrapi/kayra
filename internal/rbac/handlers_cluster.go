@@ -1,12 +1,11 @@
 package rbac
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
-
+	"github.com/infrapi/kayra/api"
 	"github.com/infrapi/kayra/internal/httpapi"
-	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
@@ -36,295 +35,301 @@ func validateClusterRoleBinding(repo *Repository, rb RoleBinding) *liberrors.Err
 	return nil
 }
 
-// RegisterClusterRoutes mounts full CRUD for the cluster RBAC resources
-// at /apis/authorization.infrapi.io/v1/{clustergroups,clusterroles,
-// clusterrolebindings} — cluster-scoped siblings of this package's own
-// namespace-scoped groups/roles/rolebindings, "cluster" folded into the
-// resource name, as Kubernetes names ClusterRole/ClusterRoleBinding —
-// behind gate, normally the authenticator then RequireCluster: the
-// cluster RBAC they define decides who manages them, the built-in
-// sysadmin binding (Repository.SetSysadmin) first. A cluster object is
-// global when its metadata.namespace is "": it grants cluster-scoped
-// resources only; otherwise it is scoped to that namespace, and grants
-// managing it (CanManageNamespaceRBAC).
+// The cluster RBAC objects, /apis/authorization.infrapi.io/v1/
+// {clustergroups,clusterroles,clusterrolebindings}: cluster-scoped
+// siblings of the namespace groups/roles/rolebindings, "cluster" folded
+// into the resource name, as Kubernetes names ClusterRole. The cluster
+// RBAC they define decides who manages them (AuthorizeClusterRequest), the
+// built-in sysadmin binding (Repository.SetSysadmin) first. A cluster
+// object is global when its metadata.namespace is "": it grants
+// cluster-scoped resources only; otherwise it is scoped to that namespace,
+// and grants managing it (CanManageNamespaceRBAC).
 //
 // Writes follow the anti-escalation rule: a cluster role, or a binding to
 // one, may grant only what its writer holds on the cluster
 // (ClusterRules), unless they hold escalate on clusterroles, or bind on
-// clusterrolebindings. validate checks a global cluster role's rules
-// against the apis' cluster-scoped resources.
-func RegisterClusterRoutes(r gin.IRouter, repo *Repository, gate gin.HandlerFunc, validate func([]Rule) *liberrors.Error) {
-	// grant checks what a cluster role, or a binding to one, grants
-	// against what the caller holds on the cluster
-	grant := func(c *gin.Context, role Role, resource, verb, origin string) bool {
-		if role.Metadata.Namespace == "" && resource == "clusterroles" && validate != nil {
-			if err := validate(role.Rules); err != nil {
-				httpapi.Fail(c, err)
-				return false
-			}
+// clusterrolebindings. ValidateClusterRoleRules checks a global cluster
+// role's rules against the apis' cluster-scoped resources.
+
+// grantCluster checks what a cluster role, or a binding to one, grants
+// against what the caller holds on the cluster.
+func (s *Server) grantCluster(ctx context.Context, role Role, resource, verb, origin string) error {
+	if role.Metadata.Namespace == "" && resource == "clusterroles" && s.o.ValidateClusterRoleRules != nil {
+		if err := s.o.ValidateClusterRoleRules(role.Rules); err != nil {
+			return err
 		}
-		ac, ok := middleware.GetAuth(c)
-		if !ok {
-			httpapi.Fail(c, liberrors.New(http.StatusUnauthorized, origin, "not authenticated"))
-			return false
-		}
-		have, err := repo.ClusterRules(ac.UserID, ac.Groups)
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, origin, ""))
-			return false
-		}
-		if err := checkGrant(have, role.Rules, resource, verb, origin); err != nil {
-			httpapi.Fail(c, err)
-			return false
-		}
-		return true
 	}
-	group := r.Group("/apis/"+AuthorizationAPI+"/v1", gate)
+	ac, err := Caller(ctx, origin)
+	if err != nil {
+		return err
+	}
+	have, err := s.repo.ClusterRules(ac.UserID, ac.Groups)
+	if err != nil {
+		return internal(err, origin)
+	}
+	return httpapi.Err(checkGrant(have, role.Rules, resource, verb, origin))
+}
 
-	// --- clustergroups ---
+// --- clustergroups ---
 
-	group.POST("/clustergroups", func(c *gin.Context) {
-		var g Group
-		if err := c.ShouldBindJSON(&g); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.CreateClusterGroup", ""))
-			return
-		}
-		if g.Name == "" {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateClusterGroup", "name is required"))
-			return
-		}
-		if err := validateGroupMembers(g, true, "rbac.CreateClusterGroup"); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if err := repo.PutClusterGroup(&g); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateClusterGroup", ""))
-			return
-		}
-		c.JSON(http.StatusCreated, g)
-	})
+func (s *Server) CreateClusterGroup(ctx context.Context, body api.Group) (api.Group, error) {
+	const origin = "rbac.CreateClusterGroup"
+	if err := s.cluster(ctx); err != nil {
+		return api.Group{}, err
+	}
+	g, err := fromAPI[Group](body, origin)
+	if err != nil {
+		return api.Group{}, err
+	}
+	if g.Name == "" {
+		return api.Group{}, liberrors.New(http.StatusBadRequest, origin, "name is required")
+	}
+	if err := validateGroupMembers(g, true, origin); err != nil {
+		return api.Group{}, err
+	}
+	if err := s.repo.PutClusterGroup(&g); err != nil {
+		return api.Group{}, internal(err, origin)
+	}
+	return toAPI[api.Group](g, origin)
+}
 
-	group.GET("/clustergroups", func(c *gin.Context) {
-		groups, err := repo.ListClusterGroups()
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.ListClusterGroups", ""))
-			return
-		}
-		c.JSON(http.StatusOK, groups)
-	})
+func (s *Server) ListClusterGroups(ctx context.Context) ([]api.Group, error) {
+	const origin = "rbac.ListClusterGroups"
+	if err := s.cluster(ctx); err != nil {
+		return nil, err
+	}
+	groups, err := s.repo.ListClusterGroups()
+	if err != nil {
+		return nil, internal(err, origin)
+	}
+	return toAPI[[]api.Group](groups, origin)
+}
 
-	group.GET("/clustergroups/:group", func(c *gin.Context) {
-		g, err := repo.GetClusterGroup(c.Param("group"))
-		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.GetClusterGroup", "group %q not found", c.Param("group")))
-			return
-		}
-		c.JSON(http.StatusOK, g)
-	})
+func (s *Server) GetClusterGroup(ctx context.Context, name string) (api.Group, error) {
+	const origin = "rbac.GetClusterGroup"
+	if err := s.cluster(ctx); err != nil {
+		return api.Group{}, err
+	}
+	g, err := s.repo.GetClusterGroup(name)
+	if err != nil {
+		return api.Group{}, notFoundOrInternal(err, origin, "group %q not found", name)
+	}
+	return toAPI[api.Group](g, origin)
+}
 
-	group.PUT("/clustergroups/:group", func(c *gin.Context) {
-		name := c.Param("group")
-		if _, err := repo.GetClusterGroup(name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.UpdateClusterGroup", "group %q not found", name))
-			return
-		}
+func (s *Server) UpdateClusterGroup(ctx context.Context, name string, body api.Group) (api.Group, error) {
+	const origin = "rbac.UpdateClusterGroup"
+	if err := s.cluster(ctx); err != nil {
+		return api.Group{}, err
+	}
+	if _, err := s.repo.GetClusterGroup(name); err != nil {
+		return api.Group{}, notFoundOrInternal(err, origin, "group %q not found", name)
+	}
+	g, err := fromAPI[Group](body, origin)
+	if err != nil {
+		return api.Group{}, err
+	}
+	g.Name = name
+	if err := validateGroupMembers(g, true, origin); err != nil {
+		return api.Group{}, err
+	}
+	if err := s.repo.PutClusterGroup(&g); err != nil {
+		return api.Group{}, internal(err, origin)
+	}
+	return toAPI[api.Group](g, origin)
+}
 
-		var g Group
-		if err := c.ShouldBindJSON(&g); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.UpdateClusterGroup", ""))
-			return
-		}
-		g.Name = name
-		if err := validateGroupMembers(g, true, "rbac.UpdateClusterGroup"); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
+func (s *Server) DeleteClusterGroup(ctx context.Context, name string) error {
+	const origin = "rbac.DeleteClusterGroup"
+	if err := s.cluster(ctx); err != nil {
+		return err
+	}
+	if _, err := s.repo.GetClusterGroup(name); err != nil {
+		return notFoundOrInternal(err, origin, "group %q not found", name)
+	}
+	if err := s.repo.DeleteClusterGroup(name); err != nil {
+		return internal(err, origin)
+	}
+	return nil
+}
 
-		if err := repo.PutClusterGroup(&g); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateClusterGroup", ""))
-			return
-		}
-		c.JSON(http.StatusOK, g)
-	})
+// --- clusterroles ---
 
-	group.DELETE("/clustergroups/:group", func(c *gin.Context) {
-		name := c.Param("group")
-		if _, err := repo.GetClusterGroup(name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.DeleteClusterGroup", "group %q not found", name))
-			return
-		}
-		if err := repo.DeleteClusterGroup(name); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.DeleteClusterGroup", ""))
-			return
-		}
-		c.Status(http.StatusNoContent)
-	})
+func (s *Server) CreateClusterRole(ctx context.Context, body api.Role) (api.Role, error) {
+	const origin = "rbac.CreateClusterRole"
+	if err := s.cluster(ctx); err != nil {
+		return api.Role{}, err
+	}
+	role, err := fromAPI[Role](body, origin)
+	if err != nil {
+		return api.Role{}, err
+	}
+	if role.Name == "" {
+		return api.Role{}, liberrors.New(http.StatusBadRequest, origin, "name is required")
+	}
+	if err := s.grantCluster(ctx, role, "clusterroles", VerbEscalate, origin); err != nil {
+		return api.Role{}, err
+	}
+	if err := s.repo.PutClusterRole(&role); err != nil {
+		return api.Role{}, internal(err, origin)
+	}
+	return toAPI[api.Role](role, origin)
+}
 
-	// --- clusterroles ---
+func (s *Server) ListClusterRoles(ctx context.Context) ([]api.Role, error) {
+	const origin = "rbac.ListClusterRoles"
+	if err := s.cluster(ctx); err != nil {
+		return nil, err
+	}
+	roles, err := s.repo.ListClusterRoles()
+	if err != nil {
+		return nil, internal(err, origin)
+	}
+	return toAPI[[]api.Role](roles, origin)
+}
 
-	group.POST("/clusterroles", func(c *gin.Context) {
-		var role Role
-		if err := c.ShouldBindJSON(&role); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.CreateClusterRole", ""))
-			return
-		}
-		if role.Name == "" {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateClusterRole", "name is required"))
-			return
-		}
-		if !grant(c, role, "clusterroles", VerbEscalate, "rbac.CreateClusterRole") {
-			return
-		}
-		if err := repo.PutClusterRole(&role); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateClusterRole", ""))
-			return
-		}
-		c.JSON(http.StatusCreated, role)
-	})
+func (s *Server) GetClusterRole(ctx context.Context, name string) (api.Role, error) {
+	const origin = "rbac.GetClusterRole"
+	if err := s.cluster(ctx); err != nil {
+		return api.Role{}, err
+	}
+	role, err := s.repo.GetClusterRole(name)
+	if err != nil {
+		return api.Role{}, notFoundOrInternal(err, origin, "role %q not found", name)
+	}
+	return toAPI[api.Role](role, origin)
+}
 
-	group.GET("/clusterroles", func(c *gin.Context) {
-		roles, err := repo.ListClusterRoles()
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.ListClusterRoles", ""))
-			return
-		}
-		c.JSON(http.StatusOK, roles)
-	})
+func (s *Server) UpdateClusterRole(ctx context.Context, name string, body api.Role) (api.Role, error) {
+	const origin = "rbac.UpdateClusterRole"
+	if err := s.cluster(ctx); err != nil {
+		return api.Role{}, err
+	}
+	if _, err := s.repo.GetClusterRole(name); err != nil {
+		return api.Role{}, notFoundOrInternal(err, origin, "role %q not found", name)
+	}
+	role, err := fromAPI[Role](body, origin)
+	if err != nil {
+		return api.Role{}, err
+	}
+	role.Name = name
+	if err := s.grantCluster(ctx, role, "clusterroles", VerbEscalate, origin); err != nil {
+		return api.Role{}, err
+	}
+	if err := s.repo.PutClusterRole(&role); err != nil {
+		return api.Role{}, internal(err, origin)
+	}
+	return toAPI[api.Role](role, origin)
+}
 
-	group.GET("/clusterroles/:role", func(c *gin.Context) {
-		role, err := repo.GetClusterRole(c.Param("role"))
-		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.GetClusterRole", "role %q not found", c.Param("role")))
-			return
-		}
-		c.JSON(http.StatusOK, role)
-	})
+func (s *Server) DeleteClusterRole(ctx context.Context, name string) error {
+	const origin = "rbac.DeleteClusterRole"
+	if err := s.cluster(ctx); err != nil {
+		return err
+	}
+	if _, err := s.repo.GetClusterRole(name); err != nil {
+		return notFoundOrInternal(err, origin, "role %q not found", name)
+	}
+	if err := s.repo.DeleteClusterRole(name); err != nil {
+		return internal(err, origin)
+	}
+	return nil
+}
 
-	group.PUT("/clusterroles/:role", func(c *gin.Context) {
-		name := c.Param("role")
-		if _, err := repo.GetClusterRole(name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.UpdateClusterRole", "role %q not found", name))
-			return
-		}
+// --- clusterrolebindings ---
 
-		var role Role
-		if err := c.ShouldBindJSON(&role); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.UpdateClusterRole", ""))
-			return
-		}
-		role.Name = name
-		if !grant(c, role, "clusterroles", VerbEscalate, "rbac.UpdateClusterRole") {
-			return
-		}
+func (s *Server) CreateClusterRoleBinding(ctx context.Context, body api.RoleBinding) (api.RoleBinding, error) {
+	const origin = "rbac.CreateClusterRoleBinding"
+	if err := s.cluster(ctx); err != nil {
+		return api.RoleBinding{}, err
+	}
+	rb, err := fromAPI[RoleBinding](body, origin)
+	if err != nil {
+		return api.RoleBinding{}, err
+	}
+	if rb.Name == "" || rb.Role == "" {
+		return api.RoleBinding{}, liberrors.New(http.StatusBadRequest, origin, "name and role are required")
+	}
+	if err := s.writeClusterRoleBinding(ctx, &rb, origin); err != nil {
+		return api.RoleBinding{}, err
+	}
+	return toAPI[api.RoleBinding](rb, origin)
+}
 
-		if err := repo.PutClusterRole(&role); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateClusterRole", ""))
-			return
-		}
-		c.JSON(http.StatusOK, role)
-	})
+// writeClusterRoleBinding validates rb, checks what its role grants
+// against the caller's, and writes it.
+func (s *Server) writeClusterRoleBinding(ctx context.Context, rb *RoleBinding, origin string) error {
+	if err := validateClusterRoleBinding(s.repo, *rb); err != nil {
+		return err
+	}
+	role, _ := s.repo.GetClusterRole(rb.Role)
+	if err := s.grantCluster(ctx, role, "clusterrolebindings", VerbBind, origin); err != nil {
+		return err
+	}
+	if err := s.repo.PutClusterRoleBinding(rb); err != nil {
+		return internal(err, origin)
+	}
+	return nil
+}
 
-	group.DELETE("/clusterroles/:role", func(c *gin.Context) {
-		name := c.Param("role")
-		if _, err := repo.GetClusterRole(name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.DeleteClusterRole", "role %q not found", name))
-			return
-		}
-		if err := repo.DeleteClusterRole(name); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.DeleteClusterRole", ""))
-			return
-		}
-		c.Status(http.StatusNoContent)
-	})
+func (s *Server) ListClusterRoleBindings(ctx context.Context) ([]api.RoleBinding, error) {
+	const origin = "rbac.ListClusterRoleBindings"
+	if err := s.cluster(ctx); err != nil {
+		return nil, err
+	}
+	bindings, err := s.repo.ListClusterRoleBindings()
+	if err != nil {
+		return nil, internal(err, origin)
+	}
+	return toAPI[[]api.RoleBinding](bindings, origin)
+}
 
-	// --- clusterrolebindings ---
+func (s *Server) GetClusterRoleBinding(ctx context.Context, name string) (api.RoleBinding, error) {
+	const origin = "rbac.GetClusterRoleBinding"
+	if err := s.cluster(ctx); err != nil {
+		return api.RoleBinding{}, err
+	}
+	rb, err := s.repo.GetClusterRoleBinding(name)
+	if err != nil {
+		return api.RoleBinding{}, notFoundOrInternal(err, origin, "rolebinding %q not found", name)
+	}
+	return toAPI[api.RoleBinding](rb, origin)
+}
 
-	group.POST("/clusterrolebindings", func(c *gin.Context) {
-		var rb RoleBinding
-		if err := c.ShouldBindJSON(&rb); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.CreateClusterRoleBinding", ""))
-			return
-		}
-		if rb.Name == "" || rb.Role == "" {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.CreateClusterRoleBinding", "name and role are required"))
-			return
-		}
-		if err := validateClusterRoleBinding(repo, rb); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if role, _ := repo.GetClusterRole(rb.Role); !grant(c, role, "clusterrolebindings", VerbBind, "rbac.CreateClusterRoleBinding") {
-			return
-		}
-		if err := repo.PutClusterRoleBinding(&rb); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.CreateClusterRoleBinding", ""))
-			return
-		}
-		c.JSON(http.StatusCreated, rb)
-	})
+func (s *Server) UpdateClusterRoleBinding(ctx context.Context, name string, body api.RoleBinding) (api.RoleBinding, error) {
+	const origin = "rbac.UpdateClusterRoleBinding"
+	if err := s.cluster(ctx); err != nil {
+		return api.RoleBinding{}, err
+	}
+	if _, err := s.repo.GetClusterRoleBinding(name); err != nil {
+		return api.RoleBinding{}, notFoundOrInternal(err, origin, "rolebinding %q not found", name)
+	}
+	rb, err := fromAPI[RoleBinding](body, origin)
+	if err != nil {
+		return api.RoleBinding{}, err
+	}
+	rb.Name = name
+	if rb.Role == "" {
+		return api.RoleBinding{}, liberrors.New(http.StatusBadRequest, origin, "role is required")
+	}
+	if err := s.writeClusterRoleBinding(ctx, &rb, origin); err != nil {
+		return api.RoleBinding{}, err
+	}
+	return toAPI[api.RoleBinding](rb, origin)
+}
 
-	group.GET("/clusterrolebindings", func(c *gin.Context) {
-		bindings, err := repo.ListClusterRoleBindings()
-		if err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.ListClusterRoleBindings", ""))
-			return
-		}
-		c.JSON(http.StatusOK, bindings)
-	})
-
-	group.GET("/clusterrolebindings/:rolebinding", func(c *gin.Context) {
-		rb, err := repo.GetClusterRoleBinding(c.Param("rolebinding"))
-		if err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.GetClusterRoleBinding", "rolebinding %q not found", c.Param("rolebinding")))
-			return
-		}
-		c.JSON(http.StatusOK, rb)
-	})
-
-	group.PUT("/clusterrolebindings/:rolebinding", func(c *gin.Context) {
-		name := c.Param("rolebinding")
-		if _, err := repo.GetClusterRoleBinding(name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.UpdateClusterRoleBinding", "rolebinding %q not found", name))
-			return
-		}
-
-		var rb RoleBinding
-		if err := c.ShouldBindJSON(&rb); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusBadRequest, "rbac.UpdateClusterRoleBinding", ""))
-			return
-		}
-		rb.Name = name
-		if rb.Role == "" {
-			httpapi.Fail(c, liberrors.New(http.StatusBadRequest, "rbac.UpdateClusterRoleBinding", "role is required"))
-			return
-		}
-		if err := validateClusterRoleBinding(repo, rb); err != nil {
-			httpapi.Fail(c, err)
-			return
-		}
-		if role, _ := repo.GetClusterRole(rb.Role); !grant(c, role, "clusterrolebindings", VerbBind, "rbac.UpdateClusterRoleBinding") {
-			return
-		}
-
-		if err := repo.PutClusterRoleBinding(&rb); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.UpdateClusterRoleBinding", ""))
-			return
-		}
-		c.JSON(http.StatusOK, rb)
-	})
-
-	group.DELETE("/clusterrolebindings/:rolebinding", func(c *gin.Context) {
-		name := c.Param("rolebinding")
-		if _, err := repo.GetClusterRoleBinding(name); err != nil {
-			httpapi.Fail(c, notFoundOrInternal(err, "rbac.DeleteClusterRoleBinding", "rolebinding %q not found", name))
-			return
-		}
-		if err := repo.DeleteClusterRoleBinding(name); err != nil {
-			httpapi.Fail(c, liberrors.Wrap(err, http.StatusInternalServerError, "rbac.DeleteClusterRoleBinding", ""))
-			return
-		}
-		c.Status(http.StatusNoContent)
-	})
+func (s *Server) DeleteClusterRoleBinding(ctx context.Context, name string) error {
+	const origin = "rbac.DeleteClusterRoleBinding"
+	if err := s.cluster(ctx); err != nil {
+		return err
+	}
+	if _, err := s.repo.GetClusterRoleBinding(name); err != nil {
+		return notFoundOrInternal(err, origin, "rolebinding %q not found", name)
+	}
+	if err := s.repo.DeleteClusterRoleBinding(name); err != nil {
+		return internal(err, origin)
+	}
+	return nil
 }
 
 // notFoundOrInternal turns a Repository Get error into a 404 when it is

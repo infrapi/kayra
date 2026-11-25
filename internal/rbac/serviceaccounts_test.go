@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/infrapi/kayra/api"
 	"github.com/infrapi/kayra/internal/identity"
 )
 
@@ -40,11 +41,8 @@ func newSAEngine(t *testing.T, issuer TokenIssuer, gate gin.HandlerFunc) (*gin.E
 	if gate == nil {
 		gate = fakeAuthGate(testAdmin, testAdminGroup)
 	}
-	engine := gin.New()
-	RegisterServiceAccountRoutes(engine, repo, gate, ServiceAccountTokens{Issuer: issuer, DefaultTTL: time.Hour, MaxTTL: 24 * time.Hour})
-	RegisterNamespaceRoutes(engine, repo, gate, nil)
-	RegisterClusterRoutes(engine, repo, sysadminGate(repo), nil)
-	return engine, repo
+	s := NewServer(ServerOptions{Repo: repo, Tokens: ServiceAccountTokens{Issuer: issuer, DefaultTTL: time.Hour, MaxTTL: 24 * time.Hour}})
+	return serve(s, byScope(sysadminGate(repo), gate)), repo
 }
 
 func TestServiceAccountCRUD(t *testing.T) {
@@ -110,7 +108,7 @@ func TestServiceAccountToken(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("token: %d %s", w.Code, w.Body)
 	}
-	var res tokenResponse
+	var res api.ServiceAccountToken
 	_ = json.Unmarshal(w.Body.Bytes(), &res)
 	if res.Token != "signed.system:serviceaccount:myns:deployer" || res.ExpiresAt.IsZero() {
 		t.Fatalf("response = %+v", res)
@@ -120,19 +118,19 @@ func TestServiceAccountToken(t *testing.T) {
 		t.Fatalf("issued = %+v", issuer)
 	}
 
-	w = doJSON(t, engine, http.MethodPost, saPath+"/deployer/token", tokenRequest{ExpiresIn: "24h", Audience: []string{"https://compute.example.com"}})
+	w = doJSON(t, engine, http.MethodPost, saPath+"/deployer/token", api.ServiceAccountTokenRequest{ExpiresIn: "24h", Audience: []string{"https://compute.example.com"}})
 	if w.Code != http.StatusCreated || issuer.ttl != 24*time.Hour || issuer.audience[0] != "https://compute.example.com" {
 		t.Fatalf("token for compute, 24h: %d %s, %+v", w.Code, w.Body, issuer)
 	}
 
 	for _, tt := range []struct {
-		body tokenRequest
+		body api.ServiceAccountTokenRequest
 		want string
 	}{
-		{tokenRequest{ExpiresIn: "25h"}, "more than the 24h0m0s"},
-		{tokenRequest{ExpiresIn: "soon"}, "a duration"},
-		{tokenRequest{ExpiresIn: "-1h"}, "a duration"},
-		{tokenRequest{Audience: []string{"https://evil.example.com"}}, "not one of the resources"},
+		{api.ServiceAccountTokenRequest{ExpiresIn: "25h"}, "more than the 24h0m0s"},
+		{api.ServiceAccountTokenRequest{ExpiresIn: "soon"}, "a duration"},
+		{api.ServiceAccountTokenRequest{ExpiresIn: "-1h"}, "a duration"},
+		{api.ServiceAccountTokenRequest{Audience: []string{"https://evil.example.com"}}, "not one of the resources"},
 	} {
 		w := doJSON(t, engine, http.MethodPost, saPath+"/deployer/token", tt.body)
 		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), tt.want) {

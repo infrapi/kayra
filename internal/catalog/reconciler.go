@@ -80,8 +80,8 @@ func (k *keyedLock) lock(ctx context.Context, key string) (func(), error) {
 // event-driven trigger that:
 //
 //   - moves a namespace or subscription out of the disabled/init state the
-//     public API always creates it in (see RegisterNamespaceCollectionRoutes
-//     and RegisterNamespaceRoutes' "/subscriptions" routes) — the "initial
+//     public API always creates it in (see system.Server.CreateNamespace
+//     and Server.CreateSubscription) — the "initial
 //     action";
 //   - reconciles every already-active subscription against an api
 //     registration whenever its own SyncID moves on — the "ongoing"

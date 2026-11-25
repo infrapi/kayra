@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	kayraapi "github.com/infrapi/kayra/api"
 	"net/http"
 	"os"
 	"slices"
@@ -28,7 +29,7 @@ import (
 	"github.com/infrapi/kayra/internal/oidc"
 	"github.com/infrapi/kayra/internal/rbac"
 	"github.com/infrapi/kayra/internal/store"
-	"github.com/infrapi/kayra/internal/tokenapi"
+	"github.com/infrapi/kayra/internal/system"
 	libconfig "github.com/infrapi/lib/pkg/config"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 	libserver "github.com/infrapi/lib/pkg/server"
@@ -113,12 +114,14 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config, opts ...Option) (*g
 	rbac.SetAPIDomain(apiDomain)
 	catalog.SetAPIDomain(apiDomain)
 	events.SetAPIDomain(apiDomain)
+	kayraapi.SetDomain(apiDomain)
 
 	// infrapi/lib serves its own endpoints (health, metrics, metadata,
 	// OpenAPI, docs) under each of Kayra's groups, about that group's
 	// routes: /apis/catalog.<domain>/v1/-/openapi.json. They answer
 	// without a token.
-	engine, err := libserver.NewServerGin(appCfg, Roots())
+	// Every request to them is checked against their contracts first.
+	engine, err := libserver.NewServerGin(appCfg, Roots(), libserver.WithOpenAPI(kayraapi.Served()...))
 	if err != nil {
 		return nil, fmt.Errorf("apiserver: build gin engine: %w", err)
 	}
@@ -273,35 +276,86 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config, opts ...Option) (*g
 	engine.GET("/oauth2/userinfo", authenticator.Middleware(), userinfoHandler)
 	engine.POST("/oauth2/userinfo", authenticator.Middleware(), userinfoHandler)
 
-	// Kayra's own cluster-scoped resources (namespaces, apiregistrations,
-	// the cluster RBAC): authenticated, then decided on the cluster RBAC,
-	// the built-in sysadmin binding first, as /check decides any app's
-	// cluster-scoped resource
-	cluster := engine.Group("", authenticator.Middleware(), rbac.RequireCluster(rbacRepo))
-	pass := func(c *gin.Context) { c.Next() }
-	rbac.RegisterClusterRoutes(cluster, rbacRepo, pass, func(rules []rbac.Rule) *liberrors.Error {
-		return catalogRepo.ValidateClusterRoleRules(rules, appCfg.AppPlatform, appCfg.AppRegion)
-	})
-	rbac.RegisterNamespaceRoutes(engine, rbacRepo, authenticator.Middleware(), func(rules []rbac.Rule) *liberrors.Error {
-		return catalogRepo.ValidateRoleRules(rules, appCfg.AppPlatform, appCfg.AppRegion)
-	})
-	rbac.RegisterServiceAccountRoutes(engine, rbacRepo, authenticator.Middleware(), saTokens)
-	// catalog.Reconciler (the namespace/subscription/api registration
-	// reconcile controller) deliberately does not run here: it's its own
-	// "kayra reconciler" CLI command/process (see cmd/kayra), not a
-	// goroutine mixed into the API server — easier to debug and scale
-	// independently, and a crash in one never takes down the other.
-	// /check's catalog-owned steps (see rbac.RegisterAuthorizeRoute for
-	// the full order): the namespace exists, then — once the caller is
-	// known to be a member — the api is registered here, the namespace is
-	// subscribed to it, and that subscription is active.
+	// Kayra's own groups, served from their contracts (api/*.yaml): every
+	// route authenticated, the request kept in its context for the
+	// handlers, which decide on the caller themselves (the cluster RBAC,
+	// the built-in sysadmin binding first, or the namespace's)
+	routes := engine.Group("", httpapi.WithRequest, authenticator.Middleware())
+	system.Register(routes, system.NewServer(catalogRepo, rbacRepo))
+	catalog.Register(routes, catalog.NewServer(catalogRepo, rbacRepo, appCfg.AppPlatform, appCfg.AppRegion))
+
+	patTTLs, err := cfg.Tokens.Pat.Durations()
+	if err != nil {
+		return nil, err
+	}
+	eventsResource := func(resource, verb string) *liberrors.Error {
+		if resource != events.Resource {
+			return liberrors.New(http.StatusNotFound, "events", "api %q serves %q only", events.API, events.Resource)
+		}
+		if !slices.Contains([]string{"get", "list", "create", "patch"}, verb) {
+			return liberrors.New(http.StatusMethodNotAllowed, "events", "events: get, list, create or patch")
+		}
+		return nil
+	}
+	// /check's catalog-owned steps (see rbac.Server.Check for the full
+	// order): the namespace exists, then — once the caller is known to be
+	// a member — the api is registered here, the namespace is subscribed
+	// to it, and that subscription is active.
+	rbac.Register(routes, rbac.NewServer(rbac.ServerOptions{
+		Repo: rbacRepo,
+		ValidateClusterRoleRules: func(rules []rbac.Rule) *liberrors.Error {
+			return catalogRepo.ValidateClusterRoleRules(rules, appCfg.AppPlatform, appCfg.AppRegion)
+		},
+		ValidateRoleRules: func(rules []rbac.Rule) *liberrors.Error {
+			return catalogRepo.ValidateRoleRules(rules, appCfg.AppPlatform, appCfg.AppRegion)
+		},
+		Tokens:  saTokens,
+		Auditor: o.auditor,
+		Prechecks: rbac.Prechecks{
+			Namespace: catalogRepo.CheckNamespace,
+			Api: func(namespace, api string) *liberrors.Error {
+				if api == events.API {
+					return nil
+				}
+				return catalogRepo.CheckApiSubscription(namespace, api, appCfg.AppPlatform, appCfg.AppRegion)
+			},
+			Resource: func(api, resource, verb string) *liberrors.Error {
+				if api == events.API {
+					return eventsResource(resource, verb)
+				}
+				return catalogRepo.CheckApiResource(api, resource, verb, appCfg.AppPlatform, appCfg.AppRegion)
+			},
+			ClusterResource: func(api, resource, verb string) *liberrors.Error {
+				if api == events.API {
+					return eventsResource(resource, verb)
+				}
+				return catalogRepo.CheckApiClusterResource(api, resource, verb, appCfg.AppPlatform, appCfg.AppRegion)
+			},
+			Builtin: func(api string) bool {
+				return api == catalog.SystemAPI || api == catalog.CatalogAPI || api == rbac.AuthorizationAPI
+			},
+			MembersRead: func(api, resource, verb string) bool {
+				return api == catalog.SystemAPI && resource == "namespaces" && (verb == "list" || verb == "get")
+			},
+		},
+		// a user's personal access tokens; another user's: the cluster
+		// RBAC's, the sysadmin first
+		PATs: rbac.PATOptions{
+			Store: s, Keys: keys, Pub: &patKey.PublicKey, Config: cfg, TTLs: patTTLs,
+			CanManageOthers: func(ac *middleware.AuthContext, verb string) bool {
+				ok, _, err := rbacRepo.AuthorizeCluster(ac.UserID, ac.Groups, rbac.AuthorizationAPI, "tokens", verb)
+				return ok && err == nil
+			},
+		},
+	}))
+
 	// events.<domain>: decided by the namespace's RBAC, as an app's API,
 	// though no namespace subscribes to it
 	eventsSettings, err := cfg.Events.Settings()
 	if err != nil {
 		return nil, err
 	}
-	events.Register(engine, authenticator.Middleware(), events.Options{
+	events.Register(routes, events.NewServer(events.Options{
 		Store: s, Keys: keys, Settings: eventsSettings, Stdout: os.Stdout,
 		Namespace: catalogRepo.CheckNamespace,
 		Authorize: func(ac *middleware.AuthContext, namespace, verb string) (bool, string, error) {
@@ -316,66 +370,11 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config, opts ...Option) (*g
 		Subscribed: func(namespace, api string) *liberrors.Error {
 			return catalogRepo.CheckApiSubscription(namespace, api, appCfg.AppPlatform, appCfg.AppRegion)
 		},
-	})
-	eventsResource := func(resource, verb string) *liberrors.Error {
-		if resource != events.Resource {
-			return liberrors.New(http.StatusNotFound, "events", "api %q serves %q only", events.API, events.Resource)
-		}
-		if !slices.Contains([]string{"get", "list", "create", "patch"}, verb) {
-			return liberrors.New(http.StatusMethodNotAllowed, "events", "events: get, list, create or patch")
-		}
-		return nil
-	}
-	rbac.RegisterAuthorizeRoute(engine, rbacRepo, authenticator.Middleware(), rbac.Prechecks{
-		Namespace: catalogRepo.CheckNamespace,
-		Api: func(namespace, api string) *liberrors.Error {
-			if api == events.API {
-				return nil
-			}
-			return catalogRepo.CheckApiSubscription(namespace, api, appCfg.AppPlatform, appCfg.AppRegion)
-		},
-		Resource: func(api, resource, verb string) *liberrors.Error {
-			if api == events.API {
-				return eventsResource(resource, verb)
-			}
-			return catalogRepo.CheckApiResource(api, resource, verb, appCfg.AppPlatform, appCfg.AppRegion)
-		},
-		ClusterResource: func(api, resource, verb string) *liberrors.Error {
-			if api == events.API {
-				return eventsResource(resource, verb)
-			}
-			return catalogRepo.CheckApiClusterResource(api, resource, verb, appCfg.AppPlatform, appCfg.AppRegion)
-		},
-		Builtin: func(api string) bool {
-			return api == catalog.SystemAPI || api == catalog.CatalogAPI || api == rbac.AuthorizationAPI
-		},
-		MembersRead: func(api, resource, verb string) bool {
-			return api == catalog.SystemAPI && resource == "namespaces" && (verb == "list" || verb == "get")
-		},
-	}, o.auditor)
-	catalog.RegisterApiRegistrationRoutes(cluster, catalogRepo, pass, appCfg.AppPlatform, appCfg.AppRegion)
-	catalog.RegisterNamespaceRoutes(engine, catalogRepo, rbacRepo, authenticator.Middleware(), appCfg.AppPlatform, appCfg.AppRegion)
-	// reading the namespaces: whoever the cluster RBAC grants it sees every
-	// one, anyone else the ones they are in, whatever their roles there
-	catalog.RegisterNamespaceCollectionRoutes(cluster, engine.Group("", authenticator.Middleware()), catalogRepo,
-		func(c *gin.Context, verb string) (bool, func(string) (bool, error), error) {
-			ac, _ := middleware.GetAuth(c)
-			if ac == nil {
-				ac = &middleware.AuthContext{}
-			}
-			all, _, err := rbacRepo.AuthorizeCluster(ac.UserID, ac.Groups, catalog.SystemAPI, "namespaces", verb)
-			if all || err != nil {
-				return all, nil, err
-			}
-			if verb == "get" {
-				return false, func(ns string) (bool, error) { return rbacRepo.IsNamespaceMember(ns, ac.UserID, ac.Groups) }, nil
-			}
-			members, err := rbacRepo.MemberNamespaces(ac.UserID, ac.Groups)
-			return false, func(ns string) (bool, error) { return members[ns], nil }, err
-		})
-	// Discovery (GET /apis) and each registration's stored openapi spec:
-	// any authenticated caller. Kayra's own groups are read from the
-	// live route table, so they always match what this server serves.
+	}))
+
+	// Discovery (GET /apis): any authenticated caller. Kayra's own groups
+	// are read from the live route table, so they always match what this
+	// server serves.
 	catalog.RegisterDiscoveryRoutes(engine, catalogRepo, authenticator.Middleware(), func() []catalog.Route {
 		infos := engine.Routes()
 		routes := make([]catalog.Route, len(infos))
@@ -384,20 +383,6 @@ func Build(appCfg *libconfig.AppConfig, cfg *gconfig.Config, opts ...Option) (*g
 		}
 		return routes
 	}, appCfg.AppPlatform, appCfg.AppRegion)
-
-	patTTLs, err := cfg.Tokens.Pat.Durations()
-	if err != nil {
-		return nil, err
-	}
-	// a user's personal access tokens; another user's: the cluster RBAC's,
-	// the sysadmin first
-	tokenapi.RegisterRoutes(engine, authenticator.Middleware(), tokenapi.Options{
-		Root: "/apis/" + rbac.AuthorizationAPI + "/v1", Store: s, Keys: keys, Pub: &patKey.PublicKey, Config: cfg, TTLs: patTTLs,
-		CanManageOthers: func(ac *middleware.AuthContext, verb string) bool {
-			ok, _, err := rbacRepo.AuthorizeCluster(ac.UserID, ac.Groups, rbac.AuthorizationAPI, "tokens", verb)
-			return ok && err == nil
-		},
-	})
 
 	return engine, nil
 }

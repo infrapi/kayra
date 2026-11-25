@@ -31,22 +31,26 @@ In order:
    [PAT keypair](crypto.md#pat-keypair).
 4. Builds [`middleware.Authenticator`](middleware.md#authenticator), and the
    built-in sysadmin binding from `cfg.Sysadmin.Groups` (falling back to
-   `middleware.SysadminGroupFor(appCfg.AppPlatform)` when left empty); the
-   cluster-scoped routes go behind the authenticator and
-   [`rbac.RequireCluster`](rbac.md#requirecluster).
+   `middleware.SysadminGroupFor(appCfg.AppPlatform)` when left empty).
 5. Mounts, via [`infrapi/lib`'s `pkg/server`](https://infrapi.github.io/lib/packages/server/):
-   its own endpoints under each of Kayra's groups (`Roots()`: system, the
-   primary, then catalog and authorization), `/apis/<group>/v1/-/healthz`,
+   Kayra's [contracts](../development.md#contracts) (`api.SetDomain`, then
+   `server.WithOpenAPI(api.Served()...)`: every request to them checked
+   first), and its own endpoints under each of Kayra's groups (`Roots()`:
+   system, the primary, then catalog, authorization and events), `/apis/<group>/v1/-/healthz`,
    `-/readyz`, `-/metrics`, `-/metadata`, `-/openapi.json` and `-/docs`, each
    about its group's routes and open without a token, `oidc`'s own routes, `GET`/`POST
    /oauth2/userinfo` (both, per OIDC Core §5.3.1: GET MUST be supported,
    POST MAY be — most real providers accept either),
    the [authorization server](../architecture/auth/oauth2-server.md)'s routes
-   when `oauth2.enabled`, then
-   [rbac](rbac.md)'s cluster and namespace routes,
-   the [catalog](../architecture/overview.md#catalog)'s
-   cluster/namespace/namespace-collection routes, and
-   [tokenapi](tokenapi.md)'s route.
+   when `oauth2.enabled`, then the four groups' generated routes, each
+   `Register` behind `httpapi.WithRequest` and the authenticator:
+   [system](system.md)'s, the [catalog](../architecture/overview.md#catalog)'s
+   (`catalog.NewServer`), [rbac](rbac.md)'s (`rbac.NewServer`, its
+   `/check` prechecks and personal access tokens) and [events](events.md)'
+   (`events.NewServer`); last `GET /apis`, the discovery. Each method
+   decides on its caller itself: the cluster RBAC
+   ([`rbac.AuthorizeClusterRequest`](rbac.md#authorizeclusterrequest), the
+   built-in sysadmin binding first) or the namespace's.
 
 [`catalog.Reconciler`](../architecture/subscriptions.md#reconciler) deliberately
 does **not** run here: it's its own `kayra reconciler` process (see

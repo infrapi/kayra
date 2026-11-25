@@ -85,8 +85,9 @@ curl -s -X POST https://kayra.example.com/apis/catalog.infrapi.io/v1/apiregistra
 - **No keys served** (a `404`, `401` or `403` at `-/jwks.json`, or an empty
   set: an app without a key, or on a lib before v0.20.0): the API gets no
   token, and its spec is still synced.
-- **Refused (`400`):** a private key, two forms at once, or an issuer that is
-  not in `federation.issuers`.
+- **Refused (`400`):** a private key (a key with `d`: the contract's `JWK`
+  allows no other member than a public key's), an empty identity, two forms
+  at once, or an issuer that is not in `federation.issuers`.
 - **`uid`:** Kayra sets it when the registration is first created, and
   keeps it when the registration is posted again. The API's tokens carry
   it, so a token of a deleted registration is refused, even after the API

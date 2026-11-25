@@ -4,6 +4,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
@@ -65,12 +66,22 @@ func GetAuth(c *gin.Context) (*AuthContext, bool) {
 	return ac, ok
 }
 
-// SetAuth stores ac as the request's AuthContext, exactly as
-// Authenticator.Middleware does. Exported so other
-// packages' tests can build a fixed-identity gate without reaching into
-// this package's internals.
+// SetAuth stores ac as the request's AuthContext, in the gin context and
+// the request's (AuthOf), exactly as Authenticator.Middleware does.
+// Exported so other packages' tests can build a fixed-identity gate
+// without reaching into this package's internals.
 func SetAuth(c *gin.Context, ac *AuthContext) {
 	c.Set(contextKey, ac)
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), authKey{}, ac))
+}
+
+type authKey struct{}
+
+// AuthOf is the caller of a request, from its context: what SetAuth put
+// there, for the handlers of the generated Handlers.
+func AuthOf(ctx context.Context) (*AuthContext, bool) {
+	ac, ok := ctx.Value(authKey{}).(*AuthContext)
+	return ac, ok && ac != nil
 }
 
 // Authenticator holds everything the bearer-auth middleware needs: the
@@ -129,7 +140,7 @@ func (a *Authenticator) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		c.Set(contextKey, ac)
+		SetAuth(c, ac)
 		c.Next()
 	}
 }
@@ -274,7 +285,7 @@ func (a *Authenticator) resolvePAT(token string) (*AuthContext, error) {
 		// bare user id (the original token is long gone by the time this
 		// PAT gets used), so this is the one case Groups/Attributes are
 		// NOT resolved live — they're whatever RegisterRoutes snapshotted
-		// into the record when this PAT was minted (see tokenapi).
+		// into the record when this PAT was minted (see rbac.Server.CreateToken).
 		groups, attributes = record.SnapshotGroups, record.SnapshotAttributes
 	} else {
 		backend, ok := a.Backends[record.Authorization]

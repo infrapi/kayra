@@ -65,7 +65,7 @@ func SetAPIDomain(domain string) {
 // (either list alone is enough), and that Group must be bound by a
 // cluster RoleBinding scoped to namespace, to a cluster Role whose
 // rules grant api + verb on resource — api is always AuthorizationAPI
-// in practice (RequireClusterRBAC's only caller), but is a parameter
+// for this package's own routes (AuthorizeNamespaceRBAC), but is a parameter
 // here rather than hardcoded so this stays the one generic check both
 // internal/rbac's own namespace routes and internal/catalog's
 // Subscription routes share, just against different APIs.
@@ -166,7 +166,7 @@ func (r *Repository) clusterGroupsMatching(userID string, callerGroups []string)
 // Authorize reports whether a caller identified by userID and holding
 // callerGroups is granted verb on resource for api, within namespace,
 // via that namespace's own Group/Role/RoleBinding objects
-// (RegisterNamespaceRoutes' groups/roles/rolebindings CRUD) — the check
+// (the Server's namespace groups/roles/rolebindings) — the check
 // infrapi/lib's auth package calls over HTTP so any app built on top of
 // it can authorize a request without storing or evaluating RBAC rules
 // itself. api is that app's own full API group URN (e.g.
@@ -193,7 +193,7 @@ func (r *Repository) Authorize(userID string, callerGroups []string, namespace, 
 }
 
 // NamespaceMembership is step 2 of every /check decision (see
-// RegisterAuthorizeRoute): the names of namespace's own Groups that
+// Server.Check): the names of namespace's own Groups that
 // count the caller as a member (see groupMatchesCaller). reason is set,
 // and memberGroups empty, when there are none.
 func (r *Repository) NamespaceMembership(namespace, userID string, callerGroups []string) (memberGroups []string, reason string, err error) {

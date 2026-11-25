@@ -50,20 +50,6 @@ func TestNamespaceSubscriptionCRUD(t *testing.T) {
 		t.Fatalf("get: status %d, body %s", w.Code, w.Body.String())
 	}
 
-	// PUT can't activate it either: it's a no-op confirmation now that
-	// active/state are computed.
-	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.infrapi.io/v1/namespaces/"+ns+"/subscriptions/vault.infrapi.io", subscriptionCreateRequest{})
-	if w.Code != http.StatusOK {
-		t.Fatalf("update: status %d, body %s", w.Code, w.Body.String())
-	}
-	var unchanged Subscription
-	if err := json.Unmarshal(w.Body.Bytes(), &unchanged); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-	if unchanged.State != SubscriptionStateInit || unchanged.Active {
-		t.Fatalf("update = %+v, want still disabled/init", unchanged)
-	}
-
 	// only the internal activation path can flip it — not any HTTP route.
 	if err := repo.ActivateSubscription(ns, "vault.infrapi.io", "sync-1"); err != nil {
 		t.Fatalf("ActivateSubscription: %v", err)
@@ -218,8 +204,7 @@ func TestSubscriptionForceSyncRequiresExistingSubscription(t *testing.T) {
 // treat "the key is missing" and "the key is empty" as two different
 // things. The api registration is written directly via the repository,
 // bypassing the create-registration route's own sync_id
-// auto-generation (see RegisterApiRegistrationRoutes' POST
-// /apiregistrations), to exercise a registration whose SyncID is
+// auto-generation (Server.CreateAPIRegistration), to exercise a registration whose SyncID is
 // still genuinely empty.
 func TestSubscriptionResponseAlwaysIncludesSyncFields(t *testing.T) {
 	engine, repo := newTestEngine(t)
@@ -319,7 +304,7 @@ func TestSubscriptionRequiresClusterRBAC(t *testing.T) {
 	}
 
 	engine := gin.New()
-	RegisterNamespaceRoutes(engine, repo, rbacRepo, fakeAuthGate("nobody"), testDeployPlatform, testDeployRegion)
+	mount(engine, repo, rbacRepo, fakeAuthGate("nobody"))
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/catalog.infrapi.io/v1/namespaces/myns/subscriptions", Subscription{
 		ApiName: "vault.infrapi.io",
@@ -330,11 +315,9 @@ func TestSubscriptionRequiresClusterRBAC(t *testing.T) {
 }
 
 // TestSubscriptionSyncIsGatedOnItsOwnResource confirms PUT .../sync is
-// checked against resource "subscriptions/sync", distinct from the
-// no-op PUT .../subscriptions/:api's "subscriptions" — so a role
-// granting "subscriptions"/"update" alone does not also grant the sync
-// action, and vice versa a role would need "subscriptions/sync" to grant
-// just that.
+// checked against resource "subscriptions/sync", verb patch, distinct
+// from "subscriptions" — so a role granting "subscriptions"/"update" alone
+// does not also grant the sync action.
 func TestSubscriptionSyncIsGatedOnItsOwnResource(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	s, err := store.NewLocalStore(t.TempDir())
@@ -378,14 +361,9 @@ func TestSubscriptionSyncIsGatedOnItsOwnResource(t *testing.T) {
 	}
 
 	engine := gin.New()
-	RegisterNamespaceRoutes(engine, repo, rbacRepo, fakeAuthGate(testAdmin, testAdminGroup), testDeployPlatform, testDeployRegion)
+	mount(engine, repo, rbacRepo, fakeAuthGate(testAdmin, testAdminGroup))
 
-	w := doJSON(t, engine, http.MethodPut, "/apis/catalog.infrapi.io/v1/namespaces/"+testNamespace+"/subscriptions/vault.infrapi.io", nil)
-	if w.Code != http.StatusOK {
-		t.Fatalf("PUT subscription: status = %d, want 200 (role grants \"subscriptions\"), body %s", w.Code, w.Body.String())
-	}
-
-	w = doJSON(t, engine, http.MethodPut, "/apis/catalog.infrapi.io/v1/namespaces/"+testNamespace+"/subscriptions/vault.infrapi.io/sync", nil)
+	w := doJSON(t, engine, http.MethodPut, "/apis/catalog.infrapi.io/v1/namespaces/"+testNamespace+"/subscriptions/vault.infrapi.io/sync", nil)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf(`PUT sync: status = %d, want 403 (role grants "subscriptions" only, not "subscriptions/sync"), body %s`, w.Code, w.Body.String())
 	}

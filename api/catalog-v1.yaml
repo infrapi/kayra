@@ -1,0 +1,425 @@
+# Kayra's catalog API, version v1: the APIs registered on the platform and
+# the namespaces' subscriptions to them. Served at
+# /apis/catalog.<api_domain>/v1: written for the domain infrapi.io, Kayra
+# serves it under its own (app.api_domain), the contract rewritten.
+#
+# Edit it, then infrapi-cli app generate (go generate ./api).
+openapi: 3.0.3
+info:
+  title: catalog
+  version: v1
+  x-infrapi-group: catalog.infrapi.io
+  description: >-
+    The APIs registered on the platform, in Kayra's platform and region,
+    and the namespaces' subscriptions to them. Kayra never serves an API it
+    registers: it tracks it, reads its contract, and tells its app, through
+    the reconciler, which namespaces subscribe.
+
+security:
+  - bearer: []
+
+paths:
+  /apis/catalog.infrapi.io/v1/apiregistrations:
+    get:
+      operationId: listApiRegistrations
+      summary: The APIs registered in Kayra's platform and region.
+      responses:
+        '200':
+          description: The registrations.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/ApiRegistration'}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createApiRegistration
+      summary: Register an API, or replace its registration.
+      description: >-
+        A registration of that name is replaced, its uid kept: its contract
+        is read again, at the new sync_id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ApiRegistration'}
+      responses:
+        '201':
+          description: The registration.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiRegistration'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/catalog.infrapi.io/v1/apiregistrations/{name}:
+    parameters:
+      - $ref: '#/components/parameters/api'
+    get:
+      operationId: getApiRegistration
+      summary: An API's registration.
+      responses:
+        '200':
+          description: The registration.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiRegistration'}
+        default: {$ref: '#/components/responses/Problem'}
+    put:
+      operationId: updateApiRegistration
+      summary: Replace an API's registration.
+      description: >-
+        Its name, uid and canary_namespaces stay; a new sync_id tells its
+        subscriptions to reconcile.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ApiRegistration'}
+      responses:
+        '200':
+          description: The registration.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiRegistration'}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: deleteApiRegistration
+      summary: Delete an API's registration, when nothing depends on it nor subscribes to it.
+      responses:
+        '204': {description: Deleted.}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/catalog.infrapi.io/v1/apiregistrations/{name}/openapi.json:
+    parameters:
+      - $ref: '#/components/parameters/api'
+    get:
+      operationId: getApiRegistrationSpec
+      summary: The contract the reconciler last read from the API.
+      responses:
+        '200':
+          description: Its OpenAPI document.
+          content:
+            application/json:
+              schema: {type: object, description: An OpenAPI document.}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/catalog.infrapi.io/v1/apiregistrations/{name}/status:
+    parameters:
+      - $ref: '#/components/parameters/api'
+    get:
+      operationId: getApiRegistrationStatus
+      summary: Where each active subscription to the API is, against its sync_id.
+      responses:
+        '200':
+          description: Its status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiRegistrationStatus'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/catalog.infrapi.io/v1/apiregistrations/{name}/sync:
+    parameters:
+      - $ref: '#/components/parameters/api'
+    put:
+      operationId: syncApiRegistration
+      summary: Release a new sync_id to the subscriptions, or to canary namespaces first.
+      description: >-
+        With canary_namespaces, a new sync_id reaches those namespaces
+        only. Without, an ongoing canary is released to every namespace; with
+        none ongoing, a new sync_id reaches them all.
+      requestBody:
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ApiRegistrationSync'}
+      responses:
+        '200':
+          description: The registration.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiRegistration'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/catalog.infrapi.io/v1/namespaces/{namespace}/subscriptions:
+    parameters:
+      - $ref: '#/components/parameters/namespace'
+    get:
+      operationId: listSubscriptions
+      summary: The namespace's subscriptions.
+      responses:
+        '200':
+          description: The subscriptions.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Subscription'}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createSubscription
+      summary: Subscribe the namespace to an API.
+      description: >-
+        The reconciler provisions the namespace in the API's app, then
+        activates the subscription: until then, every request of the
+        namespace to the API is refused.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Subscription'}
+      responses:
+        '201':
+          description: The subscription.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Subscription'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/catalog.infrapi.io/v1/namespaces/{namespace}/subscriptions/{api}:
+    parameters:
+      - $ref: '#/components/parameters/namespace'
+      - $ref: '#/components/parameters/subscription'
+    get:
+      operationId: getSubscription
+      summary: The namespace's subscription to an API.
+      responses:
+        '200':
+          description: The subscription.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Subscription'}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: deleteSubscription
+      summary: Unsubscribe the namespace from an API.
+      responses:
+        '204': {description: Deleted.}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/catalog.infrapi.io/v1/namespaces/{namespace}/subscriptions/{api}/sync:
+    parameters:
+      - $ref: '#/components/parameters/namespace'
+      - $ref: '#/components/parameters/subscription'
+    put:
+      operationId: syncSubscription
+      summary: Reconcile the subscription again, at the API's sync_id.
+      responses:
+        '200':
+          description: The subscription.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Subscription'}
+        default: {$ref: '#/components/responses/Problem'}
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: A token of Kayra's (infrapi-cli auth login), or a personal access token.
+
+  parameters:
+    namespace:
+      name: namespace
+      in: path
+      required: true
+      description: The namespace.
+      schema: {type: string, pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$', maxLength: 63}
+    api:
+      name: name
+      in: path
+      required: true
+      description: The API's group, compute.infrapi.io.
+      schema: {type: string}
+    subscription:
+      name: api
+      in: path
+      required: true
+      description: The API's group, compute.infrapi.io.
+      schema: {type: string}
+
+  responses:
+    Problem:
+      description: An error, as a problem document (RFC 9457).
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+
+  schemas:
+    Problem:
+      type: object
+      description: An error, as infrapi/lib renders it.
+      required: [status, title]
+      properties:
+        status: {type: integer, description: The HTTP status.}
+        title: {type: string, description: The kind of problem.}
+        detail: {type: string, description: This occurrence of it.}
+        code: {type: string, description: A stable code to branch on.}
+        solution: {type: string, description: What to do about it.}
+        retryable: {type: boolean, description: Whether the same request may succeed later.}
+
+    ApiRegistration:
+      type: object
+      description: An API registered in Kayra's platform and region.
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The API's group, its full name, compute.infrapi.io.
+        short_name:
+          type: string
+          description: A one-label alias, compute, unique in the platform and region, for display only.
+        version:
+          type: string
+          description: The version its app serves, v1 when empty; its contract is read from /apis/<name>/<version>/-/openapi.json.
+        platform: {type: string, readOnly: true, description: Kayra's platform.}
+        region: {type: string, readOnly: true, description: Kayra's region.}
+        active: {type: boolean, description: Whether it is open.}
+        upstream: {type: boolean, description: Whether it calls other APIs.}
+        downstream: {type: boolean, description: Whether other APIs call it.}
+        owner: {type: string, description: 'Who owns it, a team.'}
+        description: {type: string, description: What it is.}
+        depends_on:
+          type: array
+          description: The registrations it depends on, in any platform and region.
+          items: {$ref: '#/components/schemas/ApiRegistrationRef'}
+        allowed_namespaces:
+          type: array
+          description: The namespaces that may subscribe to it and use it; every one when empty.
+          items: {type: string}
+        sync_id:
+          type: string
+          description: >-
+            Its reconcile trigger: a new value, a release id say, tells
+            every active subscription to reconcile. Kayra sets one when
+            empty at creation.
+        canary_namespaces:
+          type: array
+          readOnly: true
+          description: The namespaces an ongoing canary release reaches, set by its sync action only.
+          items: {type: string}
+        mode:
+          type: string
+          description: How the reconciler tells its app, a key of reconciler.mode in Kayra's configuration; reconciler.default_mode when empty.
+        uid:
+          type: string
+          readOnly: true
+          description: Set at creation, kept by every write; the API's tokens carry it.
+        identity: {$ref: '#/components/schemas/ApiIdentity'}
+        created_at: {type: string, format: date-time, readOnly: true, description: When it was created.}
+        updated_at: {type: string, format: date-time, readOnly: true, description: When it was last written.}
+
+    ApiRegistrationRef:
+      type: object
+      description: A registration, by platform, region and name.
+      required: [platform, region, name]
+      properties:
+        platform: {type: string, description: Its platform.}
+        region: {type: string, description: Its region.}
+        name: {type: string, description: Its API's group.}
+
+    ApiIdentity:
+      type: object
+      nullable: true
+      minProperties: 1
+      description: >-
+        How the API's app proves it is the API, system:api:<name>, for a
+        token of its own: one of jwks_from, jwks and federated_credentials.
+      properties:
+        jwks_from:
+          type: string
+          enum: [spec]
+          description: spec, the keys the app serves at -/jwks.json, read with its contract.
+        jwks: {$ref: '#/components/schemas/JWKS'}
+        federated_credentials:
+          type: array
+          description: Its platform's identity tokens trusted as the API.
+          items: {$ref: '#/components/schemas/FederatedCredential'}
+
+    JWKS:
+      type: object
+      nullable: true
+      description: Public keys, as a JSON Web Key Set.
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          description: The keys.
+          items: {$ref: '#/components/schemas/JWK'}
+
+    JWK:
+      type: object
+      description: 'A public key, a JSON Web Key: never a private one (d).'
+      additionalProperties: false
+      required: [kty]
+      properties:
+        kty: {type: string, description: 'Its type: RSA or EC.'}
+        kid: {type: string, description: Its id.}
+        use: {type: string, description: 'What it is for, sig.'}
+        alg: {type: string, description: 'Its algorithm, RS256.'}
+        n: {type: string, description: An RSA key's modulus.}
+        e: {type: string, description: An RSA key's exponent.}
+        crv: {type: string, description: 'An EC key''s curve: P-256, P-384, P-521.'}
+        x: {type: string, description: An EC key's x.}
+        y: {type: string, description: An EC key's y.}
+
+    FederatedCredential:
+      type: object
+      description: A platform's identity token trusted as the identity, a CI job's say.
+      required: [name, issuer]
+      properties:
+        name: {type: string, description: 'What tells it apart, gitlab-main.'}
+        issuer: {type: string, description: 'The token''s iss, one of Kayra''s federation.issuers: https://gitlab.example.com.'}
+        subject: {type: string, description: 'Its sub, exactly.'}
+        claims:
+          type: object
+          description: Other claims it must carry, each exactly, a boolean as "true".
+          additionalProperties: {type: string}
+        audience: {type: string, description: 'What its aud must hold, Kayra''s URL when empty.'}
+
+    ApiRegistrationStatus:
+      type: object
+      description: Where each active subscription to an API is, against its sync_id.
+      required: [name, sync_id, subscriptions]
+      properties:
+        name: {type: string, description: The API's group.}
+        sync_id: {type: string, description: Its current sync_id.}
+        subscriptions:
+          type: array
+          description: Its active subscriptions, by namespace.
+          items: {$ref: '#/components/schemas/SubscriptionSyncStatus'}
+
+    SubscriptionSyncStatus:
+      type: object
+      description: An active subscription, against its API's sync_id.
+      required: [namespace, state, current_sync_id, synced]
+      properties:
+        namespace: {type: string, description: Its namespace.}
+        state: {type: string, description: 'Its last sync''s outcome: init, success or error.'}
+        current_sync_id: {type: string, description: The sync_id it was last reconciled to.}
+        synced: {type: boolean, description: Whether that is the API's.}
+
+    ApiRegistrationSync:
+      type: object
+      description: A sync of a registration.
+      properties:
+        canary_namespaces:
+          type: array
+          description: Subscribed namespaces the new sync_id reaches first.
+          items: {type: string}
+
+    Subscription:
+      type: object
+      description: A namespace's subscription to an API.
+      required: [api, active, state, current_sync_id, expected_sync_id, synced]
+      properties:
+        api: {type: string, description: 'The API''s group, compute.infrapi.io; never its short name.'}
+        active:
+          type: boolean
+          readOnly: true
+          description: Set once, by its first successful sync; until then the namespace's requests to the API are refused.
+        state:
+          type: string
+          readOnly: true
+          enum: [init, success, error]
+          description: 'Its last sync''s outcome: init until the first one.'
+        current_sync_id: {type: string, readOnly: true, description: The API's sync_id it was last reconciled to.}
+        expected_sync_id: {type: string, readOnly: true, description: The API's current sync_id.}
+        synced: {type: boolean, readOnly: true, description: Whether it is active and at the API's sync_id.}
+        created_at: {type: string, format: date-time, readOnly: true, description: When it was created.}
+        updated_at: {type: string, format: date-time, readOnly: true, description: When it was last written.}

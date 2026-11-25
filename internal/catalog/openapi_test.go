@@ -341,6 +341,8 @@ func TestDiscoveryRoutes(t *testing.T) {
 		return []Route{{Method: "GET", Path: "/apis/" + CatalogAPI + "/v1/apiregistrations"}}
 	}
 	RegisterDiscoveryRoutes(engine, repo, func(c *gin.Context) { c.Next() }, builtin, testDeployPlatform, testDeployRegion)
+	// a registration's stored spec: the catalog API's, any authenticated caller
+	mount(engine, repo, nil, fakeAuthGate("jdoe"))
 
 	get := func(path string) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
@@ -372,7 +374,7 @@ func TestDiscoveryRoutes(t *testing.T) {
 	}
 
 	w = get("/apis/" + CatalogAPI + "/v1/apiregistrations/telemetry.infrapi.io/openapi.json")
-	if w.Code != http.StatusOK || w.Body.String() != doc || w.Header().Get("Content-Type") != "application/json" {
+	if w.Code != http.StatusOK || !jsonEqual(w.Body.String(), doc) || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
 		t.Fatalf("openapi.json: status %d, type %q, body %s", w.Code, w.Header().Get("Content-Type"), w.Body.String())
 	}
 	if w = get("/apis/" + CatalogAPI + "/v1/apiregistrations/vault.infrapi.io/openapi.json"); w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "next sync") {
@@ -381,4 +383,15 @@ func TestDiscoveryRoutes(t *testing.T) {
 	if w = get("/apis/" + CatalogAPI + "/v1/apiregistrations/nope.infrapi.io/openapi.json"); w.Code != http.StatusNotFound {
 		t.Fatalf("openapi.json of an unknown registration: status %d", w.Code)
 	}
+}
+
+// jsonEqual tells two JSON documents the same, whatever their keys' order.
+func jsonEqual(a, b string) bool {
+	var x, y any
+	if json.Unmarshal([]byte(a), &x) != nil || json.Unmarshal([]byte(b), &y) != nil {
+		return false
+	}
+	ja, _ := json.Marshal(x)
+	jb, _ := json.Marshal(y)
+	return string(ja) == string(jb)
 }

@@ -1,0 +1,348 @@
+# Kayra's events API, version v1: what happened to an API's objects, told
+# by the API, a controller or anyone the namespace's RBAC lets; never
+# replaced nor deleted, they expire. Served at /apis/events.<api_domain>/v1:
+# written for the domain infrapi.io, Kayra serves it under its own
+# (app.api_domain), the contract rewritten.
+#
+# Edit it, then infrapi-cli app generate (go generate ./api).
+openapi: 3.0.3
+info:
+  title: events
+  version: v1
+  x-infrapi-group: events.infrapi.io
+  description: >-
+    Events about the APIs' objects, in a namespace or in none, decided by
+    the namespace's RBAC (no subscription). They expire after Kayra's
+    events.ttl.
+
+security:
+  - bearer: []
+
+paths:
+  /apis/events.infrapi.io/v1/namespaces/{namespace}/events:
+    parameters:
+      - $ref: '#/components/parameters/namespace'
+    get:
+      operationId: listNamespaceEvents
+      summary: The events, the namespace's, the latest first.
+      parameters:
+        - $ref: '#/components/parameters/type'
+        - $ref: '#/components/parameters/reason'
+        - $ref: '#/components/parameters/action'
+        - $ref: '#/components/parameters/user'
+        - $ref: '#/components/parameters/reporter'
+        - $ref: '#/components/parameters/reporting_controller'
+        - $ref: '#/components/parameters/regarding_api'
+        - $ref: '#/components/parameters/regarding_resource'
+        - $ref: '#/components/parameters/regarding_name'
+        - $ref: '#/components/parameters/since'
+        - $ref: '#/components/parameters/until'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: The events.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Event'}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createNamespaceEvents
+      summary: Report an event, or a batch of them.
+      description: >-
+        An API reports with its own identity about its own objects, in the
+        namespaces subscribed to it; anyone else needs create on events.
+        Each reporter is limited to a rate, then answered 429.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Event'
+                - $ref: '#/components/schemas/EventBatch'
+      responses:
+        '201':
+          description: The event, or the batch, as stored.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Event'
+                  - $ref: '#/components/schemas/EventBatch'
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/events.infrapi.io/v1/namespaces/{namespace}/events/{id}:
+    parameters:
+      - $ref: '#/components/parameters/namespace'
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: getNamespaceEvent
+      summary: An event, until it expires.
+      responses:
+        '200':
+          description: The event.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        default: {$ref: '#/components/responses/Problem'}
+    patch:
+      operationId: patchNamespaceEvent
+      summary: Count the event again, its series only; by its reporter.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventPatch'}
+      responses:
+        '200':
+          description: The event.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/events.infrapi.io/v1/events:
+    get:
+      operationId: listEvents
+      summary: The events, the cluster's, those in no namespace, the latest first.
+      parameters:
+        - $ref: '#/components/parameters/type'
+        - $ref: '#/components/parameters/reason'
+        - $ref: '#/components/parameters/action'
+        - $ref: '#/components/parameters/user'
+        - $ref: '#/components/parameters/reporter'
+        - $ref: '#/components/parameters/reporting_controller'
+        - $ref: '#/components/parameters/regarding_api'
+        - $ref: '#/components/parameters/regarding_resource'
+        - $ref: '#/components/parameters/regarding_name'
+        - $ref: '#/components/parameters/since'
+        - $ref: '#/components/parameters/until'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: The events.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/Event'}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createEvents
+      summary: Report an event, or a batch of them.
+      description: >-
+        An API reports with its own identity about its own objects, in the
+        namespaces subscribed to it; anyone else needs create on events.
+        Each reporter is limited to a rate, then answered 429.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/Event'
+                - $ref: '#/components/schemas/EventBatch'
+      responses:
+        '201':
+          description: The event, or the batch, as stored.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Event'
+                  - $ref: '#/components/schemas/EventBatch'
+        default: {$ref: '#/components/responses/Problem'}
+
+  /apis/events.infrapi.io/v1/events/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: getEvent
+      summary: An event, until it expires.
+      responses:
+        '200':
+          description: The event.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        default: {$ref: '#/components/responses/Problem'}
+    patch:
+      operationId: patchEvent
+      summary: Count the event again, its series only; by its reporter.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EventPatch'}
+      responses:
+        '200':
+          description: The event.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Event'}
+        default: {$ref: '#/components/responses/Problem'}
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: A token of Kayra's (infrapi-cli auth login), or a personal access token.
+
+  parameters:
+    namespace:
+      name: namespace
+      in: path
+      required: true
+      description: The namespace.
+      schema: {type: string, pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$', maxLength: 63}
+    id:
+      name: id
+      in: path
+      required: true
+      description: The event's id.
+      schema: {type: string}
+    type:
+      name: type
+      in: query
+      description: Only the events of this type.
+      schema: {type: string}
+    reason:
+      name: reason
+      in: query
+      description: Only the events of this reason.
+      schema: {type: string}
+    action:
+      name: action
+      in: query
+      description: Only the events of this action.
+      schema: {type: string}
+    user:
+      name: user
+      in: query
+      description: Only the events of this user.
+      schema: {type: string}
+    reporter:
+      name: reporter
+      in: query
+      description: Only the events of this reporter.
+      schema: {type: string}
+    reporting_controller:
+      name: reporting_controller
+      in: query
+      description: Only the events of this controller.
+      schema: {type: string}
+    regarding_api:
+      name: regarding.api
+      in: query
+      description: Only the events about this API.
+      schema: {type: string}
+    regarding_resource:
+      name: regarding.resource
+      in: query
+      description: Only the events about this resource.
+      schema: {type: string}
+    regarding_name:
+      name: regarding.name
+      in: query
+      description: Only the events about this object.
+      schema: {type: string}
+    since:
+      name: since
+      in: query
+      description: 'From this time, RFC 3339, or a duration back from now: 1h.'
+      schema: {type: string}
+    until:
+      name: until
+      in: query
+      description: Until this time, RFC 3339, or a duration back from now.
+      schema: {type: string}
+    limit:
+      name: limit
+      in: query
+      description: At most this many, 100 when empty.
+      schema: {type: integer, minimum: 1, maximum: 1000}
+
+  responses:
+    Problem:
+      description: An error, as a problem document (RFC 9457).
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+
+  schemas:
+    Problem:
+      type: object
+      description: An error, as infrapi/lib renders it.
+      required: [status, title]
+      properties:
+        status: {type: integer, description: The HTTP status.}
+        title: {type: string, description: The kind of problem.}
+        detail: {type: string, description: This occurrence of it.}
+        code: {type: string, description: A stable code to branch on.}
+        solution: {type: string, description: What to do about it.}
+        retryable: {type: boolean, description: Whether the same request may succeed later.}
+
+
+    Event:
+      type: object
+      description: Something that happened to an object.
+      additionalProperties: false
+      required: [regarding, type, reason, reporting_controller]
+      properties:
+        id: {type: string, readOnly: true, description: 'Its id, a UUIDv7.'}
+        received_at: {type: string, format: date-time, readOnly: true, description: When Kayra received it.}
+        reporter: {type: string, readOnly: true, description: 'Who reported it, the caller.'}
+        regarding: {$ref: '#/components/schemas/Regarding'}
+        type:
+          type: string
+          enum: [Normal, Warning]
+          description: Normal, or Warning when something failed.
+        reason: {type: string, description: 'Why, in CamelCase: VMCreated.'}
+        note: {type: string, description: 'What happened, for a human.'}
+        action: {type: string, description: 'What was done, Create.'}
+        reporting_controller: {type: string, description: 'What reported it: compute.infrapi.io/scheduler.'}
+        user: {type: string, description: 'Who asked for it, when someone did.'}
+        request_id: {type: string, description: The request that caused it.}
+        details:
+          type: object
+          description: Anything else about it.
+        time: {type: string, format: date-time, description: When it happened; when it was received if empty.}
+        series: {$ref: '#/components/schemas/Series'}
+
+    Regarding:
+      type: object
+      description: The object an event is about.
+      required: [api, resource]
+      properties:
+        api: {type: string, description: Its API's group.}
+        namespace: {type: string, description: Its namespace.}
+        resource: {type: string, description: 'Its resource, vms.'}
+        name: {type: string, description: Its name.}
+
+    Series:
+      type: object
+      description: How often an event repeated.
+      required: [count]
+      properties:
+        count: {type: integer, minimum: 1, description: 'How many times, never less than before.'}
+        last_observed: {type: string, format: date-time, description: When last; now when empty.}
+
+    EventBatch:
+      type: object
+      description: Events reported at once.
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The events.
+          items: {$ref: '#/components/schemas/Event'}
+
+    EventPatch:
+      type: object
+      description: An event's new series.
+      additionalProperties: false
+      required: [series]
+      properties:
+        series: {$ref: '#/components/schemas/Series'}

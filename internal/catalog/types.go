@@ -6,8 +6,8 @@
 // resources live in: a tenant owns one or several), and
 // Subscription (linking a namespace to an ApiRegistration by name).
 //
-// It depends on internal/rbac only for rbac.RequireClusterRBAC/
-// rbac.Repository: Subscription is gated by the exact same cluster RBAC
+// It depends on internal/rbac only for rbac.Repository and its
+// AuthorizeClusterRequest/AuthorizeNamespaceRBAC: Subscription is gated by the exact same cluster RBAC
 // check as every other namespace resource, so there's no reason to
 // duplicate that decision here — the dependency runs catalog -> rbac,
 // never the other way.
@@ -26,13 +26,13 @@ import (
 // CatalogAPI and SystemAPI name this package's two API groups,
 // laid out exactly like rbac.AuthorizationAPI: CatalogAPI's
 // cluster-scoped resource (apiregistrations) is decided on the cluster
-// RBAC, rbac.RequireCluster (see RegisterApiRegistrationRoutes), while its
+// RBAC, rbac.AuthorizeClusterRequest (see Server), while its
 // namespace-scoped one (subscriptions) is checked against CatalogAPI via
-// rbac.RequireClusterRBAC (see RegisterNamespaceRoutes) — so a cluster
+// rbac.AuthorizeNamespaceRBAC (see Server) — so a cluster
 // role scoped to a namespace granting CatalogAPI "*" covers its
 // subscriptions only, never apiregistrations. SystemAPI (namespaces, the
 // base every other group is scoped by) is cluster-scoped too (see
-// RegisterNamespaceCollectionRoutes). "infrapi.io" is a placeholder:
+// system.Server). "infrapi.io" is a placeholder:
 // SetAPIDomain rebuilds both from a deployment's own domain
 // (config.AppConfig.APIDomain) — call it once, before any Register
 // function or any stored Rule is compared against these.

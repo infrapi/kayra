@@ -7,7 +7,7 @@ SHELL := /bin/bash
 # target below has to walk the modules itself.
 MODULES ?= .
 
-.PHONY: setup clean tidy fmt lint security test docs
+.PHONY: setup clean tidy generate fmt lint security test docs
 all: setup clean tidy fmt lint security test
 
 setup:
@@ -17,6 +17,9 @@ setup:
 
 clean:
 	rm -rf ./dist
+
+generate: ## the Go code from the contracts, api/*.yaml (infrapi-cli app generate)
+	$(GO_CMD) generate ./api
 
 tidy:
 	@for module in $(MODULES); do \

@@ -24,6 +24,7 @@ make all
 |--------|---------|
 | `setup` | installs `golangci-lint`, `gosec` and `goreleaser` if missing |
 | `tidy` | `go mod tidy` |
+| `generate` | `go generate ./api`: the Go code from the contracts (`infrapi-cli app generate`) |
 | `fmt` | `gofmt -w` on every tracked Go file |
 | `lint` | `golangci-lint run` |
 | `security` | `gosec -exclude-dir _local -quiet ./...` |
@@ -35,6 +36,39 @@ CI is [infrapi/ci](https://github.com/infrapi/ci)'s Go workflow, called by
 `go test -race`, then, on `main`, the release: the archives and the image
 `ghcr.io/infrapi/kayra`. It fails when a file is not
 gofmt'ed, so run `make fmt` before pushing.
+
+## Contracts
+
+Kayra is an infrapi app: each of its groups has its contract in `api/`,
+and the code that serves it is generated from it.
+
+| Contract | Group | Handlers |
+|---|---|---|
+| `api/system-v1.yaml` | `system.<domain>`: namespaces | `internal/system` |
+| `api/catalog-v1.yaml` | `catalog.<domain>`: API registrations, subscriptions | `internal/catalog` |
+| `api/rbac-v1.yaml` | `authorization.<domain>`: RBAC, service accounts, personal access tokens, `/check` | `internal/rbac` |
+| `api/events-v1.yaml` | `events.<domain>`: events | `internal/events` |
+
+The contracts are written for the domain `infrapi.io`, and Kayra serves them
+under its own, `app.api_domain` (`api.SetDomain`). Every request is checked
+against them before a handler runs: a field the contract marks `readOnly`
+(`uid`, `created_at`) is refused in a request. Each one is served at
+`/apis/<group>/v1/-/openapi/<name>/v1.yaml`, merged into
+`/apis/<group>/v1/-/openapi.json`, and browsable at `/apis/<group>/v1/-/docs`.
+
+To change a route, change its contract first, then generate with
+[infrapi-cli](https://infrapi.github.io/cli/getting-started/#1-install):
+
+```bash
+go generate ./api      # infrapi-cli app generate
+```
+
+This writes `api/zz_generated.go`, the schemas as Go types, and each group's
+`Handlers` interface with its routes in `internal/<name>/zz_generated.go`. A
+new operation fails to compile until its method is written. A handler gets
+its caller from `middleware.AuthOf(ctx)` and decides on it in the method.
+The OAuth2 server's routes, `/.well-known/*` and `GET /apis` stay outside the
+contracts.
 
 ## Documentation
 
@@ -87,6 +121,7 @@ rebuilds every night. There is no manual deploy step.
 
 ```text
 cmd/kayra          app management: serve, reconciler, cache clean — always reads kayra.yaml
+api/                 the contracts (system, catalog, rbac, events) and their Go types, generated
 internal/config      kayra.yaml loading and validation
 internal/store       etcd/local key-value abstraction, Watch
 internal/crypto      PAT keypair, PAT encryption, self-signing keys, self-JWT
@@ -96,16 +131,18 @@ internal/authn       bearer token verification, user id resolution
 internal/authz       LDAP/dev-local directory resolution, resolved-user cache
 internal/oauth2server the authorization server: tokens of Kayra's own, for infrapi-cli and MCP clients
 internal/middleware  gin Authenticator
-internal/rbac        cluster/namespace groups, roles, rolebindings
+internal/rbac        the authorization group: groups, roles, rolebindings, service accounts, PATs, /check
+internal/system      the system group: namespaces
 internal/catalog     api registrations, namespaces, subscriptions, Reconciler
-internal/tokenapi    personal access token issuance
-internal/httpapi     RFC 9457 error response helper
+internal/events      the events group
+internal/httpapi     RFC 9457 error responses, the generated handlers' request context
 internal/apiserver   wires every other package onto one gin engine
 docs/                this site
 specs/                the full functional spec
 ```
 
 Package-by-domain, not package-by-layer: each of these owns its own types,
-etcd persistence and HTTP handlers together, rather than a shared
+etcd persistence and HTTP handlers (the `Handlers` generated from its
+contract, and their implementation) together, rather than a shared
 `models`/`controllers` split. Tests sit next to the code they cover and use
 a real `LocalStore` rather than mocks.

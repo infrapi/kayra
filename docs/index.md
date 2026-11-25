@@ -53,11 +53,11 @@ own types, storage and HTTP handlers together.
 | [`internal/authz`](packages/authz.md) | Resolving a user id to groups/attributes (LDAP or fixture) |
 | [`internal/identity`](packages/identity.md) | Kayra's own identities: the reserved `system:` prefix, service account subjects |
 | [`internal/middleware`](packages/middleware.md) | The gin auth middleware |
-| [`internal/rbac`](packages/rbac.md) | `Group`/`Role`/`RoleBinding`, cluster + namespace scoped, and a namespace's `ServiceAccount`s |
+| [`internal/rbac`](packages/rbac.md) | The authorization group: `Group`/`Role`/`RoleBinding`, cluster + namespace scoped, a namespace's `ServiceAccount`s, personal access tokens, `/check` |
+| [`internal/system`](packages/system.md) | The system group: namespaces, who sees which |
 | `internal/catalog` | `ApiRegistration`/`Namespace`/`Subscription` + the reconciler (see [API registrations](architecture/api-registrations.md), [Namespaces](architecture/namespaces.md), [Subscriptions & reconciliation](architecture/subscriptions.md)) |
-| [`internal/tokenapi`](packages/tokenapi.md) | Personal access tokens: created, listed, revoked |
 | `internal/oauth2server` | The [authorization server](architecture/auth/oauth2-server.md): tokens of Kayra's own, renewed and revoked |
-| [`internal/httpapi`](packages/httpapi.md) | RFC 9457 error response helper |
+| [`internal/httpapi`](packages/httpapi.md) | RFC 9457 error responses, the request's context for the generated handlers |
 | [`internal/apiserver`](packages/apiserver.md) | Wires every package above onto one gin engine |
 
 `cmd/kayra` wires all of it together. The end user's client,

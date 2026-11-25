@@ -11,6 +11,7 @@ import (
 	"github.com/infrapi/kayra/internal/middleware"
 	libapi "github.com/infrapi/lib/pkg/api"
 	libauth "github.com/infrapi/lib/pkg/auth"
+	liberrors "github.com/infrapi/lib/pkg/errors"
 	libserver "github.com/infrapi/lib/pkg/server"
 )
 
@@ -68,8 +69,14 @@ func requestRecord(c *gin.Context) audit.Record {
 	if ac, ok := middleware.GetAuth(c); ok {
 		r.User, r.Groups, r.Kind, r.ClientID = ac.UserID, ac.Groups, ac.Kind, ac.ClientID
 	}
-	if err, ok := httpapi.Failure(c); ok && !r.Allowed {
-		r.Reason = err.Message
+	if !r.Allowed {
+		// a gin middleware's refusal, or a generated handler's (server.AbortError)
+		var e *liberrors.Error
+		if err, ok := httpapi.Failure(c); ok {
+			r.Reason = err.Message
+		} else if liberrors.As(libserver.ErrorOf(c), &e) {
+			r.Reason = e.Message
+		}
 	}
 	rest := strings.Trim(strings.TrimPrefix(c.Request.URL.Path, "/oauth2/"), "/")
 	r.API = "oauth2"

@@ -21,7 +21,7 @@ bootstrap JWT.
 priv, err := crypto.LoadOrCreatePatKeypair(s, keys, cfg.Tokens.Pat)
 ```
 
-Resolves the RSA keypair [tokenapi](tokenapi.md) encrypts every PAT record
+Resolves the RSA keypair [rbac](rbac.md#personal-access-tokens) encrypts every PAT record
 under. When `cfg.PrivateKeyPath` names a file, that key is read directly;
 otherwise a 2048-bit keypair is generated once and persisted in the store
 at `keys.PatKeypair()`, so later starts reuse it instead of orphaning every
@@ -63,7 +63,7 @@ are always resolved live from the holder's current group membership at
 request time — `SnapshotGroups`/`SnapshotAttributes` stay nil, nothing is
 ever written there. The one exception is a `claims`-backed backend (see
 [config](config.md#claims-no-directory-at-all)): it has no directory to
-re-query later by bare user id, so [tokenapi](tokenapi.md) captures the
+re-query later by bare user id, so [rbac](rbac.md#personal-access-tokens) captures the
 caller's own Groups/Attributes into these two fields at creation time
 instead, and `middleware.resolvePAT` reads them back rather than
 attempting a live lookup that has nowhere to go — the one case a PAT's

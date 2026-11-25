@@ -5,24 +5,45 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/infrapi/kayra/internal/httpapi"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/store"
 	liberrors "github.com/infrapi/lib/pkg/errors"
 )
 
-func noopGate(c *gin.Context) {}
+// serve mounts s, every route of the rbac API (the generated Register),
+// behind gate, which authenticates the caller.
+func serve(s *Server, gate gin.HandlerFunc) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	Register(engine.Group("", httpapi.WithRequest, gate), s)
+	return engine
+}
+
+// byScope authenticates a request to a cluster object with cluster, one to
+// a namespace's with namespace: a caller of each.
+func byScope(cluster, namespace gin.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if strings.Contains(c.Request.URL.Path, "/namespaces/") {
+			namespace(c)
+			return
+		}
+		cluster(c)
+	}
+}
 
 // testSysadminGroup is the built-in sysadmin binding's group in tests.
 const testSysadminGroup = "sandbox-core-sysadmin"
 
 // sysadminGate makes repo's built-in sysadmin binding testSysadminGroup's
 // and authenticates every request as a sysadmin: the cluster routes'
-// gate, as the authenticator and RequireCluster would let a sysadmin in.
+// gate, as the authenticator and AuthorizeClusterRequest let a sysadmin in.
 func sysadminGate(repo *Repository) gin.HandlerFunc {
 	repo.SetSysadmin([]string{testSysadminGroup})
 	return fakeAuthGate("root", testSysadminGroup)
@@ -99,9 +120,7 @@ func newTestEngine(t *testing.T) (*gin.Engine, *Repository) {
 	repo := newTestRepo(t)
 	seedClusterRBAC(t, repo, testAdminGroup, testNamespace)
 
-	engine := gin.New()
-	RegisterClusterRoutes(engine, repo, sysadminGate(repo), nil)
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate(testAdmin, testAdminGroup), nil)
+	engine := serve(NewServer(ServerOptions{Repo: repo}), byScope(sysadminGate(repo), fakeAuthGate(testAdmin, testAdminGroup)))
 	return engine, repo
 }
 
@@ -328,9 +347,7 @@ func TestNamespaceWriteDeniedWithoutClusterRBAC(t *testing.T) {
 	repo := newTestRepo(t)
 	// no seedClusterRBAC: "nobody" has no cluster group membership at all.
 
-	engine := gin.New()
-	RegisterClusterRoutes(engine, repo, sysadminGate(repo), nil)
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("nobody"), nil)
+	engine := serve(NewServer(ServerOptions{Repo: repo}), byScope(sysadminGate(repo), fakeAuthGate("nobody")))
 
 	w := doJSON(t, engine, http.MethodPost, "/apis/authorization.infrapi.io/v1/namespaces/myns/groups", Group{Name: "g1"})
 	if w.Code != http.StatusForbidden {
@@ -358,11 +375,9 @@ func TestNamespaceWriteGrantedEndToEndViaHTTPBootstrap(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := newTestRepo(t)
 
-	engine := gin.New()
-	RegisterClusterRoutes(engine, repo, sysadminGate(repo), nil)
 	// jdoe's resolved groups (what /oauth2/userinfo would have returned
 	// from their real memberOf, post member_regex) — no sync step needed.
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("jdoe", "sandbox-thetenant-sysadmin"), nil)
+	engine := serve(NewServer(ServerOptions{Repo: repo}), byScope(sysadminGate(repo), fakeAuthGate("jdoe", "sandbox-thetenant-sysadmin")))
 
 	meta := Metadata{Namespace: "thetenant"}
 
@@ -415,11 +430,9 @@ func TestNamespaceWriteGrantedEndToEndViaDirectUserBootstrap(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := newTestRepo(t)
 
-	engine := gin.New()
-	RegisterClusterRoutes(engine, repo, sysadminGate(repo), nil)
 	// jdoe authenticates with no groups at all — this grant has to come
 	// from the direct user source, not from any LDAP group.
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate("jdoe"), nil)
+	engine := serve(NewServer(ServerOptions{Repo: repo}), byScope(sysadminGate(repo), fakeAuthGate("jdoe")))
 
 	meta := Metadata{Namespace: "thetenant"}
 
@@ -513,14 +526,13 @@ func TestNamespaceRoleRulesValidated(t *testing.T) {
 	seedClusterRBAC(t, repo, testAdminGroup, testNamespace)
 
 	var calls int
-	engine := gin.New()
-	RegisterNamespaceRoutes(engine, repo, fakeAuthGate(testAdmin, testAdminGroup), func(rules []Rule) *liberrors.Error {
+	engine := serve(NewServer(ServerOptions{Repo: repo, ValidateRoleRules: func(rules []Rule) *liberrors.Error {
 		calls++
 		if len(rules) > 0 && len(rules[0].Resources) > 0 && rules[0].Resources[0] == "bad" {
 			return liberrors.New(http.StatusBadRequest, "test", "api %q has no namespaced resource %q", rules[0].Apis[0], "bad")
 		}
 		return nil
-	})
+	}}), fakeAuthGate(testAdmin, testAdminGroup))
 	base := "/apis/" + AuthorizationAPI + "/v1/namespaces/" + testNamespace + "/roles"
 	role := func(resource string) Role {
 		return Role{Name: "r", Rules: []Rule{{Apis: []string{"telemetry.infrapi.io"}, Resources: []string{resource}, Verbs: []string{"get"}}}}
