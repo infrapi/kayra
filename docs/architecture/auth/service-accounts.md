@@ -45,6 +45,16 @@ curl -s -X POST https://kayra.example.com/apis/authorization.infrapi.io/v1/names
   -d '{"name": "deployer", "description": "compute CI"}'
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_service_account" "deployer" {
+  namespace   = "core"
+  name        = "deployer"
+  description = "compute CI"
+}
+```
+
 - **Name:** a DNS label (lower case letters, digits and `-`).
 - **`uid`:** Kayra sets it, and it never changes. Every token carries it.
   Once the service account is deleted, its tokens are refused, even after
@@ -78,6 +88,33 @@ curl -s -X POST https://kayra.example.com/apis/authorization.infrapi.io/v1/names
 curl -s -X POST https://kayra.example.com/apis/authorization.infrapi.io/v1/namespaces/core/rolebindings \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"name\": \"ci-deploy\", $M, \"role\": \"deployer\", \"groups\": [\"ci\"]}"
+```
+
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_group" "ci" {
+  namespace = "core"
+  name      = "ci"
+  metadata = {
+    namespace = "core"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  serviceaccounts = ["deployer"]
+}
+
+resource "kayra_role_binding" "ci_deploy" {
+  namespace = "core"
+  name      = "ci-deploy"
+  metadata = {
+    namespace = "core"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  role   = "deployer"
+  groups = [kayra_group.ci.name]
+}
 ```
 
 To grant **every** service account of the namespace at once, name the group

@@ -73,6 +73,20 @@ curl -s -X POST https://kayra.example.com/apis/catalog.infrapi.io/v1/apiregistra
        "identity": {"jwks_from": "spec"}}'
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_api_registration" "compute" {
+  name       = "compute.infrapi.io"
+  short_name = "compute"
+  active     = true
+  owner      = "compute-team"
+  identity = {
+    jwks_from = "spec"
+  }
+}
+```
+
 `identity` takes one of three forms:
 
 | `identity` | The API proves it is the API with |
@@ -162,6 +176,18 @@ curl -s https://kayra.example.com/apis/catalog.infrapi.io/v1/apiregistrations/co
   -H "Authorization: Bearer $API_TOKEN"
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+data "kayra_api_registration" "compute" {
+  name = "compute.infrapi.io"
+}
+
+data "kayra_api_registration_status" "compute" {
+  name = "compute.infrapi.io"
+}
+```
+
 Anything else is decided by the RBAC: a group that names the API in `apis`,
 exactly, with no wildcard.
 
@@ -185,6 +211,21 @@ curl -s -X POST https://kayra.example.com/apis/authorization.infrapi.io/v1/names
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "apis", "metadata": {"namespace": "core", "region": "eu-west-1", "platform": "sandbox"},
        "apis": ["compute.infrapi.io"]}'
+```
+
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_group" "apis" {
+  namespace = "core"
+  name      = "apis"
+  metadata = {
+    namespace = "core"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  apis = ["compute.infrapi.io"]
+}
 ```
 
 Bind the group to a role as any other (see [RBAC & auth](rbac-and-auth.md#the-rbac-model)).

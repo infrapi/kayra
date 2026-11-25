@@ -40,6 +40,21 @@ curl -s -X POST https://kayra.example.com/apis/authorization.infrapi.io/v1/token
 #  "scope":{"apis":["compute.infrapi.io"],"verbs":["get","list"]},"token":"pat_…"}
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_token" "laptop" {
+  name       = "laptop"
+  expires_in = "720h"
+  scope = {
+    apis  = ["compute.infrapi.io"]
+    verbs = ["get", "list"]
+  }
+}
+
+# the PAT, pat_…: kayra_token.laptop.token, a sensitive attribute
+```
+
 The `token` is shown **once**: keep it.
 
 | Field | |

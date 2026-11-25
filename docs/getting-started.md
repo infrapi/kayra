@@ -151,7 +151,9 @@ mints this bootstrap token only when actually needed again.
 
 A namespace is where an API's resources live, and the RBAC that grants
 them. A tenant, a team or a customer, owns one or several (see
-[Multi-tenancy](architecture/multi-tenancy.md)):
+[Multi-tenancy](architecture/multi-tenancy.md)). Each step is given with
+`infrapi-cli`, curl, and the resource of Kayra's OpenTofu/Terraform
+provider, [`infrapi/kayra`](https://github.com/infrapi/terraform-provider-kayra):
 
 **infrapi-cli**
 
@@ -167,6 +169,14 @@ curl -s -X POST http://localhost:8080/apis/system.infrapi.io/v1/namespaces \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"name": "acme"}'
 # {"active": false, "name": "acme"}
+```
+
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_namespace" "acme" {
+  name = "acme"
+}
 ```
 
 It comes back `active: false` — only `kayra reconciler` ever flips
@@ -215,6 +225,45 @@ curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clusterro
        "role": "acme-admin-role", "groups": ["acme-admins"]}'
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_cluster_group" "acme_admins" {
+  name = "acme-admins"
+  metadata = {
+    namespace = "acme"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  groups = ["sandbox-core-sysadmin"]
+}
+
+resource "kayra_cluster_role" "acme_admin_role" {
+  name = "acme-admin-role"
+  metadata = {
+    namespace = "acme"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  rules = [{
+    apis      = ["catalog.infrapi.io"]
+    resources = ["*"]
+    verbs     = ["*"]
+  }]
+}
+
+resource "kayra_cluster_role_binding" "acme_admin_binding" {
+  name = "acme-admin-binding"
+  metadata = {
+    namespace = "acme"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  role   = kayra_cluster_role.acme_admin_role.name
+  groups = [kayra_cluster_group.acme_admins.name]
+}
+```
+
 See [who can manage a namespace's RBAC](architecture/auth/rbac-and-auth.md)
 for how this check is actually evaluated.
 
@@ -250,6 +299,21 @@ curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/acme
 # {"api": "vault.infrapi.io", "active": false, "state": "init", ...}
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_api_registration" "vault" {
+  name       = "vault.infrapi.io"
+  short_name = "vault"
+  owner      = "sre"
+}
+
+resource "kayra_subscription" "acme_vault" {
+  namespace = "acme"
+  api       = kayra_api_registration.vault.name
+}
+```
+
 Any caller whose groups are bound to the `catalog.infrapi.io` API
 can do the subscribe step — it doesn't have to be the bootstrap token;
 `$TOKEN` works here only because step 6's rolebinding happens to grant
@@ -275,6 +339,15 @@ curl -s -X PUT http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations
 
 curl -s http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/vault.infrapi.io/status \
   -H "Authorization: Bearer $TOKEN"
+```
+
+**OpenTofu/Terraform**
+
+```hcl
+# a sync is a new sync_id on the kayra_api_registration
+data "kayra_api_registration_status" "vault" {
+  name = "vault.infrapi.io"
+}
 ```
 
 `kayra reconciler` picks up the new `sync_id` and runs whichever HTTP

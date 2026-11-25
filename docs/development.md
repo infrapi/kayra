@@ -99,10 +99,16 @@ same file renders on github.com and in the portal.
 
 Every example of a call to Kayra's API is given twice: a `**infrapi-cli**`
 paragraph followed by its code block, then a `**curl**` paragraph followed
-by the same requests. github.com shows them one after the other; the
-developer portal renders consecutive labelled code blocks as tabs. Things
-only one of them can do (`kayra token mint`, `infrapi-cli auth context set`)
-stay a single block.
+by the same requests. Where the
+[OpenTofu/Terraform provider](https://github.com/infrapi/terraform-provider-kayra)
+has the object, a third pair follows: `**OpenTofu/Terraform**` and an `hcl`
+block with its resource or data source only, no `terraform` or `provider`
+block. A creation or an update is a resource; a read, of a namespace, a
+registration, its status or its spec, a data source; a delete, a list, an
+action (`.../sync`), events, `/check` have none. github.com shows them one
+after the other; the developer portal renders consecutive labelled code
+blocks as tabs. Things only one of them can do (`kayra token mint`,
+`infrapi-cli auth context set`) stay a single block.
 
 `docs/index.md` is a real page — the docs entry point, with the "where to
 start" table and the package table — not an include of the README.

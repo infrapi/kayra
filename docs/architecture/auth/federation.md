@@ -74,6 +74,27 @@ curl -s -X PUT https://kayra.example.com/apis/authorization.infrapi.io/v1/namesp
      "subject": "repo:example/compute:environment:prod"}]}'
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_service_account" "deployer" {
+  namespace = "core"
+  name      = "deployer"
+  federated_credentials = [
+    {
+      name    = "gitlab-main"
+      issuer  = "https://gitlab.example.com"
+      subject = "project_path:infra/compute:ref_type:branch:ref:main"
+    },
+    {
+      name    = "github-prod"
+      issuer  = "https://token.actions.githubusercontent.com"
+      subject = "repo:example/compute:environment:prod"
+    },
+  ]
+}
+```
+
 A platform token is trusted when **all** of these hold for one credential:
 
 | Field | |

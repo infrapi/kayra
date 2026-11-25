@@ -228,6 +228,45 @@ curl -s -X POST http://localhost:8080/apis/authorization.infrapi.io/v1/clusterro
   -d "{\"name\": \"compute-platform\", $M, \"role\": \"compute-platform\", \"groups\": [\"compute-platform\"]}"
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_cluster_group" "compute_platform" {
+  name = "compute-platform"
+  metadata = {
+    namespace = ""
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  groups = ["sandbox-compute-platform"]
+}
+
+resource "kayra_cluster_role" "compute_platform" {
+  name = "compute-platform"
+  metadata = {
+    namespace = ""
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  rules = [{
+    apis      = ["compute.infrapi.io"]
+    resources = ["flavors", "hosts"]
+    verbs     = ["*"]
+  }]
+}
+
+resource "kayra_cluster_role_binding" "compute_platform" {
+  name = "compute-platform"
+  metadata = {
+    namespace = ""
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  role   = kayra_cluster_role.compute_platform.name
+  groups = [kayra_cluster_group.compute_platform.name]
+}
+```
+
 A global cluster role's rules are checked like a namespace role's
 (`catalog.Repository.ValidateClusterRoleRules`), against the apis'
 **cluster-scoped** resources: `vms`, a namespaced resource, is

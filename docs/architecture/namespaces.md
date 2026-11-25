@@ -45,6 +45,14 @@ curl -s -X POST http://localhost:8080/apis/system.infrapi.io/v1/namespaces \
   -d '{"name": "core"}'
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_namespace" "core" {
+  name = "core"
+}
+```
+
 ## Reading them
 
 Anyone authenticated reads the namespaces they are in, whatever their
@@ -68,6 +76,14 @@ curl -s http://localhost:8080/apis/system.infrapi.io/v1/namespaces \
   -H "Authorization: Bearer $TOKEN"
 curl -s http://localhost:8080/apis/system.infrapi.io/v1/namespaces/acme \
   -H "Authorization: Bearer $TOKEN"
+```
+
+**OpenTofu/Terraform**
+
+```hcl
+data "kayra_namespace" "acme" {
+  name = "acme"
+}
 ```
 
 `/check`, and so `infrapi-cli auth can-i`, agree: `list` on `namespaces` is

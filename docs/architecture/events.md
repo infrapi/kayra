@@ -76,6 +76,25 @@ curl -s -X POST https://kayra.example.com/apis/authorization.infrapi.io/v1/names
        "rules": [{"apis": ["events.infrapi.io"], "resources": ["events"], "verbs": ["get", "list"]}]}'
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_role" "events_read" {
+  namespace = "core"
+  name      = "events-read"
+  metadata = {
+    namespace = "core"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  rules = [{
+    apis      = ["events.infrapi.io"]
+    resources = ["events"]
+    verbs     = ["get", "list"]
+  }]
+}
+```
+
 Bind it to the namespace's groups (see [RBAC & auth](auth/rbac-and-auth.md#the-rbac-model)).
 The cluster's events are read with the cluster RBAC.
 

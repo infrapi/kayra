@@ -103,6 +103,15 @@ curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/namespaces/core
   -d '{"api": "compute.infrapi.io"}'
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_subscription" "core_compute" {
+  namespace = "core"
+  api       = "compute.infrapi.io"
+}
+```
+
 Create requires only `api`, which must be the registration's **long
 name** (`compute.infrapi.io`) — a short name is refused (`400`, the
 error names the long one to use when a registration has that

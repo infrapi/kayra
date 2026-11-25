@@ -119,6 +119,15 @@ for ns in acme-prod acme-dev; do
 done
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_namespace" "acme" {
+  for_each = toset(["acme-prod", "acme-dev"])
+  name     = each.key
+}
+```
+
 ### 2. Make its admins the admins of each
 
 A cluster group of the tenant's admins, a cluster role on the namespace's
@@ -147,6 +156,52 @@ curl -s -X POST $A/clusterroles "${H[@]}" -d "{\"name\": \"acme-prod-admin\", $M
   {\"apis\": [\"authorization.infrapi.io\"], \"resources\": [\"*\"], \"verbs\": [\"*\"]},
   {\"apis\": [\"catalog.infrapi.io\"], \"resources\": [\"subscriptions\"], \"verbs\": [\"*\"]}]}"
 curl -s -X POST $A/clusterrolebindings "${H[@]}" -d "{\"name\": \"acme-prod-admins\", $M, \"role\": \"acme-prod-admin\", \"groups\": [\"acme-prod-admins\"]}"
+```
+
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_cluster_group" "acme_prod_admins" {
+  name = "acme-prod-admins"
+  metadata = {
+    namespace = "acme-prod"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  groups = ["sandbox-acme-admins"]
+}
+
+resource "kayra_cluster_role" "acme_prod_admin" {
+  name = "acme-prod-admin"
+  metadata = {
+    namespace = "acme-prod"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  rules = [
+    {
+      apis      = ["authorization.infrapi.io"]
+      resources = ["*"]
+      verbs     = ["*"]
+    },
+    {
+      apis      = ["catalog.infrapi.io"]
+      resources = ["subscriptions"]
+      verbs     = ["*"]
+    },
+  ]
+}
+
+resource "kayra_cluster_role_binding" "acme_prod_admins" {
+  name = "acme-prod-admins"
+  metadata = {
+    namespace = "acme-prod"
+    region    = "eu-west-1"
+    platform  = "sandbox"
+  }
+  role   = kayra_cluster_role.acme_prod_admin.name
+  groups = [kayra_cluster_group.acme_prod_admins.name]
+}
 ```
 
 From then on, acme's admins subscribe their namespaces to the APIs and

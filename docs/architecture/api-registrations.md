@@ -73,6 +73,17 @@ curl -s -X POST http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistration
   }'
 ```
 
+**OpenTofu/Terraform**
+
+```hcl
+resource "kayra_api_registration" "compute" {
+  name       = "compute.infrapi.io"
+  short_name = "compute"
+  active     = true
+  owner      = "sre-a"
+}
+```
+
 A registration's id is its **long name** — the full API group URN it is
 reachable under (`compute.infrapi.io`), a lowercase DNS name of at
 least two labels; a single-label `name` is refused (`400`). It's the
@@ -115,6 +126,21 @@ curl -s -X PUT http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations
   -d '{"name": "compute.infrapi.io", "owner": "sre-b"}'
 curl -s -X DELETE http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/compute.infrapi.io \
   -H "Authorization: Bearer $TOKEN"
+```
+
+**OpenTofu/Terraform**
+
+```hcl
+# get
+data "kayra_api_registration" "compute" {
+  name = "compute.infrapi.io"
+}
+
+# update: its owner changed; delete: the resource removed
+resource "kayra_api_registration" "compute" {
+  name  = "compute.infrapi.io"
+  owner = "sre-b"
+}
 ```
 
 ## Dependencies
@@ -290,6 +316,14 @@ infrapi-cli get apiregistrations/status compute.infrapi.io
 ```bash
 curl -s http://localhost:8080/apis/catalog.infrapi.io/v1/apiregistrations/compute.infrapi.io/status \
   -H "Authorization: Bearer $TOKEN"
+```
+
+**OpenTofu/Terraform**
+
+```hcl
+data "kayra_api_registration_status" "compute" {
+  name = "compute.infrapi.io"
+}
 ```
 
 ```json
