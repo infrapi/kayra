@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/infrapi/kayra/internal/config"
+
+	"github.com/infrapi/lib/pkg/useragent"
 )
 
 // sendAttempts is how many times a batch is POSTed before it is dropped;
@@ -85,7 +87,7 @@ func NewAPI(cfg config.AuditAPIConfig) (*API, error) {
 	transport.TLSClientConfig = tlsConfig
 	a := &API{
 		url: cfg.URL, format: cfg.FormatName(), hec: cfg.SplunkHEC, headers: headers, set: set,
-		client: &http.Client{Timeout: set.Timeout, Transport: transport},
+		client: &http.Client{Timeout: set.Timeout, Transport: useragent.Transport(transport)},
 		queue:  make(chan Record, set.Queue), done: make(chan struct{}),
 	}
 	go a.run()

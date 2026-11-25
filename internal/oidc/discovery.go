@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/infrapi/lib/pkg/useragent"
 )
 
 // DiscoveryDoc is the subset of an OIDC discovery document Kayra needs.
@@ -22,7 +24,7 @@ type DiscoveryDoc struct {
 // its Transport is nil, so http.Client falls back to http.DefaultTransport,
 // which already honors HTTP_PROXY/HTTPS_PROXY/NO_PROXY; discovery and JWKS
 // documents are small and infrequent, so one conservative timeout suffices.
-var defaultHTTPClient = &http.Client{Timeout: 10 * time.Second}
+var defaultHTTPClient = useragent.Client(&http.Client{Timeout: 10 * time.Second})
 
 // ClientFor returns the *http.Client every outbound call for one provider
 // should use: the shared, env-proxy-aware default when proxy is empty, or a
@@ -39,7 +41,7 @@ func ClientFor(proxy string) (*http.Client, error) {
 	}
 	return &http.Client{
 		Timeout:   10 * time.Second,
-		Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)},
+		Transport: useragent.Transport(&http.Transport{Proxy: http.ProxyURL(proxyURL)}),
 	}, nil
 }
 

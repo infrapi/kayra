@@ -13,6 +13,8 @@ import (
 
 	"github.com/infrapi/kayra/internal/config"
 	"github.com/infrapi/kayra/internal/store"
+
+	"github.com/infrapi/lib/pkg/useragent"
 )
 
 // DefaultMaxConcurrentReconciles is the goroutine pool size NewReconciler
@@ -161,7 +163,7 @@ func NewReconciler(repo *Repository, deploymentPlatform, deploymentRegion string
 		defaultMode:        cfg.DefaultMode,
 		modeSteps:          cfg.Mode,
 		gatewayURL:         cfg.GatewayURL,
-		httpClient:         &http.Client{Timeout: specFetchTimeout},
+		httpClient:         useragent.Client(&http.Client{Timeout: specFetchTimeout}),
 	}
 }
 

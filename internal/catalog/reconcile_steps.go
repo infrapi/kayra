@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/infrapi/kayra/internal/config"
+
+	"github.com/infrapi/lib/pkg/useragent"
 )
 
 // AsyncStepAckTimeout bounds how long an async step (config.ReconcileStep
@@ -73,6 +75,11 @@ type previousStepTemplateData struct {
 // aborts the whole run; an async step's failure is only logged — the run
 // always moves on to whatever comes next regardless of what happened to
 // it. An empty steps list is trivially successful (nothing to do).
+
+// stepClient makes the steps' requests: Go's default client, Kayra named
+// in their User-Agent (the called side's logs tell who called).
+var stepClient = useragent.Client(nil)
+
 func runSteps(steps []config.ReconcileStep, data stepTemplateData, lockID int) error {
 	data.Previous = previousStepTemplateData{Outputs: map[string]string{}}
 
@@ -225,7 +232,7 @@ func doHTTPRequest(ctx context.Context, method, endpoint string, bodyBytes []byt
 		req.Header.Set(name, value)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := stepClient.Do(req)
 	if err != nil {
 		return 0, nil, fmt.Errorf("do request: %w", err)
 	}

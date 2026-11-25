@@ -43,6 +43,8 @@ import (
 	gcrypto "github.com/infrapi/kayra/internal/crypto"
 	"github.com/infrapi/kayra/internal/middleware"
 	"github.com/infrapi/kayra/internal/store"
+
+	"github.com/infrapi/lib/pkg/useragent"
 )
 
 // CLIClient is infrapi-cli's client, built in: first-party, redirected to a
@@ -126,10 +128,10 @@ func New(cfg *config.Config, auth *middleware.Authenticator, s store.Store, keys
 	srv := &Server{
 		cfg: o, ttl: ttl, cfgAll: cfg, auth: auth, store: s, prefix: keys.Prefix + "/oauth2",
 		issuer: strings.TrimRight(baseURL, "/"), signer: signer, docs: map[string]cachedDoc{},
-		HTTPClient: &http.Client{
+		HTTPClient: useragent.Client(&http.Client{
 			Timeout:       5 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		},
+		}),
 	}
 	srv.federation.now = srv.now
 	auth.Revoked = srv.Revoked
@@ -165,15 +167,15 @@ func (s *Server) RegisterRoutes(r gin.IRouter) {
 
 func (s *Server) metadata(c *gin.Context) {
 	m := gin.H{
-		"issuer":                                           s.issuer,
-		"authorization_endpoint":                           s.issuer + "/oauth2/authorize",
-		"token_endpoint":                                   s.issuer + "/oauth2/token",
-		"revocation_endpoint":                              s.issuer + "/oauth2/revoke",
-		"jwks_uri":                                         s.issuer + "/oauth2/discovery/keys",
-		"response_types_supported":                         []string{"code"},
-		"grant_types_supported":                            []string{"authorization_code", "refresh_token", "client_credentials"},
-		"code_challenge_methods_supported":                 []string{"S256"},
-		"token_endpoint_auth_methods_supported":            []string{"none", "private_key_jwt"},
+		"issuer":                                s.issuer,
+		"authorization_endpoint":                s.issuer + "/oauth2/authorize",
+		"token_endpoint":                        s.issuer + "/oauth2/token",
+		"revocation_endpoint":                   s.issuer + "/oauth2/revoke",
+		"jwks_uri":                              s.issuer + "/oauth2/discovery/keys",
+		"response_types_supported":              []string{"code"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token", "client_credentials"},
+		"code_challenge_methods_supported":      []string{"S256"},
+		"token_endpoint_auth_methods_supported": []string{"none", "private_key_jwt"},
 		"token_endpoint_auth_signing_alg_values_supported": signingMethods,
 		"revocation_endpoint_auth_methods_supported":       []string{"none"},
 		"authorization_response_iss_parameter_supported":   true,
