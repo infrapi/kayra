@@ -18,10 +18,17 @@ info:
 security:
   - bearer: []
 
+tags:
+  - name: API registrations
+    description: "The APIs registered on the platform: their contract, status and sync."
+  - name: Subscriptions
+    description: "A namespace's subscriptions to the APIs."
+
 paths:
   /apis/catalog.infrapi.io/v1/apiregistrations:
     get:
       operationId: listApiRegistrations
+      tags: ['API registrations']
       summary: The APIs registered in Kayra's platform and region.
       responses:
         '200':
@@ -32,6 +39,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createApiRegistration
+      tags: ['API registrations']
       summary: Register an API, or replace its registration.
       description: >-
         A registration of that name is replaced, its uid kept: its contract
@@ -54,6 +62,7 @@ paths:
       - $ref: '#/components/parameters/api'
     get:
       operationId: getApiRegistration
+      tags: ['API registrations']
       summary: An API's registration.
       responses:
         '200':
@@ -64,6 +73,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     put:
       operationId: updateApiRegistration
+      tags: ['API registrations']
       summary: Replace an API's registration.
       description: >-
         Its name, uid and canary_namespaces stay; a new sync_id tells its
@@ -82,6 +92,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteApiRegistration
+      tags: ['API registrations']
       summary: Delete an API's registration, when nothing depends on it nor subscribes to it.
       responses:
         '204': {description: Deleted.}
@@ -92,6 +103,7 @@ paths:
       - $ref: '#/components/parameters/api'
     get:
       operationId: getApiRegistrationSpec
+      tags: ['API registrations']
       summary: The contract the reconciler last read from the API.
       responses:
         '200':
@@ -106,6 +118,7 @@ paths:
       - $ref: '#/components/parameters/api'
     get:
       operationId: getApiRegistrationStatus
+      tags: ['API registrations']
       summary: Where each active subscription to the API is, against its sync_id.
       responses:
         '200':
@@ -120,6 +133,7 @@ paths:
       - $ref: '#/components/parameters/api'
     put:
       operationId: syncApiRegistration
+      tags: ['API registrations']
       summary: Release a new sync_id to the subscriptions, or to canary namespaces first.
       description: >-
         With canary_namespaces, a new sync_id reaches those namespaces
@@ -142,6 +156,7 @@ paths:
       - $ref: '#/components/parameters/namespace'
     get:
       operationId: listSubscriptions
+      tags: ['Subscriptions']
       summary: The namespace's subscriptions.
       responses:
         '200':
@@ -152,6 +167,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createSubscription
+      tags: ['Subscriptions']
       summary: Subscribe the namespace to an API.
       description: >-
         The reconciler provisions the namespace in the API's app, then
@@ -176,6 +192,7 @@ paths:
       - $ref: '#/components/parameters/subscription'
     get:
       operationId: getSubscription
+      tags: ['Subscriptions']
       summary: The namespace's subscription to an API.
       responses:
         '200':
@@ -186,6 +203,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteSubscription
+      tags: ['Subscriptions']
       summary: Unsubscribe the namespace from an API.
       responses:
         '204': {description: Deleted.}
@@ -197,6 +215,7 @@ paths:
       - $ref: '#/components/parameters/subscription'
     put:
       operationId: syncSubscription
+      tags: ['Subscriptions']
       summary: Reconcile the subscription again, at the API's sync_id.
       responses:
         '200':

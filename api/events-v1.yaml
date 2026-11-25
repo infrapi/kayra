@@ -18,12 +18,19 @@ info:
 security:
   - bearer: []
 
+tags:
+  - name: Namespace events
+    description: "Events about a namespace's objects."
+  - name: Cluster events
+    description: "Events about objects in no namespace."
+
 paths:
   /apis/events.infrapi.io/v1/namespaces/{namespace}/events:
     parameters:
       - $ref: '#/components/parameters/namespace'
     get:
       operationId: listNamespaceEvents
+      tags: ['Namespace events']
       summary: The events, the namespace's, the latest first.
       parameters:
         - $ref: '#/components/parameters/type'
@@ -47,6 +54,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createNamespaceEvents
+      tags: ['Namespace events']
       summary: Report an event, or a batch of them.
       description: >-
         An API reports with its own identity about its own objects, in the
@@ -77,6 +85,7 @@ paths:
       - $ref: '#/components/parameters/id'
     get:
       operationId: getNamespaceEvent
+      tags: ['Namespace events']
       summary: An event, until it expires.
       responses:
         '200':
@@ -87,6 +96,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     patch:
       operationId: patchNamespaceEvent
+      tags: ['Namespace events']
       summary: Count the event again, its series only; by its reporter.
       requestBody:
         required: true
@@ -104,6 +114,7 @@ paths:
   /apis/events.infrapi.io/v1/events:
     get:
       operationId: listEvents
+      tags: ['Cluster events']
       summary: The events, the cluster's, those in no namespace, the latest first.
       parameters:
         - $ref: '#/components/parameters/type'
@@ -127,6 +138,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createEvents
+      tags: ['Cluster events']
       summary: Report an event, or a batch of them.
       description: >-
         An API reports with its own identity about its own objects, in the
@@ -156,6 +168,7 @@ paths:
       - $ref: '#/components/parameters/id'
     get:
       operationId: getEvent
+      tags: ['Cluster events']
       summary: An event, until it expires.
       responses:
         '200':
@@ -166,6 +179,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     patch:
       operationId: patchEvent
+      tags: ['Cluster events']
       summary: Count the event again, its series only; by its reporter.
       requestBody:
         required: true

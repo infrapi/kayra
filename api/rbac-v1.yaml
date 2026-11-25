@@ -20,10 +20,31 @@ info:
 security:
   - bearer: []
 
+tags:
+  - name: Check
+    description: "Whether the caller may do a request: what every app built on infrapi/lib asks."
+  - name: Cluster groups
+    description: "Who, on the cluster: global when metadata.namespace is empty, managing a namespace otherwise."
+  - name: Cluster roles
+    description: "What, on the cluster: the rules a cluster role binding grants."
+  - name: Cluster role bindings
+    description: "A cluster role granted to cluster groups."
+  - name: Groups
+    description: "Who, in a namespace: its members."
+  - name: Roles
+    description: "What, in a namespace: the rules a role binding grants."
+  - name: Role bindings
+    description: "A namespace role granted to the namespace's groups."
+  - name: Service accounts
+    description: "A namespace's machine identities, and their tokens."
+  - name: Personal access tokens
+    description: "A user's tokens: opaque, expiring, optionally scoped."
+
 paths:
   /apis/authorization.infrapi.io/v1/check:
     post:
       operationId: check
+      tags: ['Check']
       summary: Whether the caller may do a request, as an app built on infrapi/lib asks.
       description: >-
         The caller is the request's own token. A request in no namespace is
@@ -46,6 +67,7 @@ paths:
   /apis/authorization.infrapi.io/v1/clustergroups:
     get:
       operationId: listClusterGroups
+      tags: ['Cluster groups']
       summary: The cluster groups.
       responses:
         '200':
@@ -56,6 +78,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createClusterGroup
+      tags: ['Cluster groups']
       summary: Create a cluster group, or replace the one of that name.
       requestBody:
         required: true
@@ -75,6 +98,7 @@ paths:
       - $ref: '#/components/parameters/group'
     get:
       operationId: getClusterGroup
+      tags: ['Cluster groups']
       summary: A cluster group.
       responses:
         '200':
@@ -85,6 +109,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     put:
       operationId: updateClusterGroup
+      tags: ['Cluster groups']
       summary: Replace a cluster group; its name stays.
       requestBody:
         required: true
@@ -100,6 +125,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteClusterGroup
+      tags: ['Cluster groups']
       summary: Delete a cluster group.
       responses:
         '204': {description: Deleted.}
@@ -108,6 +134,7 @@ paths:
   /apis/authorization.infrapi.io/v1/clusterroles:
     get:
       operationId: listClusterRoles
+      tags: ['Cluster roles']
       summary: The cluster roles.
       responses:
         '200':
@@ -118,6 +145,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createClusterRole
+      tags: ['Cluster roles']
       summary: Create a cluster role, or replace the one of that name.
       requestBody:
         required: true
@@ -137,6 +165,7 @@ paths:
       - $ref: '#/components/parameters/role'
     get:
       operationId: getClusterRole
+      tags: ['Cluster roles']
       summary: A cluster role.
       responses:
         '200':
@@ -147,6 +176,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     put:
       operationId: updateClusterRole
+      tags: ['Cluster roles']
       summary: Replace a cluster role; its name stays.
       requestBody:
         required: true
@@ -162,6 +192,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteClusterRole
+      tags: ['Cluster roles']
       summary: Delete a cluster role.
       responses:
         '204': {description: Deleted.}
@@ -170,6 +201,7 @@ paths:
   /apis/authorization.infrapi.io/v1/clusterrolebindings:
     get:
       operationId: listClusterRoleBindings
+      tags: ['Cluster role bindings']
       summary: The cluster role bindings.
       responses:
         '200':
@@ -180,6 +212,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createClusterRoleBinding
+      tags: ['Cluster role bindings']
       summary: Create a cluster role binding, or replace the one of that name.
       requestBody:
         required: true
@@ -199,6 +232,7 @@ paths:
       - $ref: '#/components/parameters/rolebinding'
     get:
       operationId: getClusterRoleBinding
+      tags: ['Cluster role bindings']
       summary: A cluster role binding.
       responses:
         '200':
@@ -209,6 +243,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     put:
       operationId: updateClusterRoleBinding
+      tags: ['Cluster role bindings']
       summary: Replace a cluster role binding; its name stays.
       requestBody:
         required: true
@@ -224,6 +259,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteClusterRoleBinding
+      tags: ['Cluster role bindings']
       summary: Delete a cluster role binding.
       responses:
         '204': {description: Deleted.}
@@ -234,6 +270,7 @@ paths:
       - $ref: '#/components/parameters/namespace'
     get:
       operationId: listGroups
+      tags: ['Groups']
       summary: The namespace groups.
       responses:
         '200':
@@ -244,6 +281,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createGroup
+      tags: ['Groups']
       summary: Create a namespace group, or replace the one of that name.
       requestBody:
         required: true
@@ -264,6 +302,7 @@ paths:
       - $ref: '#/components/parameters/group'
     get:
       operationId: getGroup
+      tags: ['Groups']
       summary: A namespace group.
       responses:
         '200':
@@ -274,6 +313,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     put:
       operationId: updateGroup
+      tags: ['Groups']
       summary: Replace a namespace group; its name stays.
       requestBody:
         required: true
@@ -289,6 +329,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteGroup
+      tags: ['Groups']
       summary: Delete a namespace group.
       responses:
         '204': {description: Deleted.}
@@ -299,6 +340,7 @@ paths:
       - $ref: '#/components/parameters/namespace'
     get:
       operationId: listRoles
+      tags: ['Roles']
       summary: The namespace roles.
       responses:
         '200':
@@ -309,6 +351,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createRole
+      tags: ['Roles']
       summary: Create a namespace role, or replace the one of that name.
       requestBody:
         required: true
@@ -329,6 +372,7 @@ paths:
       - $ref: '#/components/parameters/role'
     get:
       operationId: getRole
+      tags: ['Roles']
       summary: A namespace role.
       responses:
         '200':
@@ -339,6 +383,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     put:
       operationId: updateRole
+      tags: ['Roles']
       summary: Replace a namespace role; its name stays.
       requestBody:
         required: true
@@ -354,6 +399,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteRole
+      tags: ['Roles']
       summary: Delete a namespace role.
       responses:
         '204': {description: Deleted.}
@@ -364,6 +410,7 @@ paths:
       - $ref: '#/components/parameters/namespace'
     get:
       operationId: listRoleBindings
+      tags: ['Role bindings']
       summary: The namespace role bindings.
       responses:
         '200':
@@ -374,6 +421,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createRoleBinding
+      tags: ['Role bindings']
       summary: Create a namespace role binding, or replace the one of that name.
       requestBody:
         required: true
@@ -394,6 +442,7 @@ paths:
       - $ref: '#/components/parameters/rolebinding'
     get:
       operationId: getRoleBinding
+      tags: ['Role bindings']
       summary: A namespace role binding.
       responses:
         '200':
@@ -404,6 +453,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     put:
       operationId: updateRoleBinding
+      tags: ['Role bindings']
       summary: Replace a namespace role binding; its name stays.
       requestBody:
         required: true
@@ -419,6 +469,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteRoleBinding
+      tags: ['Role bindings']
       summary: Delete a namespace role binding.
       responses:
         '204': {description: Deleted.}
@@ -429,6 +480,7 @@ paths:
       - $ref: '#/components/parameters/namespace'
     get:
       operationId: listServiceAccounts
+      tags: ['Service accounts']
       summary: The service accounts.
       responses:
         '200':
@@ -439,6 +491,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createServiceAccount
+      tags: ['Service accounts']
       summary: Create a service account, or replace the one of that name.
       requestBody:
         required: true
@@ -459,6 +512,7 @@ paths:
       - $ref: '#/components/parameters/serviceaccount'
     get:
       operationId: getServiceAccount
+      tags: ['Service accounts']
       summary: A service account.
       responses:
         '200':
@@ -469,6 +523,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     put:
       operationId: updateServiceAccount
+      tags: ['Service accounts']
       summary: Replace a service account; its name stays.
       requestBody:
         required: true
@@ -484,6 +539,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteServiceAccount
+      tags: ['Service accounts']
       summary: Delete a service account.
       responses:
         '204': {description: Deleted.}
@@ -495,6 +551,7 @@ paths:
       - $ref: '#/components/parameters/serviceaccount'
     post:
       operationId: createServiceAccountToken
+      tags: ['Service accounts']
       summary: A token of the service account, short-lived; whoever holds serviceaccounts/token create acts as it.
       requestBody:
         content:
@@ -511,6 +568,7 @@ paths:
   /apis/authorization.infrapi.io/v1/tokens:
     get:
       operationId: listTokens
+      tags: ['Personal access tokens']
       summary: The caller's personal access tokens, or another user's for the cluster RBAC's token managers.
       parameters:
         - $ref: '#/components/parameters/user'
@@ -523,6 +581,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createToken
+      tags: ['Personal access tokens']
       summary: A personal access token of the caller, a user's; a personal access token creates no other.
       requestBody:
         required: true
@@ -543,6 +602,7 @@ paths:
       - $ref: '#/components/parameters/user'
     get:
       operationId: getToken
+      tags: ['Personal access tokens']
       summary: A personal access token, without its secret.
       responses:
         '200':
@@ -553,6 +613,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteToken
+      tags: ['Personal access tokens']
       summary: Revoke a personal access token.
       responses:
         '204': {description: Revoked.}

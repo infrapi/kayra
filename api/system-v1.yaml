@@ -19,10 +19,15 @@ info:
 security:
   - bearer: []
 
+tags:
+  - name: Namespaces
+    description: "The units of isolation every API works in."
+
 paths:
   /apis/system.infrapi.io/v1/namespaces:
     get:
       operationId: listNamespaces
+      tags: ['Namespaces']
       summary: The namespaces the caller sees, by name.
       description: >-
         Whoever the cluster RBAC grants list on namespaces sees every one;
@@ -36,6 +41,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     post:
       operationId: createNamespace
+      tags: ['Namespaces']
       summary: Create a namespace, or keep the one of that name.
       requestBody:
         required: true
@@ -55,6 +61,7 @@ paths:
       - $ref: '#/components/parameters/namespace'
     get:
       operationId: getNamespace
+      tags: ['Namespaces']
       summary: A namespace, for the cluster RBAC's readers and its members.
       responses:
         '200':
@@ -65,6 +72,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
     delete:
       operationId: deleteNamespace
+      tags: ['Namespaces']
       summary: Delete a namespace.
       responses:
         '204': {description: Deleted.}
