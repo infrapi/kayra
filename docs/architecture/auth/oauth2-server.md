@@ -38,9 +38,9 @@ client ──► Kayra POST /oauth2/token           code + code_verifier
 ```
 
 > [!TIP]
-> [ulgen](https://infrapi.github.io/ulgen/) is one MCP endpoint in front of
+> [Ülgen](https://infrapi.github.io/ulgen/) is one MCP endpoint in front of
 > several MCP servers: an MCP client logs in here once for all of them, and
-> ulgen checks each tool call in its namespace with `/check`.
+> Ülgen checks each tool call in its namespace with `/check`.
 
 ## Configure it
 

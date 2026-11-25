@@ -49,7 +49,7 @@ reserved for them, and no provider's user can take that prefix.
 |---|---|---|---|
 | a person at a terminal | call the APIs | [`infrapi-cli auth login`](oauth2-server.md) | a Kayra token for you, renewed |
 | a person's script, a tool | call as you, without a browser | a [personal access token](tokens.md) | `pat_…`, as you, scoped, expiring |
-| an AI agent (an MCP client) | call tools as its user | the [authorization server](oauth2-server.md)'s OAuth login, or [ulgen](https://infrapi.github.io/ulgen/) | a Kayra token for its user |
+| an AI agent (an MCP client) | call tools as its user | the [authorization server](oauth2-server.md)'s OAuth login, or [Ülgen](https://infrapi.github.io/ulgen/) | a Kayra token for its user |
 | a CI job | act **as the person who ran it** | the provider's token, accepted as is ([below](#a-providers-token-or-federation)) | no exchange: the job's token is the bearer |
 | a CI job, a pod | act **as a machine of a namespace**, no secret stored | [federation](federation.md) | a 15-minute token of a service account |
 | a workload with no platform identity | act as a machine of a namespace | a [service account](service-accounts.md)'s own key, or its token action | a token of the service account |
