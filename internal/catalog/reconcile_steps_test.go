@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -530,5 +531,20 @@ func TestReconcileFallsBackToPlaceholderWithNoStepsConfigured(t *testing.T) {
 
 	if err := w.reconcile(ApiRegistration{Name: "compute", Mode: "trigger"}, "core", Subscription{}, 0); err != nil {
 		t.Fatalf("reconcile: want nil (placeholder success), got %v", err)
+	}
+}
+
+// A step names Kayra in its User-Agent, kayra/<version>, not Go's default.
+func TestDoHTTPRequest_userAgent(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.UserAgent()
+	}))
+	defer srv.Close()
+	if _, _, err := doHTTPRequest(context.Background(), http.MethodGet, srv.URL, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "kayra/") {
+		t.Errorf("User-Agent %q, want kayra/<version>", got)
 	}
 }

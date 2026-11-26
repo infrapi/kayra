@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/infrapi/lib/pkg/std"
+
 	"github.com/infrapi/kayra/internal/config"
 )
 
@@ -85,7 +87,7 @@ func NewAPI(cfg config.AuditAPIConfig) (*API, error) {
 	transport.TLSClientConfig = tlsConfig
 	a := &API{
 		url: cfg.URL, format: cfg.FormatName(), hec: cfg.SplunkHEC, headers: headers, set: set,
-		client: &http.Client{Timeout: set.Timeout, Transport: transport},
+		client: std.UserAgentClient(&http.Client{Timeout: set.Timeout, Transport: transport}), // kayra/<version>
 		queue:  make(chan Record, set.Queue), done: make(chan struct{}),
 	}
 	go a.run()

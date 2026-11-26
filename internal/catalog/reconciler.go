@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/infrapi/lib/pkg/std"
+
 	"github.com/infrapi/kayra/internal/config"
 	"github.com/infrapi/kayra/internal/store"
 )
@@ -161,7 +163,7 @@ func NewReconciler(repo *Repository, deploymentPlatform, deploymentRegion string
 		defaultMode:        cfg.DefaultMode,
 		modeSteps:          cfg.Mode,
 		gatewayURL:         cfg.GatewayURL,
-		httpClient:         &http.Client{Timeout: specFetchTimeout},
+		httpClient:         std.UserAgentClient(&http.Client{Timeout: specFetchTimeout}), // kayra/<version>
 	}
 }
 

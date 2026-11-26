@@ -37,6 +37,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/infrapi/lib/pkg/std"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/infrapi/kayra/internal/config"
@@ -126,10 +128,11 @@ func New(cfg *config.Config, auth *middleware.Authenticator, s store.Store, keys
 	srv := &Server{
 		cfg: o, ttl: ttl, cfgAll: cfg, auth: auth, store: s, prefix: keys.Prefix + "/oauth2",
 		issuer: strings.TrimRight(baseURL, "/"), signer: signer, docs: map[string]cachedDoc{},
-		HTTPClient: &http.Client{
+		// kayra/<version> in the User-Agent (std), as every request of Kayra's
+		HTTPClient: std.UserAgentClient(&http.Client{
 			Timeout:       5 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-		},
+		}),
 	}
 	srv.federation.now = srv.now
 	auth.Revoked = srv.Revoked

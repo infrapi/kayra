@@ -13,8 +13,14 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/infrapi/lib/pkg/std"
+
 	"github.com/infrapi/kayra/internal/config"
 )
+
+// stepClient sends the pipelines' steps: http.DefaultClient, its requests
+// naming Kayra, kayra/<version>, in their User-Agent (std).
+var stepClient = std.UserAgentClient(http.DefaultClient)
 
 // AsyncStepAckTimeout bounds how long an async step (config.ReconcileStep
 // with Async: true) waits for a response before giving up and moving on
@@ -225,7 +231,7 @@ func doHTTPRequest(ctx context.Context, method, endpoint string, bodyBytes []byt
 		req.Header.Set(name, value)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := stepClient.Do(req)
 	if err != nil {
 		return 0, nil, fmt.Errorf("do request: %w", err)
 	}

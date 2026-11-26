@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/infrapi/lib/pkg/std"
 )
 
 // DiscoveryDoc is the subset of an OIDC discovery document Kayra needs.
@@ -22,7 +24,8 @@ type DiscoveryDoc struct {
 // its Transport is nil, so http.Client falls back to http.DefaultTransport,
 // which already honors HTTP_PROXY/HTTPS_PROXY/NO_PROXY; discovery and JWKS
 // documents are small and infrequent, so one conservative timeout suffices.
-var defaultHTTPClient = &http.Client{Timeout: 10 * time.Second}
+// Every client names Kayra, kayra/<version>, in its User-Agent (std).
+var defaultHTTPClient = std.UserAgentClient(&http.Client{Timeout: 10 * time.Second})
 
 // ClientFor returns the *http.Client every outbound call for one provider
 // should use: the shared, env-proxy-aware default when proxy is empty, or a
@@ -37,10 +40,10 @@ func ClientFor(proxy string) (*http.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("oidc: parse proxy %q: %w", proxy, err)
 	}
-	return &http.Client{
+	return std.UserAgentClient(&http.Client{
 		Timeout:   10 * time.Second,
 		Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)},
-	}, nil
+	}), nil
 }
 
 // FetchDiscovery retrieves and parses the discovery document at url (a
